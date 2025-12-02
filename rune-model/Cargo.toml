@@ -1,0 +1,11 @@
+[workspace]
+members = [
+    "crates/rune-lexer",
+    "crates/rune-ast",
+    "crates/rune-parser",
+    "crates/rune-runtime",
+    "crates/rune-semantics",
+    "crates/rune-evaluator",
+]
+
+resolver = "2"
