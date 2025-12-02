@@ -1,9 +1,0 @@
-[package]
-name = "rune-semantics"
-version = "0.1.0"
-edition = "2021"
-description = "RuneLang AST"
-license = "MIT"
-
-[dependencies]
-rune-ast   = { path = "../rune-ast" }
