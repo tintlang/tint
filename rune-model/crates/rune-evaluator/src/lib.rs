@@ -9,6 +9,8 @@ pub mod eval_fn;
 pub mod eval_block;
 pub mod errors;
 pub mod eval_host;
+pub mod host_vm;
+
 
 pub use eval_host::EvalHost;
 pub use value::Value;

@@ -1,6 +1,5 @@
-// RuneVM v2.0 — Clean Layered Runtime
+// RuneVM v2. — Clean Layered Runtime
 
-// Imports
 use std::collections::HashMap;
 
 use crate::{
@@ -24,22 +23,21 @@ use rune_evaluator::{
     call::call_builtin,
 };
 
-
-/// ============================================================
-/// RuneVM — Three-layer runtime
-/// ============================================================
+// ============================================================================
+// RuneVM — layered runtime
+// ============================================================================
 pub struct RuneVM {
-    // CORE
+    // ---------------------- CORE ----------------------
     pub scopes: RuntimeScopeStack,
     pub functions: HashMap<String, FnDecl>,
 
-    // SYSTEM
+    // ---------------------- SYSTEM --------------------
     pub resources: ResourceTable,
     pub state: StateStore,
     pub scheduler: Scheduler,
     pub borrow: BorrowManager,
 
-    // UI
+    // ---------------------- UI ------------------------
     pub ui: UiRuntime,
 }
 
@@ -58,9 +56,9 @@ impl RuneVM {
         }
     }
 
-    // ------------------------------------------------------------
+    // =========================================================================
     // PROGRAM ENTRY
-    // ------------------------------------------------------------
+    // =========================================================================
     pub fn run_program(&mut self, program: &Program) {
         self.register_functions(program);
         self.mount_entry_ui(program);
@@ -77,17 +75,15 @@ impl RuneVM {
 
     fn mount_entry_ui(&mut self, program: &Program) {
         for item in &program.items {
-            if let Item::UiFn(ui_fn) = item {
-                if ui_fn.name == "App" || ui_fn.name == "Main" {
-                    self.ui.mount(ui_fn);
+            if let Item::UiFn(ui) = item {
+                if ui.name == "App" || ui.name == "Main" {
+                    self.ui.mount(ui);
                 }
             }
         }
     }
 
-    // ------------------------------------------------------------
     // EVENT LOOP
-    // ------------------------------------------------------------
     fn main_loop(&mut self) {
         loop {
             let mut progressed = false;
@@ -100,13 +96,13 @@ impl RuneVM {
                 progressed = true;
             }
 
-            if !progressed { break; }
+            if !progressed {
+                break;
+            }
         }
     }
 
-    // ------------------------------------------------------------
-    // Eval helpers
-    // ------------------------------------------------------------
+    // Eval Helpers
     pub fn eval_expr(&mut self, expr: &Expr) -> EvalValue {
         eval_expr::eval_expr(self, expr)
     }
@@ -115,11 +111,9 @@ impl RuneVM {
         eval_stmt::eval_stmt(self, stmt)
     }
 
-    // ------------------------------------------------------------
-    // Value Conversion Layer
-    // ------------------------------------------------------------
-    fn eval_to_rt(val: EvalValue) -> RuntimeValue {
-        match val {
+    // VALUE CONVERSION LAYER
+    fn eval_to_rt(v: EvalValue) -> RuntimeValue {
+        match v {
             EvalValue::Number(n) => RuntimeValue::Number(n),
             EvalValue::String(s) => RuntimeValue::String(s),
             EvalValue::Bool(b) => RuntimeValue::Bool(b),
@@ -127,8 +121,8 @@ impl RuneVM {
         }
     }
 
-    fn rt_to_eval(val: &RuntimeValue) -> EvalValue {
-        match val {
+    fn rt_to_eval(v: &RuntimeValue) -> EvalValue {
+        match v {
             RuntimeValue::Number(n) => EvalValue::Number(*n),
             RuntimeValue::String(s) => EvalValue::String(s.clone()),
             RuntimeValue::Bool(b) => EvalValue::Bool(*b),
@@ -137,22 +131,21 @@ impl RuneVM {
     }
 }
 
+// EvalHost IMPLEMENTATION
 
-// ============================================================
-// EvalHost Implementation
-// ============================================================
 impl EvalHost for RuneVM {
+
 
     // VARIABLES
     fn load_var(&mut self, name: &str, _span: Span) -> EvalValue {
         match self.scopes.lookup(name) {
-            Some(rt_val) => Self::rt_to_eval(&rt_val),
+            Some(rt) => Self::rt_to_eval(&rt),
             None => EvalValue::Unit,
         }
     }
 
-    fn define_var(&mut self, name: &str, value: EvalValue) {
-        let rt = Self::eval_to_rt(value);
+    fn define_var(&mut self, name: &str, v: EvalValue) {
+        let rt = Self::eval_to_rt(v);
         self.scopes.define(name, rt);
     }
 
@@ -168,36 +161,32 @@ impl EvalHost for RuneVM {
         eval_block::eval_block(self, block)
     }
 
-    // FUNCTIONS
+    // FUNCTION CALLS
     fn call_fn(&mut self, name: &str, args: &[EvalValue], span: Span) -> EvalValue {
+        // 1) Builtins
         if let Ok(v) = call_builtin(self, name, args, span) {
             return v;
         }
+
+        // 2) User functions
         self.call_user_fn(name, args, span)
     }
 
     fn call_user_fn(&mut self, name: &str, args: &[EvalValue], _span: Span) -> EvalValue {
-        // ---- 1) Копируем FnDecl, чтобы не держать &func ----
-        let func = match self.functions.get(name) {
-            Some(f) => f.clone(),   // <-- теперь нет borrow!
-            None => {
-                println!("Runtime error: no such function `{}`", name);
-                return EvalValue::Unit;
-            }
+        let func = match self.functions.get(name).cloned() {
+            Some(f) => f,
+            None => return EvalValue::Unit,
         };
 
-        // ---- 2) Теперь можно спокойно работать с self ----
         self.scopes.push();
 
-        // ---- 3) Bind params ----
         for (param, arg) in func.params.iter().zip(args.iter()) {
             self.define_var(&param.name, arg.clone());
         }
 
-        // ---- 4) Execute function body ----
-        let res = self.eval_block(&func.body);
+        let out = self.eval_block(&func.body);
 
         self.scopes.pop();
-        res
+        out
     }
 }

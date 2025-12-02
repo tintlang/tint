@@ -7,21 +7,22 @@ use rune_lexer::TokenKind;
 
 impl Parser {
     pub(crate) fn parse_ui_fn(&mut self) -> PResult<UiFnDecl> {
+        // ui fn
         let start = self.stream.expect(TokenKind::Ui)?.span;
-
         self.stream.expect(TokenKind::Fn)?;
         let name = self.parse_ident()?;
 
+        // parameters (we ignore them for now, but later: UIChildren, props)
         self.stream.expect(TokenKind::LParen)?;
         self.stream.expect(TokenKind::RParen)?;
 
-        // expect { 
+        // body starts with "{"
         self.stream.expect(TokenKind::LBrace)?;
 
-        // a single root UI node
+        // Parse exactly ONE root UI node
         let body = self.parse_ui_node()?;
 
-        // expect }
+        // closing "}"
         self.stream.expect(TokenKind::RBrace)?;
 
         let end = body.span();

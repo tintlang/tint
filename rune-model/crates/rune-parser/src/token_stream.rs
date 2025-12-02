@@ -14,63 +14,70 @@ impl TokenStream {
         Self { tokens, pos: 0 }
     }
 
-    /// Peek current token
+    // BASIC ACCESS
+    /// Peek current token safely
     pub fn peek(&self) -> &Token {
-        self.tokens.get(self.pos).unwrap()
+        self.tokens.get(self.pos).unwrap_or_else(|| {
+            self.tokens.last().expect("token stream can't be empty")
+        })
     }
 
-    /// Peek N tokens ahead
+    /// Peek token N positions ahead safely
     pub fn peek_n(&self, n: usize) -> &Token {
-        self.tokens.get(self.pos + n).unwrap()
+        self.tokens.get(self.pos + n).unwrap_or_else(|| {
+            self.tokens.last().expect("token stream can't be empty")
+        })
     }
 
-    /// True if EOF reached
-    pub fn is_eof(&self) -> bool {
+    /// Return previous token (or first)
+    pub fn prev(&self) -> &Token {
+        if self.pos == 0 {
+            &self.tokens[0]
+        } else {
+            &self.tokens[self.pos - 1]
+        }
+    }
+
+    pub fn at_end(&self) -> bool {
         self.peek().kind == TokenKind::Eof
     }
 
-    /// Take next token by reference (advance)
+    // ADVANCED CHECKS
+    /// Check if current token is of kind
+    pub fn check(&self, kind: TokenKind) -> bool {
+        self.peek().kind == kind
+    }
+
+    /// Check 2-token sequence
+    pub fn check2(&self, a: TokenKind, b: TokenKind) -> bool {
+        self.peek().kind == a && self.peek_n(1).kind == b
+    }
+
+    /// Check token kind without cloning token
+    pub fn peek_kind(&self) -> TokenKind {
+        self.peek().kind.clone()
+    }
+
+    pub fn peek2_kind(&self) -> TokenKind {
+        self.peek_n(1).kind.clone()
+    }
+
+    // CONSUME
     pub fn next(&mut self) -> Token {
-        let t = self.tokens[self.pos].clone();
-        self.pos += 1;
-        t
-    }
-
-    /// Take next token by value (clone)
-    pub fn next_owned(&mut self) -> Token {
         let t = self.peek().clone();
-        self.pos += 1;
+        if !self.at_end() {
+            self.pos += 1;
+        }
         t
     }
 
-    /// Require token of kind
-    pub fn expect(&mut self, kind: TokenKind) -> Result<Token, ParserError> {
-        let token = self.peek().clone();
-
-        if token.kind == kind {
-            self.pos += 1;
-            Ok(token)
-        } else {
-            Err(ParserError::Unexpected {
-                expected: kind,
-                found: token.kind,
-                span: token.span,
-            })
-        }
+    pub fn next_owned(&mut self) -> Token {
+        self.next()
     }
 
-    /// Span of the previous token (pos - 1)
-    pub fn last_span(&self) -> Span {
-        if self.pos == 0 {
-            self.tokens[0].span
-        } else {
-            self.tokens[self.pos - 1].span
-        }
-    }
-
-    /// If next token matches → consume + return true
+    /// Consume ONLY if matches
     pub fn consume_if(&mut self, kind: TokenKind) -> bool {
-        if self.peek().kind == kind {
+        if self.check(kind.clone()) {
             self.pos += 1;
             true
         } else {
@@ -78,14 +85,40 @@ impl TokenStream {
         }
     }
 
-    /// Same but returns the token (Option<Token>)
     pub fn consume_if_ret(&mut self, kind: TokenKind) -> Option<Token> {
-        if self.peek().kind == kind {
+        if self.check(kind.clone()) {
             let t = self.peek().clone();
             self.pos += 1;
             Some(t)
         } else {
             None
         }
+    }
+
+    /// Expect EXACT token or throw error
+    pub fn expect(&mut self, kind: TokenKind) -> Result<Token, ParserError> {
+        let tok = self.peek().clone();
+        if tok.kind == kind {
+            self.pos += 1;
+            Ok(tok)
+        } else {
+            Err(ParserError::Unexpected {
+                expected: kind,
+                found: tok.kind,
+                span: tok.span,
+            })
+        }
+    }
+
+    // ERROR HELPERS
+    pub fn error_here<T>(&self, msg: impl Into<String>) -> Result<T, ParserError> {
+        Err(ParserError::Message {
+            msg: msg.into(),
+            span: self.peek().span,
+        })
+    }
+
+    pub fn last_span(&self) -> Span {
+        self.prev().span
     }
 }

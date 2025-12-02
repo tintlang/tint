@@ -6,6 +6,7 @@ pub mod error;
 pub mod parse_expr;
 pub mod ui;
 pub mod parse_block;
+pub mod parse_type;
 
 mod parse_stmt;
 mod parse_fn;

@@ -1,12 +1,13 @@
+// crates/lexer/src/lexer.rs
 use crate::{Token, TokenKind};
 use rune_ast::{Span, Position};
 
 pub struct Lexer<'a> {
     src: &'a str,
     chars: std::str::Chars<'a>,
-    pos: usize,     // byte offset
-    line: usize,    // 1-based
-    column: usize,  // 1-based
+    pos: usize,
+    line: usize,
+    column: usize,
 }
 
 impl<'a> Lexer<'a> {
@@ -38,25 +39,37 @@ impl<'a> Lexer<'a> {
         self.chars.clone().next()
     }
 
+    fn peek2(&self) -> Option<(char, char)> {
+        let mut clone = self.chars.clone();
+        let a = clone.next()?;
+        let b = clone.next()?;
+        Some((a, b))
+    }
+
+    fn peek3(&self) -> Option<(char, char, char)> {
+        let mut clone = self.chars.clone();
+        Some((clone.next()?, clone.next()?, clone.next()?))
+    }
+
     fn position(&self) -> Position {
         Position::new(self.pos, self.line, self.column)
     }
 
-    // MAIN ENTRY
+    // MAIN
     pub fn next_token(&mut self) -> Token {
-        self.skip_whitespace_and_comments();
+        self.skip_ws_and_comments();
 
-        let start_pos = self.position();
+        let start = self.position();
         let Some(c) = self.peek() else {
-            return Token::new(TokenKind::Eof, Span::new(start_pos, start_pos), "");
+            return Token::new(TokenKind::Eof, Span::new(start, start), "");
         };
 
-        // multi-char operators first
-        if let Some(tok) = self.try_multi_char(start_pos) {
+        // 1) Multi-char operators (longest first)
+        if let Some(tok) = self.try_multi(start) {
             return tok;
         }
 
-        // simple tokens
+        // 2) Single char tokens
         match c {
             '{' => return self.single(TokenKind::LBrace),
             '}' => return self.single(TokenKind::RBrace),
@@ -64,169 +77,208 @@ impl<'a> Lexer<'a> {
             ')' => return self.single(TokenKind::RParen),
             '<' => return self.single(TokenKind::LAngle),
             '>' => return self.single(TokenKind::RAngle),
-            ':' => return self.single(TokenKind::Colon),
+            '[' => return self.single(TokenKind::LBracket),
+            ']' => return self.single(TokenKind::RBracket),
             ',' => return self.single(TokenKind::Comma),
-            '=' => return self.single(TokenKind::Eq),
-            ';' => return self.single(TokenKind::Semicolon), 
-
+            ':' => return self.single(TokenKind::Colon),
+            ';' => return self.single(TokenKind::Semicolon),
+            '.' => return self.single(TokenKind::Dot),
             '+' => return self.single(TokenKind::Plus),
             '-' => return self.single(TokenKind::Minus),
             '*' => return self.single(TokenKind::Star),
             '/' => return self.single(TokenKind::Slash),
+            '%' => return self.single(TokenKind::Percent),
+            '!' => return self.single(TokenKind::Bang),
+            '|' => return self.single(TokenKind::Pipe),
 
-            '"' => return self.lex_string(start_pos),
+            '"' => return self.lex_string(start),
 
-            c if c.is_ascii_digit() => return self.lex_number(start_pos),
-            c if is_ident_start(c) => return self.lex_ident_or_keyword(start_pos),
+            c if c.is_ascii_digit() => return self.lex_number(start),
+            c if is_ident_start(c) => return self.lex_ident(start),
 
             _ => {
                 self.bump();
-                return Token::new(TokenKind::Ident, Span::new(start_pos, self.position()), c.to_string());
+                return Token::new(TokenKind::Ident, Span::new(start, self.position()), c.to_string());
             }
         }
     }
 
-    // HELPERS
     fn single(&mut self, kind: TokenKind) -> Token {
         let start = self.position();
         let c = self.bump().unwrap();
-        let end = self.position();
-        Token::new(kind, Span::new(start, end), c.to_string())
+        Token::new(kind, Span::new(start, self.position()), c.to_string())
     }
 
-    fn skip_whitespace_and_comments(&mut self) {
+    // WHITESPACE + COMMENTS
+    fn skip_ws_and_comments(&mut self) {
         loop {
-            let Some(c) = self.peek() else { return; };
+            let Some(c) = self.peek() else { return };
 
-            // whitespace
             if c.is_whitespace() {
                 self.bump();
                 continue;
             }
 
-            // line comment //
             if c == '/' {
                 let mut clone = self.chars.clone();
                 clone.next();
                 if clone.next() == Some('/') {
-                    self.bump(); // '/'
-                    self.bump(); // '/'
-                    while let Some(ch) = self.peek() {
-                        if ch == '\n' { break; }
+                    // line comment
+                    self.bump();
+                    self.bump();
+                    while let Some(c) = self.peek() {
+                        if c == '\n' { break }
                         self.bump();
                     }
                     continue;
                 }
             }
+
             return;
         }
     }
 
-    // MULTI-CHAR OPERATORS
-    fn try_multi_char(&mut self, start_pos: Position) -> Option<Token> {
-        let mut clone = self.chars.clone();
-        let first = clone.next()?;
-        let second = clone.next();
-
-        match (first, second) {
-            ('-', Some('>')) => return Some(self.eat_two(start_pos, TokenKind::Arrow, "->")),
-            ('=', Some('>')) => return Some(self.eat_two(start_pos, TokenKind::FatArrow, "=>")),
-            ('.', Some('.')) => return Some(self.eat_two(start_pos, TokenKind::DotDot, "..")),
-            ('<', Some('/')) => return Some(self.eat_two(start_pos, TokenKind::AngleSlash, "</")),
-            ('/', Some('>')) => return Some(self.eat_two(start_pos, TokenKind::SlashAngle, "/>")),
-            _ => None,
+    // MULTI-CHAR TOKENS
+    fn try_multi(&mut self, start: Position) -> Option<Token> {
+        if let Some((a,b,c)) = self.peek3() {
+            if a == '.' && b == '.' && c == '.' {
+                self.bump(); self.bump(); self.bump();
+                return Some(Token::new(TokenKind::DotDotDot, Span::new(start, self.position()), "..."));
+            }
         }
+
+        if let Some((a,b)) = self.peek2() {
+            return match (a,b) {
+                (':', ':') => Some(self.eat2(start, TokenKind::PathSep, "::")),
+
+                ('=', '=') => Some(self.eat2(start, TokenKind::EqEq, "==")),
+                ('!', '=') => Some(self.eat2(start, TokenKind::NotEq, "!=")),
+                ('<', '=') => Some(self.eat2(start, TokenKind::LessEq, "<=")),
+                ('>', '=') => Some(self.eat2(start, TokenKind::GreaterEq, ">=")),
+                ('&', '&') => Some(self.eat2(start, TokenKind::AndAnd, "&&")),
+                ('|', '|') => Some(self.eat2(start, TokenKind::OrOr, "||")),
+
+                ('+', '=') => Some(self.eat2(start, TokenKind::PlusEq, "+=")),
+                ('-', '=') => Some(self.eat2(start, TokenKind::MinusEq, "-=")),
+                ('*', '=') => Some(self.eat2(start, TokenKind::StarEq, "*=")),
+                ('/', '=') => Some(self.eat2(start, TokenKind::SlashEq, "/=")),
+
+                ('-', '>') => Some(self.eat2(start, TokenKind::Arrow, "->")),
+                ('=', '>') => Some(self.eat2(start, TokenKind::FatArrow, "=>")),
+
+                ('<', '/') => Some(self.eat2(start, TokenKind::AngleSlash, "</")),
+                ('/', '>') => Some(self.eat2(start, TokenKind::SlashAngle, "/>")),
+
+                ('.', '.') => Some(self.eat2(start, TokenKind::DotDot, "..")),
+
+                _ => None,
+            };
+        }
+
+        None
     }
 
-    fn eat_two(&mut self, start: Position, kind: TokenKind, lexeme: &str) -> Token {
-        self.bump(); // first
-        self.bump(); // second
-        let end = self.position();
-        Token::new(kind, Span::new(start, end), lexeme)
+    fn eat2(&mut self, start: Position, kind: TokenKind, lexeme: &str) -> Token {
+        self.bump();
+        self.bump();
+        Token::new(kind, Span::new(start, self.position()), lexeme)
     }
 
-    // STRINGS
-    fn lex_string(&mut self, start_pos: Position) -> Token {
+    // STRING
+    fn lex_string(&mut self, start: Position) -> Token {
         self.bump(); // open quote
-        let mut value = String::new();
+        let mut s = String::new();
 
         while let Some(c) = self.bump() {
             match c {
-                '"' => break,      // close string
+                '"' => break,
                 '\\' => {
                     if let Some(next) = self.bump() {
-                        value.push(next);
+                        s.push(next);
                     }
                 }
-                _ => value.push(c),
+                _ => s.push(c),
             }
         }
 
-        let end_pos = self.position();
-        Token::new(TokenKind::String, Span::new(start_pos, end_pos), value)
+        Token::new(TokenKind::String, Span::new(start, self.position()), s)
     }
 
-    // NUMBER LITERAL
-    fn lex_number(&mut self, start_pos: Position) -> Token {
-        let mut value = String::new();
+    // NUMBER
+    fn lex_number(&mut self, start: Position) -> Token {
+        let mut s = String::new();
 
         while let Some(c) = self.peek() {
             if c.is_ascii_digit() || c == '.' {
-                value.push(self.bump().unwrap());
+                s.push(self.bump().unwrap());
             } else {
                 break;
             }
         }
 
-        let end_pos = self.position();
-        Token::new(TokenKind::Number, Span::new(start_pos, end_pos), value)
+        Token::new(TokenKind::Number, Span::new(start, self.position()), s)
     }
 
-    // IDENTIFIER / KEYWORD
-    fn lex_ident_or_keyword(&mut self, start_pos: Position) -> Token {
-        let mut value = String::new();
+    // IDENT / KEYWORD
+    fn lex_ident(&mut self, start: Position) -> Token {
+        let mut s = String::new();
 
         while let Some(c) = self.peek() {
             if is_ident_continue(c) {
-                value.push(self.bump().unwrap());
+                s.push(self.bump().unwrap());
             } else {
                 break;
             }
         }
 
-        let kind = match value.as_str() {
+        let kind = match s.as_str() {
             "fn" => TokenKind::Fn,
             "ui" => TokenKind::Ui,
+            "return" => TokenKind::Return,
             "let" => TokenKind::Let,
+            "if" => TokenKind::If,
+            "else" => TokenKind::Else,
+            "match" => TokenKind::Match,
+            "for" => TokenKind::For,
+            "in" => TokenKind::In,
+            "where" => TokenKind::Where,
+            "while" => TokenKind::While,
+            "loop" => TokenKind::Loop,
+            "break" => TokenKind::Break,
+            "continue" => TokenKind::Continue,
+            "async" => TokenKind::Async,
+            "await" => TokenKind::Await,
+            "try" => TokenKind::Try,
+
+            "enum" => TokenKind::Enum,
+            "struct" => TokenKind::Struct,
+            "impl" => TokenKind::Impl,
+            "self" => TokenKind::SelfKw,
+
+            "borrow" => TokenKind::Borrow,
+            "immut" => TokenKind::Immut,
+            "move" => TokenKind::Move,
+            "clone" => TokenKind::Clone,
+
             "state" => TokenKind::State,
             "signal" => TokenKind::Signal,
             "computed" => TokenKind::Computed,
-            "match" => TokenKind::Match,
-            "for" => TokenKind::For,
-            "if" => TokenKind::If,
-            "else" => TokenKind::Else,
-            "async" => TokenKind::Async,
-            "await" => TokenKind::Await,
-            "enum" => TokenKind::Enum,
-            "struct" => TokenKind::Struct,
-            "export" => TokenKind::Export,
+            "rune2d" => TokenKind::Rune2d,
+
             "module" => TokenKind::Module,
-            "borrow" => TokenKind::Borrow,
-            "immut" => TokenKind::Immut,
-            "try" => TokenKind::Try,
-            "move" => TokenKind::Move,
-            "clone" => TokenKind::Clone,
+            "export" => TokenKind::Export,
+            "use" => TokenKind::Use,
+
             _ => TokenKind::Ident,
         };
 
-        let end_pos = self.position();
-        Token::new(kind, Span::new(start_pos, end_pos), value)
+        Token::new(kind, Span::new(start, self.position()), s)
     }
 }
 
 // HELPERS
 fn is_ident_start(c: char) -> bool {
-    c.is_ascii_alphabetic() || c == '_' 
+    c.is_ascii_alphabetic() || c == '_'
 }
 
 fn is_ident_continue(c: char) -> bool {

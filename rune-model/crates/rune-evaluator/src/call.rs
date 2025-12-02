@@ -34,8 +34,10 @@ pub fn call_builtin<H: EvalHost>(
         }
 
         _ => {
-            // теперь работает!
-            Ok(host.call_user_fn(name, args, span))
+            //
+            // Пользовательская функция
+            //
+            host.call_user_fn(name, args, span)
         }
     }
 }
