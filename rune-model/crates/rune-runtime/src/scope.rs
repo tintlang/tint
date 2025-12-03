@@ -13,6 +13,18 @@ impl RuntimeScopeStack {
         Self { frames: vec![HashMap::new()] }
     }
 
+    pub fn set(&mut self, name: &str, value: RuntimeValue) {
+        // Идём с конца (сверху стека)
+        for frame in self.frames.iter_mut().rev() {
+            if frame.contains_key(name) {
+                frame.insert(name.to_string(), value);
+                return;
+            }
+        }
+
+        panic!("Assign to undefined variable '{}'", name);
+    }
+
     pub fn push(&mut self) {
         self.frames.push(HashMap::new());
     }

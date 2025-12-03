@@ -151,6 +151,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "rune-ir"
+version = "0.1.0"
+dependencies = [
+ "rune-ast",
+]
+
+[[package]]
 name = "rune-lexer"
 version = "0.1.0"
 dependencies = [
@@ -173,6 +180,7 @@ dependencies = [
  "futures",
  "rune-ast",
  "rune-evaluator",
+ "rune-ir",
  "rune-lexer",
  "rune-parser",
  "thiserror",

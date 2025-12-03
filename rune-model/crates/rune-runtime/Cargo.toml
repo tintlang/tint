@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 rune-ast = { path = "../rune-ast" }
 rune-parser = { path = "../rune-parser" }
+rune-ir = { path = "../rune-ir" }
 rune-lexer = { path = "../rune-lexer" }
 rune-evaluator = { path = "../rune-evaluator" }
 

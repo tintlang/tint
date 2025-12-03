@@ -2,6 +2,7 @@
 members = [
     "crates/rune-lexer",
     "crates/rune-ast",
+    "crates/rune-ir",
     "crates/rune-parser",
     "crates/rune-runtime",
     "crates/rune-semantics",

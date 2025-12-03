@@ -1,0 +1,8 @@
+[package]
+name = "rune-ir"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rune-ast = { path = "../rune-ast" }
+

@@ -73,4 +73,44 @@ impl Parser {
             }
         }
     }
+
+    pub fn new_expr_only(expr_src: String, _span: Span) -> Self {
+        use rune_lexer::Lexer;
+
+        let mut lexer = Lexer::new(&expr_src);
+        let tokens = rune_lexer::collect_tokens(&mut lexer);
+
+        Parser::new(tokens)
+    }
+
+    /// Parse function parameters:  (name: Type, name: Type, ...)
+    pub(crate) fn parse_params(&mut self) -> PResult<Vec<Param>> {
+        let mut params = Vec::new();
+
+        // empty:  ()
+        if self.stream.check(TokenKind::RParen) {
+            return Ok(params);
+        }
+
+        loop {
+            // param name
+            let name = self.parse_ident()?;
+
+            // :
+            self.stream.expect(TokenKind::Colon)?;
+
+            // type
+            let ty = self.parse_type()?;     // ✔ already exists in parser
+
+            params.push(Param { name, ty });
+
+            // comma?
+            if !self.stream.consume_if(TokenKind::Comma) {
+                break;
+            }
+        }
+
+        Ok(params)
+    }
+    
 }

@@ -121,4 +121,55 @@ impl TokenStream {
     pub fn last_span(&self) -> Span {
         self.prev().span
     }
+
+      pub fn expect_ident(&mut self) -> Result<Token, ParserError> {
+        let tok = self.peek().clone();
+
+        if let TokenKind::Ident = tok.kind {
+            self.pos += 1;
+            Ok(tok)
+        } else {
+            Err(ParserError::Unexpected {
+                expected: TokenKind::Ident,
+                found: tok.kind,
+                span: tok.span,
+            })
+        }
+    }
+
+    pub fn expect_string(&mut self) -> Result<Token, ParserError> {
+        let tok = self.peek().clone();
+
+        if let TokenKind::String = tok.kind {
+            self.pos += 1;
+            Ok(tok)
+        } else {
+            Err(ParserError::Unexpected {
+                expected: TokenKind::String,
+                found: tok.kind,
+                span: tok.span,
+            })
+        }
+    }
+
+        pub fn is_modifier_start(&self) -> bool {
+        // must start with Ident
+        if self.peek().kind != TokenKind::Ident {
+            return false;
+        }
+
+        // Look ahead for pattern: ident [ . ident ]* LBrace
+        let mut i = 1;
+
+        // Consume chains like "padding.x.y"
+        while self.peek_n(i - 1).kind == TokenKind::Ident
+            && self.peek_n(i).kind == TokenKind::Dot
+            && self.peek_n(i + 1).kind == TokenKind::Ident
+        {
+            i += 2; // skip ". ident"
+        }
+
+        // After the chain → must be '{'
+        self.peek_n(i).kind == TokenKind::LBrace
+    }
 }

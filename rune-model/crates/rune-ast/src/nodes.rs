@@ -1,6 +1,9 @@
 use crate::Span;
 
-// Program
+// ============================================================
+// PROGRAM
+// ============================================================
+
 #[derive(Debug, Clone)]
 pub struct Program {
     pub items: Vec<Item>,
@@ -14,14 +17,18 @@ pub enum Item {
     Enum(EnumDecl),
 }
 
-// Functions
+
+// ============================================================
+// FUNCTION DECLARATIONS
+// ============================================================
+
 #[derive(Debug, Clone)]
 pub struct FnDecl {
     pub name: String,
     pub params: Vec<Param>,
-    pub ret_ty: Option<Type>,     // optional return type
-    pub async_: bool,             // async fn
-    pub body: FnBody,             // Block or Expr
+    pub ret_ty: Option<Type>,
+    pub async_: bool,
+    pub body: FnBody,
     pub span: Span,
 }
 
@@ -45,7 +52,11 @@ pub struct Param {
     pub ty: Type,
 }
 
-// Blocks & Statements
+
+// ============================================================
+// BLOCKS & STATEMENTS
+// ============================================================
+
 #[derive(Debug, Clone)]
 pub struct Block {
     pub stmts: Vec<Stmt>,
@@ -56,7 +67,6 @@ pub struct Block {
 pub enum Stmt {
     Let { name: String, expr: Expr, span: Span },
     Assign { name: String, expr: Expr, span: Span },
-    // +=, -=, *=, /= 
     CompoundAssign { name: String, op: String, expr: Expr, span: Span },
     Expr(Expr),
     If { cond: Expr, then: Block, else_: Option<Block>, span: Span },
@@ -70,14 +80,16 @@ pub enum Stmt {
 }
 
 
-// Match patterns
+// ============================================================
+// PATTERNS & MATCH
+// ============================================================
+
 #[derive(Debug, Clone)]
 pub enum Pattern {
     Ident(String, Span),
     Number(String, Span),
     String(String, Span),
 
-    // enum variant: Variant(a,b)
     Variant {
         name: String,
         args: Vec<Pattern>,
@@ -94,35 +106,35 @@ pub struct MatchArm {
     pub span: Span,
 }
 
-// Expressions
+
+// ============================================================
+// EXPRESSIONS
+// ============================================================
+
 #[derive(Debug, Clone)]
 pub enum Expr {
     Number(String, Span),
     String(String, Span),
     Ident(String, Span),
 
-    // foo(arg1, arg2)
     Call {
         target: Box<Expr>,
         args: Vec<Expr>,
         span: Span,
     },
 
-    // a.b
     Field {
         target: Box<Expr>,
         field: String,
         span: Span,
     },
 
-    // a::b
     Namespace {
         base: Box<Expr>,
         item: String,
         span: Span,
     },
 
-    // arr[i]
     Index {
         target: Box<Expr>,
         index: Box<Expr>,
@@ -157,19 +169,65 @@ pub enum Expr {
     },
 }
 
-// Types
+impl Expr {
+    pub fn span(&self) -> Span {
+        match self {
+            Expr::Number(_, s)
+            | Expr::String(_, s)
+            | Expr::Ident(_, s)
+            | Expr::Paren(_, s) => *s,
+
+            Expr::Unary { span, .. }
+            | Expr::Binary { span, .. }
+            | Expr::Call { span, .. }
+            | Expr::Field { span, .. }
+            | Expr::Namespace { span, .. }
+            | Expr::Index { span, .. }
+            | Expr::Lambda { span, .. }
+            | Expr::StructInit { span, .. } => *span,
+        }
+    }
+}
+
+
+// ============================================================
+// TYPES
+// ============================================================
+
 #[derive(Debug, Clone)]
 pub enum Type {
     Simple(String),
     Generic(String, Vec<Type>),
 }
 
-// UI nodes
+
+// ============================================================
+// UI TEXT WITH INTERPOLATION
+// ============================================================
+
+#[derive(Debug, Clone)]
+pub enum UiTextPart {
+    Literal(String, Span),
+    Interpolation(Expr, Span),
+}
+
+#[derive(Debug, Clone)]
+pub struct UiText {
+    pub parts: Vec<UiTextPart>,
+    pub span: Span,
+}
+
+
+// ============================================================
+// UI NODES
+// ============================================================
+
 #[derive(Debug, Clone)]
 pub enum UiNode {
     Element {
         name: String,
-        attributes: Vec<UiAttribute>,
+        attributes: Vec<UiAttribute>,      // event handlers, props
+        modifiers: Vec<UiModifier>,        // padding{}, radius{}, animate{}
         children: Vec<UiNodeOrExpr>,
         span: Span,
     },
@@ -177,16 +235,31 @@ pub enum UiNode {
     SelfClosing {
         name: String,
         attributes: Vec<UiAttribute>,
+        modifiers: Vec<UiModifier>,
         span: Span,
     },
+}
+
+
+impl UiNode {
+    pub fn span(&self) -> Span {
+        match self {
+            UiNode::Element { span, .. } => *span,
+            UiNode::SelfClosing { span, .. } => *span,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
 pub enum UiNodeOrExpr {
     Node(UiNode),
-    Text(String, Span),
-    Expr(Expr),
+    Text(UiText),
 }
+
+
+// ============================================================
+// UI ATTRIBUTES & MODIFIERS
+// ============================================================
 
 #[derive(Debug, Clone)]
 pub struct UiAttribute {
@@ -197,21 +270,51 @@ pub struct UiAttribute {
 
 #[derive(Debug, Clone)]
 pub enum UiAttrValue {
-    Ident(String),
-    Literal(String),
-    Interpolation(Expr),
-    Modifier(Vec<ModifierItem>),
+    Literal(String),        // attr="text"
+    Ident(String),          // attr=foo
+    Expr(Expr),             // attr={a + b}
+    Modifier(UiModifierBlock),
 }
 
+
+// ============================================================
+// UI MODIFIER BLOCK
+// ============================================================
+
 #[derive(Debug, Clone)]
-pub struct ModifierItem {
-    pub key: String,
-    pub value: Option<String>,
-    pub children: Vec<ModifierItem>,
+pub struct UiModifierBlock {
+    pub path: Vec<String>,          // padding.x → ["padding","x"]
+    pub items: Vec<UiModifierItem>, // inside { ... }
     pub span: Span,
 }
 
-// Struct & Enum
+#[derive(Debug, Clone)]
+pub struct UiModifierItem {
+    pub key: String,
+    pub value: Option<UiModifierValue>,
+    pub children: Vec<UiModifierItem>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct UiModifier {
+    pub path: Vec<String>,    // padding.x -> ["padding","x"]
+    pub value: UiModifierValue,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub enum UiModifierValue {
+    Number(f64),
+    String(String),
+    Expr(Expr),          // animate{ opacity: 0 -> 1 }
+    Block(Vec<UiModifier>),  // nested modifiers
+}
+
+// ============================================================
+// STRUCTS & ENUMS
+// ============================================================
+
 #[derive(Debug, Clone)]
 pub struct StructDecl {
     pub name: String,
@@ -240,35 +343,6 @@ pub enum EnumVariant {
     Struct(String, Vec<StructField>),
 }
 
-impl Expr {
-    pub fn span(&self) -> Span {
-        match self {
-            Expr::Number(_, span)
-            | Expr::String(_, span)
-            | Expr::Ident(_, span)
-            | Expr::Paren(_, span)
-            => *span,
-            Expr::Unary { span, .. } => *span,
-            Expr::Binary { span, .. } => *span,
-            Expr::Call { span, .. } => *span,
-            Expr::Field { span, .. } => *span,
-            Expr::Namespace { span, .. } => *span,
-            Expr::Index { span, .. } => *span,
-            Expr::Lambda { span, .. } => *span,
-            Expr::StructInit { span, .. } => *span,
-        }
-    }
-}
-
-
-impl UiNode {
-    pub fn span(&self) -> Span {
-        match self {
-            UiNode::Element { span, .. } => *span,
-            UiNode::SelfClosing { span, .. } => *span,
-        }
-    }
-}
 
 impl Stmt {
     pub fn span(&self) -> Span {

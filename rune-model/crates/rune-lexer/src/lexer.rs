@@ -90,6 +90,7 @@ impl<'a> Lexer<'a> {
             '%' => return self.single(TokenKind::Percent),
             '!' => return self.single(TokenKind::Bang),
             '|' => return self.single(TokenKind::Pipe),
+            '=' => return self.single(TokenKind::Eq),
 
             '"' => return self.lex_string(start),
 
