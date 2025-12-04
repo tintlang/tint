@@ -106,11 +106,11 @@ impl Parser {
             // 1) parse name
             let name = self.parse_ident()?;
 
-            // 2) :
-            self.stream.expect(TokenKind::Colon)?;
-
-            // 3) type
-            let ty = self.parse_type()?;
+            let ty = if self.stream.consume_if(TokenKind::Colon) {
+                Some(self.parse_type()?)
+            } else {
+                None
+            };
 
             // 4) default value — Rune style: { expr }
             let default = if self.stream.consume_if(TokenKind::LBrace) {

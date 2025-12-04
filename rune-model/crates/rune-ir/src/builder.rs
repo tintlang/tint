@@ -217,7 +217,7 @@ impl IrBuilder {
         &mut self,
         block: &mut Block,
         scrutinee: ValueId,
-        arms: Vec<(Pattern, ValueId)>
+        arms: Vec<(Pattern, Option<ValueId>, ValueId)>,
     ) -> ValueId {
         let dst = self.fresh_value();
         block.instrs.push(Instr::Match { dst, scrutinee, arms });

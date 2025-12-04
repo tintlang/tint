@@ -49,6 +49,7 @@ pub enum PatternField {
 #[derive(Debug, Clone)]
 pub struct MatchArm {
     pub pattern: Pattern,
+    pub guard: Option<Expr>,
     pub expr: Expr,
     pub span: Span,
 }

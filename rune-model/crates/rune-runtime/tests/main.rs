@@ -42,8 +42,57 @@ fn AllFeatures() {
         _ => 0
     };
 
+
     return s1 + a0 + a3 + res + who;
 }
+
+fn TestMatchNumbers(x) {
+    match x {
+        0 => "zero",
+        1 => "one",
+        _ => "other"
+    }
+}
+
+fn TestMatchTuple(point) {
+    match point {
+        (0, 0) => 0,
+        (x, y) => x*x + y*y
+    }
+}
+
+fn TestMatchStruct(user) {
+    match user {
+        User { id, name } => "{id}:{name}",
+        _ => "unknown"
+    }
+}
+
+fn TestGuard(value) {
+    match value {
+        x if x > 10 => "big",
+        _ => "small"
+    }
+}
+
+enum Shape {
+    Circle { r: f32 },
+}
+
+enum ShapeRune {
+    Circle { r },
+    Square { w, h }
+}
+
+fn TestMatchShapes(shape) {
+    match shape {
+        Circle { r } => r * 2,
+        Square { w, h } => w * h,
+        _ => 0
+    }
+}
+
+
 "#;
 
     println!("{}", code);

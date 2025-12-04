@@ -137,7 +137,9 @@ impl TokenKind {
             | TokenKind::Less
             | TokenKind::LessEq
             | TokenKind::Greater
-            | TokenKind::GreaterEq => 5,
+            | TokenKind::GreaterEq
+            | TokenKind::LAngle
+            | TokenKind::RAngle => 5,
 
             // ADD / SUB
             TokenKind::Plus | TokenKind::Minus => 10,

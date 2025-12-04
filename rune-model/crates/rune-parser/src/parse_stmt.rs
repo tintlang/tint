@@ -206,6 +206,12 @@ fn parse_let_stmt(&mut self, start: Span) -> PResult<Stmt> {
             TokenKind::Break => self.parse_break_stmt(),
             TokenKind::Continue => self.parse_continue_stmt(),
 
+            TokenKind::Match => {
+                let expr = self.parse_expr()?;  // match — это expression
+                self.stream.consume_if(TokenKind::Semicolon);
+                Ok(Stmt::Expr(expr))
+            },
+
             // for
             TokenKind::For => self.parse_for_stmt(),
 

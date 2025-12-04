@@ -1,6 +1,6 @@
 use crate::Span;
 use super::stmt::Block;
-use crate::pattern::Pattern;
+use crate::MatchArm;
 
 #[derive(Debug, Clone)]
 pub enum StructInitField {
@@ -89,7 +89,7 @@ pub enum Expr {
 
     Match {
         scrutinee: Box<Expr>,
-        arms: Vec<(Pattern, Expr)>,
+        arms: Vec<MatchArm>,
         span: Span,
     },
 

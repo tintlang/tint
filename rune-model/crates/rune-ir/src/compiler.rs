@@ -260,17 +260,30 @@ fn bind_pattern(
                 self.builder.emit_index(block, arr, idx)
             }
 
-            Expr::Match { scrutinee, arms, .. } => {
-                let scr = self.lower_expr(scrutinee, block, locals);
+Expr::Match { scrutinee, arms, .. } => {
+    let scr = self.lower_expr(scrutinee, block, locals);
 
-                let mut v = Vec::new();
-                for (pat, body) in arms {
-                    let val = self.lower_expr(body, block, locals);
-                    v.push((pat.clone(), val));
-                }
+    let mut lowered_arms = Vec::new();
 
-                self.builder.emit_match(block, scr, v)
-            }
+    for arm in arms {
+        let pat = arm.pattern.clone();
+
+        // Lower the guard, if present
+        let guard_val = if let Some(ref guard_expr) = arm.guard {
+            Some(self.lower_expr(guard_expr, block, locals))
+        } else {
+            None
+        };
+
+        // Lower the body expression
+        let body_val = self.lower_expr(&arm.expr, block, locals);
+
+        lowered_arms.push((pat, guard_val, body_val));
+    }
+
+    self.builder.emit_match(block, scr, lowered_arms)
+}
+
 
             // ---------------------------------------------
             // STRUCT INIT

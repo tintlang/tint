@@ -56,7 +56,7 @@ pub enum Instr {
     Match {
         dst: ValueId,
         scrutinee: ValueId,
-        arms: Vec<(Pattern, ValueId)>,
+        arms: Vec<(Pattern, Option<ValueId>, ValueId)>,
     },
 
     Tuple { dst: ValueId, items: Vec<ValueId> },

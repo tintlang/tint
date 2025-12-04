@@ -45,7 +45,7 @@ pub struct UiFnDecl {
 #[derive(Debug, Clone)]
 pub struct Param {
     pub name: String,
-    pub ty: Type,
+    pub ty: Option<Type>, 
     pub default: Option<Expr>,
 }
 
@@ -75,6 +75,11 @@ pub enum StructField {
         ty: Type,
         span: Span,
     },
+
+    RuneField {   // name
+        name: String,
+        span: Span,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -96,6 +101,7 @@ impl StructField {
         match self {
             StructField::Typed { span, .. } => *span,
             StructField::RuneTyped { span, .. } => *span,
+            StructField::RuneField { span, .. } => *span,
         }
     }
 }

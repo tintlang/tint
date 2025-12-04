@@ -33,7 +33,8 @@ impl Parser {
             // Determine this field's style
             let this_style = match &field {
                 StructField::Typed { .. }     => "typed",
-                StructField::RuneTyped { .. } => "rune",
+                StructField::RuneTyped { .. } => "runetyped",
+                StructField::RuneField { .. } => "runefield",
             };
 
             // First field → set struct style

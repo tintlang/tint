@@ -63,54 +63,54 @@ impl Parser {
     }
 
     // PARAMS: (a: i32, b: f32, string{""})
-   fn parse_fn_params(&mut self) -> PResult<Vec<Param>> {
-        self.stream.expect(TokenKind::LParen)?;
+fn parse_fn_params(&mut self) -> PResult<Vec<Param>> {
+    self.stream.expect(TokenKind::LParen)?;
 
-        // empty params: ()
-        if self.stream.consume_if(TokenKind::RParen) {
-            return Ok(vec![]);
-        }
-
-        let mut params = Vec::new();
-        let mut seen_default = false;
-
-        loop {
-            // 1) name
-            let name = self.parse_ident()?;
-
-            // 2) :
-            self.stream.expect(TokenKind::Colon)?;
-
-            // 3) type
-            let ty = self.parse_type()?;
-
-            // 4) optional default { expr }
-            let default = if self.stream.consume_if(TokenKind::LBrace) {
-                let expr = self.parse_expr()?;
-                self.stream.expect(TokenKind::RBrace)?;
-                seen_default = true;
-                Some(expr)
-            } else {
-                // Если ранее был default — а сейчас нет → ошибка
-                if seen_default {
-                    return Err(ParserError::Message {
-                        msg: "Cannot mix parameters with and without default values".into(),
-                        span: self.stream.peek().span,
-                    });
-                }
-                None
-            };
-
-            params.push(Param { name, ty, default });
-
-            // 5) comma?
-            if !self.stream.consume_if(TokenKind::Comma) {
-                break;
-            }
-        }
-
-        self.stream.expect(TokenKind::RParen)?;
-        Ok(params)
+    // empty params: ()
+    if self.stream.consume_if(TokenKind::RParen) {
+        return Ok(vec![]);
     }
+
+    let mut params = Vec::new();
+    let mut seen_default = false;
+
+    loop {
+        // ----- 1) name -----
+        let name = self.parse_ident()?;
+
+        // ----- 2) optional ": type" -----
+        let ty = if self.stream.consume_if(TokenKind::Colon) {
+            Some(self.parse_type()?)
+        } else {
+            None
+        };
+
+        // ----- 3) optional default { expr } -----
+        let default = if self.stream.consume_if(TokenKind::LBrace) {
+            let expr = self.parse_expr()?;
+            self.stream.expect(TokenKind::RBrace)?;
+            seen_default = true;
+            Some(expr)
+        } else {
+            if seen_default && ty.is_none() {
+                return Err(ParserError::Message {
+                    msg: "Cannot mix parameters with and without default values".into(),
+                    span: self.stream.peek().span,
+                });
+            }
+            None
+        };
+
+        params.push(Param { name, ty, default });
+
+        // ----- 4) comma? -----
+        if !self.stream.consume_if(TokenKind::Comma) {
+            break;
+        }
+    }
+
+    self.stream.expect(TokenKind::RParen)?;
+    Ok(params)
+}
 
 }

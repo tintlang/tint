@@ -78,17 +78,35 @@ pub fn eval_expr<H: EvalHost>(host: &mut H, expr: &Expr) -> Value {
         }
 
         // MATCH EXPRESSION
-        Expr::Match { scrutinee, arms, .. } => {
-            let val = eval_expr(host, scrutinee);
+Expr::Match { scrutinee, arms, .. } => {
+    let val = eval_expr(host, scrutinee);
 
-            for (pat, body) in arms {
-                if match_pattern(pat, &val) {
-                    return eval_expr(host, body);
+    for arm in arms {
+        // 1. PATTERN CHECK
+        if match_pattern(&arm.pattern, &val) {
+            
+            // 2. OPTIONAL GUARD
+            if let Some(ref guard_expr) = arm.guard {
+                let guard_val = eval_expr(host, guard_expr);
+
+                match guard_val {
+                    Value::Bool(true) => {
+                        return eval_expr(host, &arm.expr);
+                    }
+                    Value::Bool(false) => {
+                        continue; // skip this arm
+                    }
+                    _ => panic!("Match guard must evaluate to bool"),
                 }
             }
 
-            Value::Unit
+            // 3. NO GUARD → MATCHED
+            return eval_expr(host, &arm.expr);
         }
+    }
+
+    Value::Unit
+}
 
         // FIELD: obj.field
         Expr::Field { target, field, .. } => {

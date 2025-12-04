@@ -1,129 +1,61 @@
 use crate::{Parser, error::*};
-use rune_ast::{Expr, Pattern, Span};
+use rune_ast::{Expr, Pattern, Span, MatchArm};
 use rune_lexer::TokenKind;
 
 impl Parser {
-    pub(crate) fn parse_match_expression(&mut self) -> PResult<Expr> {
-        let start_tok = self.stream.peek();
 
-        eprintln!("\n==================== MATCH ====================");
-        eprintln!("MATCH: start at {:?}", start_tok.span);
+    pub(crate) fn parse_match_arm(&mut self) -> PResult<MatchArm> {
+    let start = self.stream.peek().span;
 
-        // match
-        let start = self.stream.next().span;
-        eprintln!("MATCH: consumed 'match', next token={:?} '{}' @ {:?}",
-            self.stream.peek_kind(),
-            self.stream.peek().lexeme,
-            self.stream.peek().span
-        );
+    // PATTERN
+    let old = self.in_pattern;
+    self.in_pattern = true;
+    let pattern = self.parse_pattern()?;
+    self.in_pattern = old;
 
-        // scrutinee
-        eprintln!("MATCH: --- parsing scrutinee ---");
-        let scrutinee = match self.parse_expr_until(TokenKind::LBrace) {
-            Ok(v) => v,
-            Err(e) => {
-                eprintln!("❌ MATCH: scrutinee parse FAILED: {:?}", e);
-                return Err(e);
-            }
-        };
+    // OPTIONAL GUARD: `if expr`
+    let guard = if self.stream.consume_if(TokenKind::If) {
+        Some(self.parse_expr()?)
+    } else {
+        None
+    };
 
-        eprintln!("MATCH: scrutinee OK = {:?}, next token={:?} '{}' @ {:?}",
-            scrutinee,
-            self.stream.peek_kind(),
-            self.stream.peek().lexeme,
-            self.stream.peek().span
-        );
+    // FAT ARROW =>
+    self.stream.expect(TokenKind::FatArrow)?;
 
-        // expect {
-        eprintln!("MATCH: expect LBrace '{{'}} ...");
-        let brace = self.stream.expect(TokenKind::LBrace)?;
-        eprintln!("MATCH: got '{{}}' @ {:?}", brace.span);
+    // BODY
+    let expr = self.parse_expr()?;
+    let end = expr.span();
 
-        eprintln!("MATCH: entering arms, first token={:?} '{}' @ {:?}",
-            self.stream.peek_kind(),
-            self.stream.peek().lexeme,
-            self.stream.peek().span
-        );
+    Ok(MatchArm {
+        pattern,
+        guard,
+        expr,
+        span: Span::merge(start, end),
+    })
+}
+pub(crate) fn parse_match_expression(&mut self) -> PResult<Expr> {
+    let start = self.stream.next().span; // 'match'
 
-        let mut arms = Vec::new();
+    // scrutinee
+    let scrutinee = self.parse_expr_until(TokenKind::LBrace)?;
+    self.stream.expect(TokenKind::LBrace)?;
 
-        // ARMS LOOP
-        loop {
-            if self.stream.consume_if(TokenKind::RBrace) {
-                eprintln!("MATCH: reached closing '}}' @ {:?}", self.stream.last_span());
-                break;
-            }
+    let mut arms = Vec::new();
 
-            eprintln!("\nMATCH: ----- NEW ARM -----");
-            eprintln!("MATCH: arm start token={:?} '{}' @ {:?}",
-                self.stream.peek_kind(),
-                self.stream.peek().lexeme,
-                self.stream.peek().span
-            );
-
-            // PATTERN
-            eprintln!("MATCH: --- parsing pattern ---");
-
-            let old = self.in_pattern;
-            self.in_pattern = true;
-
-            let pat_res = self.parse_pattern();
-            self.in_pattern = old;
-
-            match pat_res {
-                Ok(ref p) => eprintln!("MATCH: pattern OK = {:?}", p),
-                Err(e) => {
-                    eprintln!("❌ MATCH: pattern FAILED: {:?}", e);
-                    return Err(e);
-                }
-            }
-
-            let pat = pat_res?;
-
-            // expect =>
-            eprintln!(
-                "MATCH: expect FAT ARROW '=>' , current={:?} '{}' @ {:?}",
-                self.stream.peek_kind(),
-                self.stream.peek().lexeme,
-                self.stream.peek().span
-            );
-
-            self.stream.expect(TokenKind::FatArrow)?;
-            eprintln!("MATCH: got '=>'");
-
-            // VALUE expr
-            eprintln!("MATCH: --- parsing value expression ---");
-            let value_res = self.parse_expr();
-
-            match value_res {
-                Ok(ref v) => eprintln!("MATCH: value OK = {:?}, next token={:?} '{}' @ {:?}",
-                    v,
-                    self.stream.peek_kind(),
-                    self.stream.peek().lexeme,
-                    self.stream.peek().span
-                ),
-                Err(e) => {
-                    eprintln!("❌ MATCH: value expr FAILED: {:?}", e);
-                    return Err(e);
-                }
-            }
-
-            let value = value_res?;
-            arms.push((pat, value));
-
-            if self.stream.consume_if(TokenKind::Comma) {
-                eprintln!("MATCH: consumed trailing comma");
-            }
-        }
-
-        eprintln!("================ END MATCH ================\n");
-
-        let end = self.stream.last_span();
-
-        Ok(Expr::Match {
-            scrutinee: Box::new(scrutinee),
-            arms,
-            span: Span::merge(start, end),
-        })
+    while !self.stream.consume_if(TokenKind::RBrace) {
+        let arm = self.parse_match_arm()?;
+        arms.push(arm);
+        self.stream.consume_if(TokenKind::Comma);
     }
+
+    let end = self.stream.last_span();
+
+    Ok(Expr::Match {
+        scrutinee: Box::new(scrutinee),
+        arms, 
+        span: Span::merge(start, end),
+    })
+}
+
 }
