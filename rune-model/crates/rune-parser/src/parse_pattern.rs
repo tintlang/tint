@@ -71,6 +71,28 @@ pub fn parse_pattern(&mut self) -> PResult<Pattern> {
         Ok(Pattern::Tuple(items, Span::merge(start, end)))
     }
 
+
+pub fn parse_let_pattern(&mut self) -> PResult<Pattern> {
+    match self.stream.peek_kind() {
+
+        TokenKind::Ident => {
+            // SPAN копируем до parse_ident()
+            let span = self.stream.peek().span;
+            let id = self.parse_ident()?;
+            Ok(Pattern::Ident(id, span))
+        }
+
+        TokenKind::LParen => {
+            // tuple pattern
+            self.parse_tuple_pattern()
+        }
+
+        _ => Err(ParserError::Message {
+            msg: "Invalid pattern in let (only `name` or `(x,y)` allowed)".into(),
+            span: self.stream.peek().span,
+        })
+    }
+}
     // -----------------------------------------
     // x
     // Some(x)

@@ -1,203 +1,49 @@
 // rune-parser/parse_struct.rs
 
-use crate::Parser;
-use crate::error::*;
-use rune_ast::*;
+use crate::{Parser, error::*};
+use rune_ast::{StructDecl, StructField, Span};
 use rune_lexer::TokenKind;
 
 impl Parser {
+    /// Parse a struct declaration:
+    ///   struct User {
+    ///       id: i32,
+    ///       name{String},
+    ///   }
+    pub(crate) fn parse_struct(&mut self) -> PResult<StructDecl> {
+        // `struct`
+        let start = self.stream.expect(TokenKind::Struct)?.span;
 
-    // Parse field:
-    //   id{10}
-    //   id: 10
-    fn parse_struct_init_field(&mut self) -> PResult<StructInitField> {
+        // name
         let name = self.parse_ident()?;
-        let start = self.stream.last_span();
 
-        // RUST-STYLE: id: expr
-        if self.stream.consume_if(TokenKind::Colon) {
-            let expr = self.parse_expr()?;
-            let end = expr.span();
-            return Ok(StructInitField::Assign {
-                name,
-                expr,
-                span: Span::merge(start, end),
-            });
-        }
+        // optional <T, U>
+        let _generics = self.parse_optional_generics()?;
 
-        // RUNE-STYLE: id{expr}
-        if self.stream.consume_if(TokenKind::LBrace) {
-            let expr = self.parse_expr()?;
-            self.stream.expect(TokenKind::RBrace)?;
-            let end = expr.span();
-            return Ok(StructInitField::Rune {
-                name,
-                expr,
-                span: Span::merge(start, end),
-            });
-        }
-
-        Err(ParserError::Message {
-            msg: "Expected ':' or '{' in struct initializer".into(),
-            span: start,
-        })
-    }
-
-
-pub(crate) fn parse_struct(&mut self) -> PResult<StructDecl> {
-    // consume `struct`
-    let start = self.stream.expect(TokenKind::Struct)?.span;
-
-    // name
-    let name = self.parse_ident()?;
-
-    // <T>
-    let _generics = self.parse_optional_generics()?;
-
-    // {
-    self.stream.expect(TokenKind::LBrace)?;
-
-    let mut fields = Vec::new();
-    let mut style: Option<&'static str> = None;  // "typed" | "rune"
-
-    while !self.stream.consume_if(TokenKind::RBrace) {
-        let field = self.parse_struct_field()?; 
-
-        // Determine this field's style
-        let this_style = match &field {
-            StructField::Typed { .. } => "typed",
-            StructField::RuneTyped { .. } => "rune",
-        };
-
-        // First field → set style
-        if style.is_none() {
-            style = Some(this_style);
-        } else {
-            // Check consistency
-            if style.unwrap() != this_style {
-                return Err(ParserError::Message {
-                    msg: format!(
-                        "Mixed struct field styles are not allowed. \
-                         Expected all `{}` fields, but found `{}`.",
-                        style.unwrap(),
-                        this_style
-                    ),
-                    span: field.span(),
-                });
-            }
-        }
-
-        fields.push(field);
-
-        // optional comma
-        self.stream.consume_if(TokenKind::Comma);
-    }
-
-    let end = self.stream.last_span();
-
-    Ok(StructDecl {
-        name,
-        fields,
-        span: Span::merge(start, end),
-    })
-}
-
-
-    // Parse struct initialization:
-    //   User { id{10}, name{"Mark"} }
-    //   User { id: 10, name: "X" }
-    pub(crate) fn parse_struct_init(&mut self, name: String, start: Span) -> PResult<Expr> {
+        // `{`
         self.stream.expect(TokenKind::LBrace)?;
 
-        // Empty: User {}
-        if self.stream.consume_if(TokenKind::RBrace) {
-            let end = self.stream.last_span();
-            return Ok(Expr::StructInit {
-                name,
-                fields: vec![],
-                span: Span::merge(start, end),
-            });
-        }
-
-        // -----------------------------
-        // CHECK for STRUCT UPDATE
-        // -----------------------------
-        if self.stream.consume_if(TokenKind::DotDot) {
-            let base_ident = self.parse_ident()?;
-            let base_expr = Expr::Ident(base_ident, start);
-
-            self.stream.consume_if(TokenKind::Comma);
-
-            let mut updates = Vec::new();
-            let mut style: Option<&'static str> = None;
-
-            while !self.stream.consume_if(TokenKind::RBrace) {
-                let field = self.parse_struct_init_field()?;
-
-                // determine style
-                let this_style = match &field {
-                    StructInitField::Assign { .. } => "assign",
-                    StructInitField::Rune { .. } => "rune",
-                };
-
-                if style.is_none() {
-                    style = Some(this_style);
-                } else if style.unwrap() != this_style {
-                    return Err(ParserError::Message {
-                        msg: format!(
-                            "Mixed struct-update field styles are not allowed. \
-                            Expected all `{}` fields, but found `{}`.",
-                            style.unwrap(),
-                            this_style
-                        ),
-                        span: field.span(),
-                    });
-                }
-
-                updates.push(field);
-
-                if !self.stream.consume_if(TokenKind::Comma) {
-                    break;
-                }
-            }
-
-            let end = self.stream.last_span();
-            return Ok(Expr::StructUpdate {
-                base: Box::new(base_expr),
-                updates,
-                span: Span::merge(start, end),
-            });
-        }
-
-        // -----------------------------
-        // NORMAL STRUCT INITIALIZATION
-        // -----------------------------
         let mut fields = Vec::new();
-        let mut style: Option<&'static str> = None;
+        let mut style: Option<&'static str> = None; // "typed" or "rune"
 
-        loop {
-            // BEFORE parsing fields, handle legacy "=" syntax error
-            if self.stream.consume_if(TokenKind::Eq) {
-                return Err(ParserError::Message {
-                    msg: "Struct init does not support `=`. Use either Rust-style `:` or Rune-style `{}`".into(),
-                    span: self.stream.last_span(),
-                });
-            }
+        // fields loop
+        while !self.stream.consume_if(TokenKind::RBrace) {
+            let field = self.parse_struct_field()?;
 
-            let field = self.parse_struct_init_field()?;
-
+            // Determine this field's style
             let this_style = match &field {
-                StructInitField::Assign { .. } => "rust",
-                StructInitField::Rune { .. } => "rune",
+                StructField::Typed { .. }     => "typed",
+                StructField::RuneTyped { .. } => "rune",
             };
 
+            // First field → set struct style
             if style.is_none() {
                 style = Some(this_style);
             } else if style.unwrap() != this_style {
                 return Err(ParserError::Message {
                     msg: format!(
-                        "Mixed struct-init field styles are not allowed. \
-                        Expected all `{}` fields, but found `{}`.",
+                        "Mixed struct field styles are not allowed. \
+                         Expected all `{}`, but found `{}`.",
                         style.unwrap(),
                         this_style
                     ),
@@ -207,36 +53,28 @@ pub(crate) fn parse_struct(&mut self) -> PResult<StructDecl> {
 
             fields.push(field);
 
-            if !self.stream.consume_if(TokenKind::Comma) {
-                break;
-            }
-
-            if self.stream.peek_kind() == TokenKind::RBrace {
-                break;
-            }
+            // optional comma
+            self.stream.consume_if(TokenKind::Comma);
         }
 
-        self.stream.expect(TokenKind::RBrace)?;
         let end = self.stream.last_span();
 
-        Ok(Expr::StructInit {
+        Ok(StructDecl {
             name,
             fields,
             span: Span::merge(start, end),
         })
     }
 
-    // ---------------------------------------------------------
-    // PARSE ONE STRUCT FIELD
-    // Supports:
-    //   id: i32
-    //   id{i32}
-    // ---------------------------------------------------------
+    /// Parse a single struct field inside `struct { … }`
+    /// Supports:
+    ///   name: Type
+    ///   name{Type}
     fn parse_struct_field(&mut self) -> PResult<StructField> {
         let name = self.parse_ident()?;
         let start = self.stream.last_span();
 
-        // RUST STYLE: name: Type
+        // RUST-style field: name: Type
         if self.stream.consume_if(TokenKind::Colon) {
             let ty = self.parse_type()?;
             let end = self.stream.last_span();
@@ -247,7 +85,7 @@ pub(crate) fn parse_struct(&mut self) -> PResult<StructDecl> {
             });
         }
 
-        // RUNE STYLE: name{Type}
+        // RUNE-style field: name{Type}
         if self.stream.consume_if(TokenKind::LBrace) {
             let ty = self.parse_type()?;
             self.stream.expect(TokenKind::RBrace)?;
@@ -259,26 +97,24 @@ pub(crate) fn parse_struct(&mut self) -> PResult<StructDecl> {
             });
         }
 
-        // ERROR
         Err(ParserError::Message {
             msg: "Expected ':' or '{' after struct field name".into(),
             span: start,
         })
     }
 
-    // ---------------------------------------------------------
-    // GENERICS LIST: <T, U>
-    // ---------------------------------------------------------
+    /// Parse optional generics: <T, U>
     fn parse_optional_generics(&mut self) -> PResult<Vec<String>> {
         let mut out = Vec::new();
 
+        // no `<`
         if !self.stream.consume_if(TokenKind::LAngle) {
             return Ok(out);
         }
 
+        // parse identifiers separated by commas until `>`
         loop {
-            let ident = self.parse_ident()?;
-            out.push(ident);
+            out.push(self.parse_ident()?);
 
             if self.stream.consume_if(TokenKind::RAngle) {
                 break;
