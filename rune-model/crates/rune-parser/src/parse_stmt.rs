@@ -6,6 +6,62 @@ use rune_ast::*;
 use rune_lexer::TokenKind;
 
 impl Parser {
+ /// Parse a let-statement:
+    ///   let name = expr;
+    ///   let name: Type = expr;
+    ///   let name { expr };
+    ///   let name: Type { expr };
+fn parse_let_stmt(&mut self, start: Span) -> PResult<Stmt> {
+    // already consumed `let`
+
+    // ▼▼▼ KEY FIX ▼▼▼
+    let old = self.in_pattern;
+    self.in_pattern = true;
+    let pattern = self.parse_let_pattern()?;
+    self.in_pattern = old;
+    // ▲▲▲ KEY FIX ▲▲▲
+
+    // Optional type
+    let ty = if self.stream.consume_if(TokenKind::Colon) {
+        Some(self.parse_type()?)
+    } else {
+        None
+    };
+
+    // Must have "=" or "{ expr }"
+    if self.stream.peek_kind() != TokenKind::Eq
+        && self.stream.peek_kind() != TokenKind::LBrace
+    {
+        return Err(ParserError::Message {
+            msg: "let must have either `= expr` or `{ expr }`".into(),
+            span: start,
+        });
+    }
+
+    let init = if self.stream.consume_if(TokenKind::Eq) {
+        LetInit::Assign(self.parse_expr()?)
+    } else {
+        self.stream.expect(TokenKind::LBrace)?;
+        let expr = self.parse_expr()?;
+        self.stream.expect(TokenKind::RBrace)?;
+        LetInit::Rune(expr)
+    };
+
+    self.stream.consume_if(TokenKind::Semicolon);
+
+    let end = match &init {
+        LetInit::Assign(e) => e.span(),
+        LetInit::Rune(e) => e.span(),
+    };
+
+    Ok(Stmt::Let {
+        pattern,
+        ty,
+        init,
+        span: Span::merge(start, end),
+    })
+}
+
 
     // RETURN statement
     fn parse_return_stmt(&mut self) -> PResult<Stmt> {
@@ -130,21 +186,10 @@ impl Parser {
         match tok.kind {
             // let
             TokenKind::Let => {
-                let start = self.stream.next().span;
-                let name = self.parse_ident()?;
-
-                self.stream.expect(TokenKind::Eq)?;
-                let expr = self.parse_expr()?;
-                self.stream.consume_if(TokenKind::Semicolon);
-
-                let end = expr.span();
-                Ok(Stmt::Let {
-                    name,
-                    expr,
-                    span: Span::merge(start, end),
-                })
+                let start = self.stream.next().span; // consume 'let'
+                self.parse_let_stmt(start)
             }
-
+            
             // return
             TokenKind::Return => self.parse_return_stmt(),
 
@@ -183,7 +228,17 @@ impl Parser {
             }
 
             // Fallback → expression
-            TokenKind::Number | TokenKind::String | TokenKind::LParen => {
+            TokenKind::Number
+            | TokenKind::String
+            | TokenKind::True
+            | TokenKind::False
+            | TokenKind::Ident
+            | TokenKind::LParen
+            | TokenKind::LBracket
+            | TokenKind::Bang
+            | TokenKind::Minus
+            | TokenKind::PipeLambda
+            => {
                 let expr = self.parse_expr()?;
                 self.stream.consume_if(TokenKind::Semicolon);
                 Ok(Stmt::Expr(expr))

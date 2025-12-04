@@ -10,8 +10,10 @@ pub mod eval_block;
 pub mod errors;
 pub mod eval_host;
 pub mod host_vm;
+pub mod pattern_match;
 
 
 pub use eval_host::EvalHost;
 pub use value::Value;
 pub use env::Env;
+pub use pattern_match::match_pattern;

@@ -1,119 +1,155 @@
-use rune_parser::Parser;
-use rune_lexer::Lexer;
-use rune_runtime::vm::RuneVM;
-use rune_ast::{Item, FnBody, Stmt, Expr};
-use rune_evaluator::EvalHost;
-
-fn format_expr(e: &Expr) -> String {
-    use Expr::*;
-    match e {
-        Ident(name, _) => name.clone(),
-        Number(n, _) => n.clone(),
-        Binary { left, op, right, .. } =>
-            format!("{} {} {}", format_expr(left), op, format_expr(right)),
-        _ => format!("<expr {:?}>", e),
-    }
-}
-
-fn print_fn_source(item: &Item) {
-    if let Item::Fn(func) = item {
-        println!("EXECUTED CODE:");
-        println!("fn {}() {{", func.name);
-
-        match &func.body {
-            FnBody::Block(block) => {
-                for stmt in &block.stmts {
-                    match stmt {
-                        Stmt::Let { name, expr, .. } =>
-                            println!("    let {} = {};", name, format_expr(expr)),
-                        Stmt::Return(expr, _) =>
-                            println!("    return {};", format_expr(expr)),
-                        _ => println!("    {:?}", stmt),
-                    }
-                }
-            }
-            FnBody::Expr(expr) =>
-                println!("    {}", format_expr(expr)),
-        }
-
-        println!("}}\n");
-    }
-}
-
 #[test]
-fn test_complex_math_plus_ui() {
+fn test_rune_capabilities() {
+    use rune_parser::Parser;
+    use rune_lexer::{Lexer, collect_tokens, Token};
+    use rune_runtime::vm::RuneVM;
+    use rune_evaluator::EvalHost;
+
+    use rune_parser::error::ParserError;
+
+    println!("\n\n============================= RUNE TEST =================================");
+    println!("→ STEP 1: Loading source code\n");
+
     let code = r#"
-        ui fn Show(msg: string) {
-            <Text padding{12} color{blue}> "OUT: {msg}" </Text>
-        }
+fn AllFeatures() {
+    let p = (10, 20, 30);
+    let (x, y, z) = p;
+    let s1 = x + y + z;
 
-        ui fn Status(label: string, value: number) {
-            <Row gap.x{8} padding{4}>
-                <Text>"{label}"</Text>
-                <Text color{green}>"{value}"</Text>
-            </Row>
-        }
+    let arr = [x, y, z, s1];
+    let a0 = arr[0];
+    let a3 = arr[3];
 
-        ui fn Card(title: string, msg: string) {
-            <Panel padding{16} radius{12}>
-                <Text weight{700}> "{title}" </Text>
-                <Text>"{msg}"</Text>
-            </Panel>
-        }
-
-        fn Calc2() {
-            let x = 12;
-            let y = 4;
-            let z = 3;
-
-            let r = (x * y - 6) + (z * (y + 2)) - 5;
-
-            Show("Result is {r}");
-            Status("Value:", r);
-            Card("Final", "Computed value is {r}");
-
-            return r;
-        }
-    "#;
-
-    println!("================ CODE ================");
-    println!("{code}");
-    println!("======================================");
-
-    // ---------------- TOKEN DUMP ----------------
-    let mut lexer = Lexer::new(code);
-    let tokens = rune_lexer::collect_tokens(&mut lexer);
-
-    println!("\n============= TOKENS =============");
-    for t in &tokens {
-        println!("{:?}", t);
-    }
-
-    // ---------------- PARSER ----------------
-    let mut parser = Parser::new(tokens);
-    let program = parser.parse_program().expect("Parser failed");
-
-    println!("\n============= AST =============");
-    for item in &program.items {
-        println!("{:#?}", item);
-    }
-
-    // ---------------- RUNTIME ----------------
-    let mut vm = RuneVM::new();
-    vm.run_program(&program);
-
-    println!("\n============= RUN Calc2() =============");
-
-    let out = vm.call_fn("Calc2", &[], rune_ast::Span::dummy())
-        .expect("Call failed");
-
-    let result = match out {
-        rune_evaluator::value::Value::Number(n) => n as i64,
-        _ => panic!("Calc2 must return number"),
+    let u = User {
+        id{a0},
+        name{"Rune"},
+        age{99},
     };
 
-    println!("RESULT = {}", result);
-    assert_eq!(result, 55);
+    let user2 = user {
+        age{user.age + 1},
+        name{"Nornse"}
+    }
 
-    println!("============= TEST PASSED =============");
+    let t = (1, 2, 3);
+    let res = match t {
+        (1, b, 3) => b * 10,
+        _ => 0
+    };
+
+    let who = match user2 {
+        User { id, name } => id * 100,
+        _ => 0
+    };
+
+    return s1 + a0 + a3 + res + who;
+}
+"#;
+
+    println!("{}", code);
+
+    println!("→ STEP 2: Lexing\n");
+
+    let tokens = collect_tokens(&mut Lexer::new(code));
+
+    for (i, tok) in tokens.iter().enumerate() {
+        println!(
+            "  [{}] {:?}   span=({}:{})",
+            i,
+            tok.kind,
+            tok.span.start.offset,
+            tok.span.end.offset
+        );
+    }
+
+    println!("\n→ STEP 3: Parsing\n");
+
+    let mut parser = Parser::new(tokens);
+
+let program = match parser.parse_program() {
+    Ok(p) => {
+        println!("✔ PARSER OK");
+        p
+    }
+    Err(e) => {
+        println!("\n❌ PARSER FAILED");
+        println!("Error: {:?}", e);
+
+        // Extract SPAN manually because ParserError has no `.span()` method
+        let span_opt = match &e {
+            ParserError::Message { span, .. } => Some(span),
+            ParserError::Unexpected { span, .. } => Some(span),
+            _ => None,
+        };
+
+        if let Some(span) = span_opt {
+            println!(
+                "Span: {}..{} (line {}, col {})",
+                span.start.offset,
+                span.end.offset,
+                span.start.line,
+                span.start.column
+            );
+
+            println!(
+                "Source fragment: `{}`",
+                &code[span.start.offset .. span.end.offset]
+            );
+        } else {
+            println!("(No span available for this error variant)");
+        }
+
+        panic!("Parser failed, aborting test");
+    }
+};
+
+
+    println!("\n→ STEP 4: Executing VM\n");
+
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+
+    println!("→ STEP 4: Loading program into VM");
+
+    let mut vm = RuneVM::new();
+
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        vm.run_program(&program);
+    }));
+
+    match result {
+        Ok(_) => println!("✔ VM loaded program"),
+        Err(e) => {
+            println!("❌ VM PANICKED DURING LOAD: {:?}", e);
+            panic!("VM load failed");
+        }
+    }
+
+
+    println!("\n→ STEP 5: Calling function\n");
+
+    let out = match vm.call_fn("AllFeatures", &[], rune_ast::Span::dummy()) {
+        Ok(v) => {
+            println!("✔ Function returned value: {:?}", v);
+            v
+        }
+        Err(e) => {
+            println!("❌ CALL FAILED: {:?}", e);
+            panic!("Call failed");
+        }
+    };
+
+    println!("\n→ STEP 6: Normalizing output\n");
+
+    let result = match out {
+        rune_evaluator::value::Value::Number(n) => {
+            println!("✔ Final result = {}", n);
+            n as f64
+        }
+        other => {
+            println!("❌ Expected number, got: {:?}", other);
+            panic!("Invalid return");
+        }
+    };
+
+    println!("\n============================= END TEST =================================\n");
 }

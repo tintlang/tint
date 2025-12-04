@@ -37,48 +37,4 @@ impl Parser {
             span: Span::merge(start_tok.span, end_tok.span),
         })
     }
-
-// ============================================================
-// VALUE PARSER for MODIFIERS
-// Supports:
-//   10
-//   blue
-//   a + b
-//   { expr }
-// ============================================================
-
-fn try_parse_value(&mut self) -> PResult<Option<UiModifierValue>> {
-    let kind = self.stream.peek().kind.clone();
-
-    match kind {
-        TokenKind::Number => {
-            let tok = self.stream.next();
-            let v: f64 = tok.lexeme.parse().unwrap();
-            return Ok(Some(UiModifierValue::Number(v)));
-        }
-
-        TokenKind::Ident => {
-            let tok = self.stream.next();
-            return Ok(Some(UiModifierValue::String(tok.lexeme.clone())));
-        }
-
-        // { expr }
-        TokenKind::LBrace => {
-            self.stream.next(); // {
-            let expr = self.parse_expr()?;
-            self.stream.expect(TokenKind::RBrace)?;
-            return Ok(Some(UiModifierValue::Expr(expr)));
-        }
-
-        _ => Ok(None),
-    }
-}
-
-// ============================================================
-// Parse ONE UI modifier: 
-//    padding{12}
-//    padding.x{ left: 10 right: 20 }
-//    animate.opacity{ from: 0 to: 1 }
-// ============================================================
-
 }

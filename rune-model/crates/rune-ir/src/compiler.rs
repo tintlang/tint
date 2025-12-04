@@ -5,7 +5,10 @@
 use crate::ir::*;
 use crate::builder::IrBuilder;
 
-use rune_ast::{Program, Item, Expr, Stmt, FnBody};
+use rune_ast::{Program, Item, Expr, Stmt, FnBody, Pattern};
+use rune_ast::PatternField;
+use rune_ast::StringPart;
+use std::collections::HashMap;
 
 pub struct SsaCompiler {
     builder: IrBuilder,
@@ -54,6 +57,9 @@ impl SsaCompiler {
         }
     }
 
+    // ---------------------------------------------
+    // LOWERING STATEMENTS
+    // ---------------------------------------------
     fn lower_stmt(
         &mut self,
         s: &Stmt,
@@ -61,10 +67,15 @@ impl SsaCompiler {
         locals: &mut std::collections::HashMap<String, ValueId>,
     ) {
         match s {
-            Stmt::Let { name, expr, .. } => {
+            // NEW: let pattern = expr
+            Stmt::Let { pattern, init, .. } => {
+                let expr = match init {
+                    rune_ast::LetInit::Assign(e) => e,
+                    rune_ast::LetInit::Rune(e)   => e,
+                };
+
                 let v = self.lower_expr(expr, block, locals);
-                self.builder.emit_store(block, name.clone(), v);
-                locals.insert(name.clone(), v);
+                self.bind_pattern(pattern, v, locals, block);
             }
 
             Stmt::Assign { name, expr, .. } => {
@@ -82,28 +93,83 @@ impl SsaCompiler {
                 self.lower_expr(expr, block, locals);
             }
 
-            _ => {
-                // TODO: remaining statements
-                println!("WARNING: stmt not lowered in SSA: {:?}", s);
+
+            other => {
+                println!("WARNING: stmt not lowered in SSA: {:?}", other);
             }
         }
     }
 
-       fn lower_expr(
+    // ---------------------------------------------
+    // PATTERN BINDING in SSA
+    // ---------------------------------------------
+fn bind_pattern(
+    &mut self,
+    pat: &Pattern,
+    value: ValueId,
+    locals: &mut HashMap<String, ValueId>,
+    block: &mut Block,
+) {
+    match pat {
+        Pattern::Ident(name, _) => {
+            locals.insert(name.clone(), value);
+        }
+
+        Pattern::Tuple(items, _) => {
+            for (i, subpat) in items.iter().enumerate() {
+                let elem = self.builder.emit_tuple_extract(block, value, i);
+                self.bind_pattern(subpat, elem, locals, block);
+            }
+        }
+
+        Pattern::Struct { fields, .. } => {
+            for f in fields {
+                match f {
+                    PatternField::Shorthand { field, .. } => {
+                        let fld = self.builder.emit_field_access(block, value, field.clone());
+                        locals.insert(field.clone(), fld);
+                    }
+
+                    PatternField::Assign { field, pat, .. } => {
+                        let fld = self.builder.emit_field_access(block, value, field.clone());
+                        self.bind_pattern(pat, fld, locals, block);
+                    }
+
+                    PatternField::Rest(_) => {}
+                }
+            }
+        }
+
+        Pattern::Wildcard(_) => {}
+        Pattern::Number(_, _) => {}
+        Pattern::String(_, _) => {}
+        Pattern::Variant { .. } => {
+            println!("TODO: variant pattern in SSA");
+        }
+    }
+}
+
+    // ---------------------------------------------
+    // LOWERING EXPRESSIONS
+    // ---------------------------------------------
+    fn lower_expr(
         &mut self,
         e: &Expr,
         block: &mut Block,
         locals: &mut std::collections::HashMap<String, ValueId>,
     ) -> ValueId {
         match e {
-            Expr::Number(n, _) => {
-                let v = Value::Number(n.parse().unwrap());
-                self.builder.emit_const(block, v)
-            }
+            Expr::Number(n, _) =>
+                self.builder.emit_const(block, Value::Number(n.parse().unwrap())),
 
-            Expr::String(s, _) => {
-                self.builder.emit_const(block, Value::String(s.clone()))
-            }
+            Expr::String(s, _) =>
+                self.builder.emit_const(block, Value::String(s.clone())),
+
+            Expr::Bool(v, _) =>
+                self.builder.emit_const(block, Value::Bool(*v)),
+
+            Expr::Unit(_) =>
+                self.builder.emit_const(block, Value::Unit),
 
             Expr::Ident(name, _) => {
                 if let Some(&id) = locals.get(name) {
@@ -113,6 +179,41 @@ impl SsaCompiler {
                 }
             }
 
+            Expr::Block(b, _) => {
+                let mut last = self.builder.emit_const(block, Value::Unit);
+
+                for stmt in &b.stmts {
+                    self.lower_stmt(stmt, block, locals);
+                    if let Stmt::Expr(e2) = stmt {
+                        last = self.lower_expr(e2, block, locals);
+                    }
+                }
+
+                last
+            }
+
+            // ---------------------------------------------
+            // INTERPOLATED STRING → sequence of concat ops
+            // ---------------------------------------------
+            Expr::InterpolatedString { parts, .. } => {
+                let mut acc = self.builder.emit_const(block, Value::String(String::new()));
+
+                for part in parts {
+                    let next = match part {
+                        StringPart::Text(t) =>
+                            self.builder.emit_const(block, Value::String(t.clone())),
+
+                        StringPart::Expr(e2) => 
+                            self.lower_expr(e2, block, locals),
+                    };
+
+                    acc = self.builder.emit_binary(block, "+".into(), acc, next);
+                }
+
+                acc
+            }
+
+            // ---------------------------------------------
             Expr::Binary { left, op, right, .. } => {
                 let lv = self.lower_expr(left, block, locals);
                 let rv = self.lower_expr(right, block, locals);
@@ -124,66 +225,132 @@ impl SsaCompiler {
                 self.builder.emit_unary(block, op.clone(), v)
             }
 
-            Expr::Paren(expr, _) => {
-                self.lower_expr(expr, block, locals)
-            }
+            Expr::Paren(expr, _) =>
+                self.lower_expr(expr, block, locals),
 
-            // -----------------------------------------------
-            // CALL: foo(a, b)
-            // -----------------------------------------------
+            // ---------------------------------------------
+            // CALL: foo(a,b)
+            // ---------------------------------------------
             Expr::Call { target, args, .. } => {
                 let fn_val = self.lower_expr(target, block, locals);
-                let mut arg_vals = Vec::new();
-                for a in args {
-                    arg_vals.push(self.lower_expr(a, block, locals));
-                }
-                self.builder.emit_call(block, fn_val, arg_vals)
+                let lowered = args
+                    .iter()
+                    .map(|a| self.lower_expr(a, block, locals))
+                    .collect::<Vec<_>>();
+
+                self.builder.emit_call(block, fn_val, lowered)
             }
 
-            // -----------------------------------------------
             // FIELD: obj.field
-            // -----------------------------------------------
             Expr::Field { target, field, .. } => {
                 let base = self.lower_expr(target, block, locals);
                 self.builder.emit_field_access(block, base, field.clone())
             }
 
-            // -----------------------------------------------
-            // NAMESPACE: A::B
-            // -----------------------------------------------
+            // MODULE::ITEM
             Expr::Namespace { base, item, .. } => {
                 let mod_val = self.lower_expr(base, block, locals);
                 self.builder.emit_namespace_access(block, mod_val, item.clone())
             }
 
-            // -----------------------------------------------
             // INDEX: arr[i]
-            // -----------------------------------------------
             Expr::Index { target, index, .. } => {
                 let arr = self.lower_expr(target, block, locals);
                 let idx = self.lower_expr(index, block, locals);
                 self.builder.emit_index(block, arr, idx)
             }
 
-            // -----------------------------------------------
-            // LAMBDA → пока как TODO
-            // -----------------------------------------------
-            Expr::Lambda { .. } => {
-                let id = self.builder.emit_const(block, Value::Unit);
-                println!("WARNING: Lambda lowering not implemented");
-                id
+            Expr::Match { scrutinee, arms, .. } => {
+                let scr = self.lower_expr(scrutinee, block, locals);
+
+                let mut v = Vec::new();
+                for (pat, body) in arms {
+                    let val = self.lower_expr(body, block, locals);
+                    v.push((pat.clone(), val));
+                }
+
+                self.builder.emit_match(block, scr, v)
             }
 
-            // -----------------------------------------------
-            // STRUCT INIT { .. }
-            // -----------------------------------------------
+            // ---------------------------------------------
+            // STRUCT INIT
+            // ---------------------------------------------
             Expr::StructInit { name, fields, .. } => {
-                let mut field_vals = Vec::new();
-                for (fname, fexpr) in fields {
-                    let fv = self.lower_expr(fexpr, block, locals);
-                    field_vals.push((fname.clone(), fv));
+                let mut fv = Vec::new();
+
+                for f in fields {
+                    match f {
+                        rune_ast::StructInitField::Assign { name, expr, .. } => {
+                            let v = self.lower_expr(expr, block, locals);
+                            fv.push((name.clone(), v));
+                        }
+                        rune_ast::StructInitField::Rune { name, expr, .. } => {
+                            let v = self.lower_expr(expr, block, locals);
+                            fv.push((name.clone(), v));
+                        }
+                    }
                 }
-                self.builder.emit_struct_init(block, name.clone(), field_vals)
+
+                self.builder.emit_struct_init(block, name.clone(), fv)
+            }
+
+            // ---------------------------------------------
+            // STRUCT UPDATE: base { f = 10, y{expr} }
+            // ---------------------------------------------
+            Expr::StructUpdate { base, updates, .. } => {
+                let base_val = self.lower_expr(base, block, locals);
+                let mut upd_vec = Vec::new();
+
+                for u in updates {
+                    match u {
+                        rune_ast::StructInitField::Assign { name, expr, .. } => {
+                            let v = self.lower_expr(expr, block, locals);
+                            upd_vec.push((name.clone(), v));
+                        }
+                        rune_ast::StructInitField::Rune { name, expr, .. } => {
+                            let v = self.lower_expr(expr, block, locals);
+                            upd_vec.push((name.clone(), v));
+                        }
+                    }
+                }
+
+                self.builder.emit_struct_update(block, base_val, upd_vec)
+            }
+
+            Expr::Array { items, .. } => {
+                let vals = items
+                    .iter()
+                    .map(|e2| self.lower_expr(e2, block, locals))
+                    .collect::<Vec<_>>();
+
+                self.builder.emit_array(block, vals)
+            }
+
+            // ---------------------------------------------
+            // TUPLE: (a,b,c)
+            // ---------------------------------------------
+            Expr::Tuple { items, .. } => {
+                let vals = items
+                    .iter()
+                    .map(|e2| self.lower_expr(e2, block, locals))
+                    .collect::<Vec<_>>();
+
+                self.builder.emit_tuple(block, vals)
+            }
+
+            // ---------------------------------------------
+            // NAMED ARG — cannot be lowered outside call
+            // ---------------------------------------------
+            Expr::NamedArg { name, .. } => {
+                panic!("Named argument `{}` cannot appear as bare expression", name);
+            }
+
+            // ---------------------------------------------
+            // TODO λ
+            // ---------------------------------------------
+            Expr::Lambda { .. } => {
+                println!("TODO: lambda lowering");
+                self.builder.emit_const(block, Value::Unit)
             }
         }
     }

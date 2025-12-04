@@ -108,9 +108,51 @@ impl IrVM {
                     self.alloc_value(*dst, Value::Unit);
                 }
 
+                Instr::Match { dst, .. } => {
+                    println!("WARNING: IR match not implemented");
+                    self.alloc_value(*dst, Value::Unit);
+                }
+
                 Instr::StructInit { dst, .. } => {
                     println!("WARNING: struct init not implemented");
                     self.alloc_value(*dst, Value::Unit);
+                }
+
+                Instr::StructUpdate { dst, base, updates } => {
+                    println!("WARNING: struct update not implemented, returning unit");
+                    self.alloc_value(*dst, Value::Unit);
+                }
+
+                Instr::Tuple { dst, items } => {
+                    // Сгенерировать runtime-значение tuple: Vec<Value>
+                    let mut out = Vec::new();
+                    for id in items {
+                        out.push(self.get_value(*id));
+                    }
+                    self.alloc_value(*dst, Value::Tuple(out));
+                }
+
+                Instr::TupleExtract { dst, tuple, index } => {
+                    let v = self.get_value(*tuple);
+                    match v {
+                        Value::Tuple(items) => {
+                            let elem = items
+                                .get(*index)
+                                .unwrap_or_else(|| panic!("Tuple index {} out of bounds", index))
+                                .clone();
+
+                            self.alloc_value(*dst, elem);
+                        }
+                        other => panic!("TupleExtract on non-tuple value: {:?}", other),
+                    }
+                }
+
+                Instr::Array { dst, items } => {
+                    let mut out = Vec::new();
+                    for id in items {
+                        out.push(self.get_value(*id));
+                    }
+                    self.alloc_value(*dst, Value::List(out));
                 }
 
                 Instr::Return(id) => {

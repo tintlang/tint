@@ -346,6 +346,145 @@ impl EvalHost for RuneVM {
         }
     }
 
+    fn bind_pattern(&mut self, pat: &rune_ast::Pattern, value: &EvalValue) -> bool {
+    use rune_ast::{Pattern, PatternField};
+
+    match pat {
+        Pattern::Wildcard(_) => true,
+
+        Pattern::Ident(name, _) => {
+            // bind ident = value
+            self.define_var(name, value.clone());
+            true
+        }
+
+        Pattern::Number(s, _) => match value {
+            EvalValue::Number(n) => n.to_string() == *s,
+            _ => false,
+        },
+
+        Pattern::String(s, _) => match value {
+            EvalValue::String(v) => v == s,
+            _ => false,
+        },
+
+        // Tuple pattern: (a, b, c)
+        Pattern::Tuple(p_items, _) => match value {
+            EvalValue::Tuple(v_items) => {
+                if p_items.len() != v_items.len() {
+                    return false;
+                }
+                for (p, v) in p_items.iter().zip(v_items.iter()) {
+                    if !self.bind_pattern(p, v) {
+                        return false;
+                    }
+                }
+                true
+            }
+            _ => false,
+        },
+
+        // Struct pattern: User { x, y }
+        Pattern::Struct { name, fields, .. } => match value {
+            EvalValue::StructInstance { name: vname, fields: vfields } => {
+                if vname != name {
+                    return false;
+                }
+
+                for pf in fields {
+                    match pf {
+                        PatternField::Shorthand { field, .. } => {
+                            // get value from struct
+                            let Some(v) = vfields
+                                .iter()
+                                .find(|(k,_)| k == field)
+                                .map(|(_,v)| v)
+                            else {
+                                return false;
+                            };
+
+                            // bind variable
+                            self.define_var(field, v.clone());
+                        }
+
+                        PatternField::Assign { field, pat, .. } => {
+                            let Some(v) = vfields
+                                .iter()
+                                .find(|(k,_)| k == field)
+                                .map(|(_,v)| v)
+                            else {
+                                return false;
+                            };
+
+                            if !self.bind_pattern(pat, v) {
+                                return false;
+                            }
+                        }
+
+                        PatternField::Rest(_) => continue,
+                    }
+                }
+
+                true
+            }
+            _ => false,
+        },
+
+        // Enum pattern: Ok(x), Error(msg)
+        Pattern::Variant { name, args, .. } => match value {
+            EvalValue::EnumInstance { variant, args: v_args, .. } => {
+                if variant != name {
+                    return false;
+                }
+                if args.len() != v_args.len() {
+                    return false;
+                }
+                for (p, v) in args.iter().zip(v_args.iter()) {
+                    if !self.bind_pattern(p, v) {
+                        return false;
+                    }
+                }
+                true
+            }
+            _ => false,
+        },
+    }
+}
+fn apply_compound(
+    &mut self,
+    left: &EvalValue,
+    op: &str,
+    right: &EvalValue
+) -> EvalValue {
+    match (left, op, right) {
+        (EvalValue::Number(a), "+=", EvalValue::Number(b)) =>
+            EvalValue::Number(a + b),
+
+        (EvalValue::Number(a), "-=", EvalValue::Number(b)) =>
+            EvalValue::Number(a - b),
+
+        (EvalValue::Number(a), "*=", EvalValue::Number(b)) =>
+            EvalValue::Number(a * b),
+
+        (EvalValue::Number(a), "/=", EvalValue::Number(b)) =>
+            EvalValue::Number(a / b),
+
+        // Strings: s += "text"
+        (EvalValue::String(a), "+=", EvalValue::String(b)) =>
+            EvalValue::String(format!("{}{}", a, b)),
+
+        // Lists: list += elem
+        (EvalValue::List(a), "+=", v) => {
+            let mut out = a.clone();
+            out.push(v.clone());
+            EvalValue::List(out)
+        }
+
+        _ => EvalValue::Unit,
+    }
+}
+
+
     fn namespace_lookup(&mut self, _ns: EvalValue, item: &str) -> EvalValue {
         panic!("Namespaces not supported: {}", item);
     }
@@ -364,14 +503,88 @@ impl EvalHost for RuneVM {
     }
 
     fn match_pattern(&mut self, value: &EvalValue, pat: &rune_ast::Pattern) -> bool {
-        use rune_ast::Pattern;
+        use rune_ast::{Pattern, PatternField};
 
         match pat {
+            // `_`
             Pattern::Wildcard(_) => true,
+
+            // `_ = expr` — всегда матчит
             Pattern::Ident(_, _) => true,
-            Pattern::Number(s, _) => matches!(value, EvalValue::Number(n) if &n.to_string() == s),
-            Pattern::String(s, _) => matches!(value, EvalValue::String(v) if v == s),
-            Pattern::Variant {..} => panic!("Pattern matching on variants not supported"),
+
+            // literal numbers
+            Pattern::Number(s, _) => match value {
+                EvalValue::Number(n) => &n.to_string() == s,
+                _ => false,
+            },
+
+            // literal string
+            Pattern::String(s, _) => match value {
+                EvalValue::String(v) => v == s,
+                _ => false,
+            },
+
+            // tuple patterns: (a, b, c)
+            Pattern::Tuple(p_items, _) => match value {
+                EvalValue::Tuple(v_items) => {
+                    if p_items.len() != v_items.len() {
+                        return false;
+                    }
+
+                    for (p, v) in p_items.iter().zip(v_items.iter()) {
+                        if !self.match_pattern(v, p) {
+                            return false;
+                        }
+                    }
+
+                    true
+                }
+                _ => false,
+            },
+
+            // struct patterns: User { id, name }
+            Pattern::Struct { name, fields, .. } => match value {
+                EvalValue::StructInstance { name: vname, fields: vfields } => {
+                    if vname != name {
+                        return false;
+                    }
+
+                    for pf in fields {
+                        match pf {
+                            // shorthand: name → just check exists
+                            PatternField::Shorthand { field, .. } => {
+                                if vfields.iter().all(|(k, _)| k != field) {
+                                    return false;
+                                }
+                            }
+
+                            // field: pattern
+                            PatternField::Assign { field, pat, .. } => {
+                                let Some(v) =
+                                    vfields.iter().find(|(k,_)| k == field).map(|(_,v)| v)
+                                else {
+                                    return false;
+                                };
+
+                                if !self.match_pattern(v, pat) {
+                                    return false;
+                                }
+                            }
+
+                            // `..` always ok
+                            PatternField::Rest(_) => continue,
+                        }
+                    }
+
+                    true
+                }
+                _ => false,
+            },
+
+            // enums unsupported (как ты и хотел)
+            Pattern::Variant { .. } => {
+                panic!("Pattern matching on variants not supported");
+            }
         }
     }
 }

@@ -1,5 +1,5 @@
 // rune-evaluator/value.rs
-// rune-evaluator/value.rs
+
 use std::{fmt, rc::Rc};
 use crate::env::Env;
 
@@ -11,6 +11,8 @@ pub enum Value {
     String(String),
     Bool(bool),
     Unit,
+
+    Tuple(Vec<Value>),
 
     // Struct instance:  Point { x:1, y:2 }
     StructInstance {
@@ -54,6 +56,72 @@ pub enum Value {
     },
 }
 
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Value::Number(n) => write!(f, "{}", n),
+            Value::Bool(b) => write!(f, "{}", b),
+            Value::String(s) => write!(f, "{}", s),
+            Value::Unit => write!(f, "()"),
+
+            Value::Tuple(items) => {
+                write!(f, "(")?;
+                for (i, item) in items.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", item)?;
+                }
+                write!(f, ")")
+            }
+
+            // ✔ ARRAY / LIST
+            Value::List(items) => {
+                write!(f, "[")?;
+                for (i, item) in items.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", item)?;
+                }
+                write!(f, "]")
+            }
+
+            // ✔ STRUCT
+            Value::StructInstance { name, fields } => {
+                write!(f, "{} {{ ", name)?;
+                let mut first = true;
+                for (k, v) in fields {
+                    if !first {
+                        write!(f, ", ")?;
+                    }
+                    first = false;
+                    write!(f, "{}: {}", k, v)?;
+                }
+                write!(f, " }}")
+            }
+
+            // ✔ ENUM
+            Value::EnumInstance { enum_name, variant, args } => {
+                write!(f, "{}::{}(", enum_name, variant)?;
+                for (i, v) in args.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", v)?;
+                }
+                write!(f, ")")
+            }
+
+            Value::Lambda { .. } => write!(f, "<lambda>"),
+            Value::Function { name, .. } => write!(f, "<fn {}>", name),
+            Value::HostFunction(_) => write!(f, "<host-fn>"),
+            Value::Namespace { name, .. } => write!(f, "<namespace {}>", name),
+        }
+    }
+}
+
+
 impl fmt::Debug for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -61,6 +129,17 @@ impl fmt::Debug for Value {
             Value::String(s) => write!(f, "{:?}", s),
             Value::Bool(b) => write!(f, "{}", b),
             Value::Unit => write!(f, "unit"),
+
+            Value::Tuple(items) => {
+                write!(f, "(")?;
+                for (i, item) in items.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{:?}", item)?;
+                }
+                write!(f, ")")
+            }
 
             Value::StructInstance { name, fields } => {
                 write!(f, "{} {{ ", name)?;
@@ -104,5 +183,16 @@ impl Value {
 
     pub fn as_bool(&self) -> Option<bool> {
         match self { Value::Bool(b) => Some(*b), _ => None }
+    }
+
+    pub fn force_bool(&self) -> bool {
+        self.as_bool().unwrap_or(false)
+    }
+        pub fn as_int(&self) -> i64 {
+        match self {
+            Value::Number(n) => *n as i64,
+            Value::Bool(b) => if *b { 1 } else { 0 },
+            _ => 0,
+        }
     }
 }

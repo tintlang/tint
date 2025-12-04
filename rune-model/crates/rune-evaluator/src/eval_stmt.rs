@@ -8,9 +8,23 @@ use rune_ast::*;
 pub fn eval_stmt<H: EvalHost>(host: &mut H, stmt: &Stmt) -> Flow {
     match stmt {
 
-        Stmt::Let { name, expr, .. } => {
-            let val = host.eval_expr(expr);
-            host.define_var(name, val.clone());
+       Stmt::Let { pattern, ty, init, .. } => {
+            // 1. Evaluate initializer
+            let value = match init {
+                LetInit::Assign(expr) => host.eval_expr(expr),
+                LetInit::Rune(expr)   => host.eval_expr(expr),
+            };
+
+            // 2. Optional type checking (future)
+            if let Some(_expected_ty) = ty {
+                // TODO
+            }
+
+            // 3. Apply pattern binding
+            if !host.bind_pattern(pattern, &value) {
+                panic!("Pattern match failed in let-binding");
+            }
+
             Flow::Value(Value::Unit)
         }
 
@@ -21,18 +35,12 @@ pub fn eval_stmt<H: EvalHost>(host: &mut H, stmt: &Stmt) -> Flow {
         }
 
         Stmt::CompoundAssign { name, op, expr, .. } => {
-            let old = host.load_var(name, expr.span());
-            let rhs = host.eval_expr(expr);
+            let left  = host.load_var(name, expr.span());
+            let right = host.eval_expr(expr);
 
-            let new = match (old, op.as_str(), rhs) {
-                (Value::Number(a), "+=", Value::Number(b)) => Value::Number(a + b),
-                (Value::Number(a), "-=", Value::Number(b)) => Value::Number(a - b),
-                (Value::Number(a), "*=", Value::Number(b)) => Value::Number(a * b),
-                (Value::Number(a), "/=", Value::Number(b)) => Value::Number(a / b),
-                _ => Value::Unit,
-            };
-
+            let new = host.apply_compound(&left, op.as_str(), &right);
             host.set_var(name, new.clone());
+
             Flow::Value(new)
         }
 
@@ -45,36 +53,37 @@ pub fn eval_stmt<H: EvalHost>(host: &mut H, stmt: &Stmt) -> Flow {
         Stmt::Continue(_) => Flow::Continue,
 
         Stmt::If { cond, then, else_, .. } => {
-            let c = host.eval_expr(cond).as_bool().unwrap_or(false);
+            let c = host.eval_expr(cond).force_bool();
 
             if c {
-                // then-block → может вернуть Flow::Return/Break/Continue
-                return host.eval_block_flow(then);
+                host.eval_block_flow(then)
             } else if let Some(e) = else_ {
-                return host.eval_block_flow(e);
+                host.eval_block_flow(e)
+            } else {
+                Flow::Value(Value::Unit)
+            }
+        }
+
+        Stmt::While { cond, body, .. } => {
+            loop {
+                if !host.eval_expr(cond).force_bool() {
+                    break;
+                }
+
+                host.push_scope();
+                let flow = host.eval_block_flow(body);
+                host.pop_scope();
+
+                match flow {
+                    Flow::Continue => continue,
+                    Flow::Break    => break,
+                    Flow::Return(v)=> return Flow::Return(v),
+                    Flow::Value(_) => {}
+                }
             }
 
             Flow::Value(Value::Unit)
-            }
-
-            Stmt::While { cond, body, .. } => {
-                loop {
-                    let c = host.eval_expr(cond).as_bool().unwrap_or(false);
-                    if !c { break; }
-
-                    host.push_scope();
-                    let flow = host.eval_block_flow(body);
-                    host.pop_scope();
-
-                    match flow {
-                        Flow::Value(_) => {}
-                        Flow::Continue => continue,
-                        Flow::Break => break,
-                        Flow::Return(v) => return Flow::Return(v),
-                    }
-                }
-                Flow::Value(Value::Unit)
-            }
+        }
 
         Stmt::Loop { body, .. } => {
             loop {
@@ -84,17 +93,18 @@ pub fn eval_stmt<H: EvalHost>(host: &mut H, stmt: &Stmt) -> Flow {
 
                 match flow {
                     Flow::Continue => continue,
-                    Flow::Break => break,
-                    Flow::Return(v) => return Flow::Return(v),
+                    Flow::Break    => break,
+                    Flow::Return(v)=> return Flow::Return(v),
                     Flow::Value(_) => {}
                 }
             }
+
             Flow::Value(Value::Unit)
         }
 
         Stmt::For { var, start, end, body, .. } => {
-            let s = host.eval_expr(start).as_number().unwrap_or(0.0) as i64;
-            let e = host.eval_expr(end).as_number().unwrap_or(0.0) as i64;
+            let s = host.eval_expr(start).as_int(); // as_int — новая функция
+            let e = host.eval_expr(end).as_int();
 
             for i in s..e {
                 host.push_scope();
@@ -104,9 +114,9 @@ pub fn eval_stmt<H: EvalHost>(host: &mut H, stmt: &Stmt) -> Flow {
                 host.pop_scope();
 
                 match flow {
-                    Flow::Break => break,
                     Flow::Continue => continue,
-                    Flow::Return(v) => return Flow::Return(v),
+                    Flow::Break    => break,
+                    Flow::Return(v)=> return Flow::Return(v),
                     Flow::Value(_) => {}
                 }
             }

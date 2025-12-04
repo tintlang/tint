@@ -14,13 +14,59 @@ impl TokenStream {
         Self { tokens, pos: 0 }
     }
 
-    // BASIC ACCESS
-    /// Peek current token safely
-    pub fn peek(&self) -> &Token {
-        self.tokens.get(self.pos).unwrap_or_else(|| {
-            self.tokens.last().expect("token stream can't be empty")
+    /// Peek token safely + log
+pub fn peek(&self) -> &Token {
+    let t = self.tokens.get(self.pos).unwrap();
+    eprintln!("👁️  PEEK  [{}] {:?} '{}' @ {:?}", 
+        self.pos, t.kind, t.lexeme, t.span
+    );
+    t
+}
+
+/// Move stream forward + log
+pub fn next(&mut self) -> Token {
+    let t = self.tokens.get(self.pos).unwrap().clone();
+    eprintln!("➡️  NEXT  [{}] {:?} '{}' @ {:?}", 
+        self.pos, t.kind, t.lexeme, t.span
+    );
+    if !self.at_end() {
+        self.pos += 1;
+    }
+    t
+}
+
+/// consume_if with log
+pub fn consume_if(&mut self, kind: TokenKind) -> bool {
+    if self.peek().kind == kind {
+        eprintln!("✔️  CONSUME  {:?} at [{}]", kind, self.pos);
+        self.pos += 1;
+        true
+    } else {
+        false
+    }
+}
+
+/// expect with log
+pub fn expect(&mut self, kind: TokenKind) -> Result<Token, ParserError> {
+    let t = self.peek().clone();
+
+    if t.kind == kind {
+        eprintln!("✔️  EXPECT OK: {:?}", kind);
+        self.pos += 1;
+        Ok(t)
+    } else {
+        eprintln!("❌ EXPECT FAIL: expected {:?}, found {:?} @ {:?}", 
+            kind, t.kind, t.span
+        );
+        Err(ParserError::Unexpected {
+            expected: kind,
+            found: t.kind,
+            span: t.span,
         })
     }
+}
+
+
 
     /// Peek token N positions ahead safely
     pub fn peek_n(&self, n: usize) -> &Token {
@@ -62,28 +108,12 @@ impl TokenStream {
         self.peek_n(1).kind.clone()
     }
 
-    // CONSUME
-    pub fn next(&mut self) -> Token {
-        let t = self.peek().clone();
-        if !self.at_end() {
-            self.pos += 1;
-        }
-        t
-    }
+
 
     pub fn next_owned(&mut self) -> Token {
         self.next()
     }
 
-    /// Consume ONLY if matches
-    pub fn consume_if(&mut self, kind: TokenKind) -> bool {
-        if self.check(kind.clone()) {
-            self.pos += 1;
-            true
-        } else {
-            false
-        }
-    }
 
     pub fn consume_if_ret(&mut self, kind: TokenKind) -> Option<Token> {
         if self.check(kind.clone()) {
@@ -92,21 +122,6 @@ impl TokenStream {
             Some(t)
         } else {
             None
-        }
-    }
-
-    /// Expect EXACT token or throw error
-    pub fn expect(&mut self, kind: TokenKind) -> Result<Token, ParserError> {
-        let tok = self.peek().clone();
-        if tok.kind == kind {
-            self.pos += 1;
-            Ok(tok)
-        } else {
-            Err(ParserError::Unexpected {
-                expected: kind,
-                found: tok.kind,
-                span: tok.span,
-            })
         }
     }
 
@@ -172,4 +187,8 @@ impl TokenStream {
         // After the chain → must be '{'
         self.peek_n(i).kind == TokenKind::LBrace
     }
+
+    
+    
 }
+

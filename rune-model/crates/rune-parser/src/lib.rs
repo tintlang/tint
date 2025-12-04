@@ -14,5 +14,6 @@ mod parse_ui;
 mod parse_enum;
 mod parse_struct;
 mod parse_ident;
+mod parse_pattern;
 
 pub use parser::Parser;

@@ -58,4 +58,10 @@ pub trait EvalHost {
 
     fn eval_block_flow(&mut self, block: &Block) -> Flow;
     fn match_pattern(&mut self, value: &Value, pat: &Pattern) -> bool;
+
+    fn bind_pattern(&mut self, pat: &Pattern, value: &Value) -> bool;
+
+    // NEW: Compound assignment operator handler
+    fn apply_compound(&mut self, left: &Value, op: &str, right: &Value) -> Value;
+    
 }

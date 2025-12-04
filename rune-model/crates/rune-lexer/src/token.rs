@@ -77,6 +77,13 @@ pub enum TokenKind {
     In,
     Where,
 
+    // Keywords — literals
+    True,
+    False,
+
+    // Wildcard
+    Underscore,  
+
     // inline lambda: |x|
     PipeLambda, // |    <-- UI and Logic pipelines use the same char, but parser distinguishes
 
@@ -118,14 +125,13 @@ pub enum TokenKind {
 impl TokenKind {
     pub fn binary_precedence(&self) -> u8 {
         match self {
-            // assignment-like
-            TokenKind::Eq | TokenKind::Colon => 1,
+            // LOGICAL OR
+            TokenKind::OrOr => 1,
 
-            // logical
-            TokenKind::OrOr => 2,
-            TokenKind::AndAnd => 3,
+            // LOGICAL AND
+            TokenKind::AndAnd => 2,
 
-            // comparison
+            // COMPARISON
             TokenKind::EqEq
             | TokenKind::NotEq
             | TokenKind::Less
@@ -133,9 +139,19 @@ impl TokenKind {
             | TokenKind::Greater
             | TokenKind::GreaterEq => 5,
 
-            // arithmetic
+            // ADD / SUB
             TokenKind::Plus | TokenKind::Minus => 10,
+
+            // MUL / DIV / MOD
             TokenKind::Star | TokenKind::Slash | TokenKind::Percent => 20,
+
+            // Assignment / Non-binary tokens — precedence 0
+            TokenKind::Eq
+            | TokenKind::PlusEq
+            | TokenKind::MinusEq
+            | TokenKind::StarEq
+            | TokenKind::SlashEq
+            | TokenKind::Colon => 0,
 
             _ => 0,
         }

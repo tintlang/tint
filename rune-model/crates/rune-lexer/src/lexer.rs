@@ -54,7 +54,7 @@ impl<'a> Lexer<'a> {
     fn position(&self) -> Position {
         Position::new(self.pos, self.line, self.column)
     }
-
+    
     // MAIN
     pub fn next_token(&mut self) -> Token {
         self.skip_ws_and_comments();
@@ -232,9 +232,17 @@ impl<'a> Lexer<'a> {
             }
         }
 
+        
+
         let kind = match s.as_str() {
             "fn" => TokenKind::Fn,
             "ui" => TokenKind::Ui,
+
+            "true" => TokenKind::True,
+            "false" => TokenKind::False,
+
+            "_" => TokenKind::Underscore,
+            
             "return" => TokenKind::Return,
             "let" => TokenKind::Let,
             "if" => TokenKind::If,

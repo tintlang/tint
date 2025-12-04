@@ -1,6 +1,7 @@
 // ============================================
 // rune-ir/src/ir.rs — Minimal SSA IR
 // ============================================
+use rune_ast::Pattern;
 
 pub type ValueId = u32;
 pub type BlockId = u32;
@@ -11,6 +12,9 @@ pub enum Value {
     String(String),
     Bool(bool),
     Unit,
+
+    Tuple(Vec<Value>),
+    List(Vec<Value>),  
 }
 
 #[derive(Debug, Clone)]
@@ -37,6 +41,28 @@ pub enum Instr {
     Index { dst: ValueId, arr: ValueId, index: ValueId },
 
     StructInit { dst: ValueId, name: String, fields: Vec<(String, ValueId)> },
+
+    StructUpdate {
+        dst: ValueId,
+        base: ValueId,
+        updates: Vec<(String, ValueId)>,
+    },
+
+    Array {
+        dst: ValueId,
+        items: Vec<ValueId>,
+    },
+
+    Match {
+        dst: ValueId,
+        scrutinee: ValueId,
+        arms: Vec<(Pattern, ValueId)>,
+    },
+
+    Tuple { dst: ValueId, items: Vec<ValueId> },
+
+    TupleExtract { dst: ValueId, tuple: ValueId, index: usize },
+
 
     Return(ValueId),
 }

@@ -1,7 +1,7 @@
 // ============================================
 // rune-ir/src/builder.rs — SSA Builder
 // ============================================
-
+use rune_ast::Pattern;
 use crate::ir::*;
 
 /// SSA Builder: allocates ValueId, builds Ops with destinations (dst)
@@ -154,6 +154,73 @@ impl IrBuilder {
     ) -> ValueId {
         let dst = self.fresh_value();
         block.instrs.push(Instr::StructInit { dst, name, fields });
+        dst
+    }
+
+        // ---------------------------------------
+    // TUPLE: (a, b, c)
+    // ---------------------------------------
+    pub fn emit_tuple(
+        &mut self,
+        block: &mut Block,
+        items: Vec<ValueId>,
+    ) -> ValueId {
+        let dst = self.fresh_value();
+        block.instrs.push(Instr::Tuple { dst, items });
+        dst
+    }
+
+    // ---------------------------------------
+    // TUPLE EXTRACT: t.0, t.1 …
+    // ---------------------------------------
+    pub fn emit_tuple_extract(
+        &mut self,
+        block: &mut Block,
+        tuple: ValueId,
+        index: usize,
+    ) -> ValueId {
+        let dst = self.fresh_value();
+        block.instrs.push(Instr::TupleExtract {
+            dst,
+            tuple,
+            index,
+        });
+        dst
+    }
+
+    pub fn emit_struct_update(
+        &mut self,
+        block: &mut Block,
+        base: ValueId,
+        updates: Vec<(String, ValueId)>,
+    ) -> ValueId {
+        let dst = self.fresh_value();
+        block.instrs.push(Instr::StructUpdate {
+            dst,
+            base,
+            updates,
+        });
+        dst
+    }
+
+    pub fn emit_array(
+        &mut self,
+        block: &mut Block,
+        items: Vec<ValueId>,
+    ) -> ValueId {
+        let dst = self.fresh_value();
+        block.instrs.push(Instr::Array { dst, items });
+        dst
+    }
+
+    pub fn emit_match(
+        &mut self,
+        block: &mut Block,
+        scrutinee: ValueId,
+        arms: Vec<(Pattern, ValueId)>
+    ) -> ValueId {
+        let dst = self.fresh_value();
+        block.instrs.push(Instr::Match { dst, scrutinee, arms });
         dst
     }
 

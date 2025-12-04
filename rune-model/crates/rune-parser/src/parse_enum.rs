@@ -1,90 +1,87 @@
 // rune-parser/parse_enum.rs
 
 use crate::{Parser};
-use crate::{ error::* };
+use crate::error::*;
 use rune_ast::*;
 use rune_lexer::TokenKind;
 
 impl Parser {
     pub(crate) fn parse_enum(&mut self) -> PResult<EnumDecl> {
-        // enum keyword
+        // `enum`
         let start = self.stream.expect(TokenKind::Enum)?.span;
 
         // enum name
         let name = self.parse_ident()?;
 
-        // expect {
+        // `{`
         self.stream.expect(TokenKind::LBrace)?;
 
         let mut variants = Vec::new();
 
         while !self.stream.consume_if(TokenKind::RBrace) {
             let var_start = self.stream.peek().span;
-
             let variant_name = self.parse_ident()?;
 
-            // 3 forms:
-            // 1) Unit:    Ready
-            // 2) Tuple:   Success(i32, string)
-            // 3) Struct:  Error { msg: string, code: i32 }
+            let variant = match self.stream.peek_kind() {
+                // TUPLE VARIANT: Variant(T1, T2)
+                TokenKind::LParen => {
+                    self.stream.next(); // consume '('
+                    let mut types = Vec::new();
 
-            let variant = if self.stream.consume_if(TokenKind::LParen) {
-                // --- TUPLE FORM ---
-                let mut types = Vec::new();
+                    if !self.stream.consume_if(TokenKind::RParen) {
+                        loop {
+                            types.push(self.parse_type()?);
 
-                if !self.stream.consume_if(TokenKind::RParen) {
-                    loop {
-                        types.push(self.parse_type()?);
+                            if self.stream.consume_if(TokenKind::RParen) {
+                                break;
+                            }
 
-                        if self.stream.consume_if(TokenKind::RParen) {
-                            break;
+                            self.stream.expect(TokenKind::Comma)?;
                         }
-
-                        self.stream.expect(TokenKind::Comma)?;
                     }
+
+                    EnumVariant::Tuple(variant_name, types)
                 }
 
-                EnumVariant::Tuple(variant_name, types)
-            }
-            else if self.stream.consume_if(TokenKind::LBrace) {
-                // --- STRUCT FORM ---
+                // STRUCT VARIANT: Variant { a: T, b: U }
+                TokenKind::LBrace => {
+                    self.stream.next(); // consume '{'
+                    let mut fields = Vec::new();
 
-                let mut fields = Vec::new();
+                    if !self.stream.consume_if(TokenKind::RBrace) {
+                        loop {
+                            let field_start = self.stream.peek().span;
 
-                if !self.stream.consume_if(TokenKind::RBrace) {
-                    loop {
-                        let field_start = self.stream.peek().span;
+                            let field_name = self.parse_ident()?;
+                            self.stream.expect(TokenKind::Colon)?;
+                            let field_ty = self.parse_type()?;
 
-                        let field_name = self.parse_ident()?;
-                        self.stream.expect(TokenKind::Colon)?;
-                        let field_ty = self.parse_type()?;
+                            let field_end = self.stream.last_span();
 
-                        let field_end = self.stream.last_span();
+                            fields.push(StructField::Typed {
+                                name: field_name,
+                                ty: field_ty,
+                                span: Span::merge(field_start, field_end),
+                            });
 
-                        fields.push(StructField {
-                            name: field_name,
-                            ty: field_ty,
-                            span: Span::merge(field_start, field_end),
-                        });
+                            if self.stream.consume_if(TokenKind::RBrace) {
+                                break;
+                            }
 
-                        if self.stream.consume_if(TokenKind::RBrace) {
-                            break;
+                            self.stream.expect(TokenKind::Comma)?;
                         }
-
-                        self.stream.expect(TokenKind::Comma)?;
                     }
+
+                    EnumVariant::Struct(variant_name, fields)
                 }
 
-                EnumVariant::Struct(variant_name, fields)
-            }
-            else {
-                // --- UNIT FORM ---
-                EnumVariant::Unit(variant_name)
+                // UNIT VARIANT: Variant
+                _ => EnumVariant::Unit(variant_name),
             };
 
             variants.push(variant);
 
-            // optional comma between variants
+            // optional trailing comma
             self.stream.consume_if(TokenKind::Comma);
         }
 

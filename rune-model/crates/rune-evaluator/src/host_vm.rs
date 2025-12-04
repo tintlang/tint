@@ -5,7 +5,7 @@ use crate::env::Env;
 use crate::errors::{EvalError, EvalResult};
 use crate::value::Value;
 use crate::{eval_expr, eval_block, eval_fn};
-use rune_ast::{Expr, Block, Span, FnDecl};
+use rune_ast::{Expr, Block, Span, FnDecl, PatternField};
 
 use rune_ast::Pattern;
 
@@ -175,42 +175,197 @@ fn eval_block_flow(&mut self, block: &Block) -> Flow {
     crate::eval_block::eval_block_flow(self, block)
 }
 
-fn match_pattern(&mut self, value: &Value, pat: &Pattern) -> bool {
-    match pat {
-        Pattern::Wildcard(_) => true,
+fn bind_pattern(&mut self, pat: &Pattern, value: &Value) -> bool {
+        match pat {
+            Pattern::Wildcard(_) => true,
 
-        Pattern::Number(s, _) => {
-            match value {
+            Pattern::Ident(name, _) => {
+                self.define_var(name, value.clone());
+                true
+            }
+
+            Pattern::Number(s, _) => match value {
                 Value::Number(n) => n.to_string() == *s,
                 _ => false,
-            }
-        }
+            },
 
-        Pattern::String(s, _) => {
-            match value {
+            Pattern::String(s, _) => match value {
                 Value::String(v) => v == s,
                 _ => false,
-            }
-        }
+            },
 
-        Pattern::Ident(_, _) => true,
-
-        Pattern::Variant { name, args, .. } => {
-            match value {
-                Value::EnumInstance { variant, args: v_args, .. } => {
-                    if variant != name { return false; }
-                    if args.len() != v_args.len() { return false; }
-
-                    for (p, v) in args.iter().zip(v_args.iter()) {
-                        if !self.match_pattern(v, p) {
+            // (a, b, c)
+            Pattern::Tuple(p_items, _) => match value {
+                Value::Tuple(v_items) => {
+                    if p_items.len() != v_items.len() {
+                        return false;
+                    }
+                    for (p, v) in p_items.iter().zip(v_items.iter()) {
+                        if !self.bind_pattern(p, v) {
                             return false;
                         }
                     }
                     true
                 }
                 _ => false,
-            }
+            },
+
+            // User { id, name }
+            Pattern::Struct { name, fields, .. } => match value {
+                Value::StructInstance { name: vname, fields: vfields } => {
+                    if vname != name {
+                        return false;
+                    }
+
+                    for pf in fields {
+                        match pf {
+                            PatternField::Shorthand { field, .. } => {
+                                let Some(v) =
+                                    vfields.iter().find(|(k,_)| k == field).map(|(_,v)| v)
+                                else { return false; };
+
+                                // shorthand = bind variable
+                                self.define_var(field, v.clone());
+                            }
+
+                            PatternField::Assign { field, pat, .. } => {
+                                let Some(v) =
+                                    vfields.iter().find(|(k,_)| k == field).map(|(_,v)| v)
+                                else { return false; };
+
+                                if !self.bind_pattern(pat, v) {
+                                    return false;
+                                }
+                            }
+
+                            PatternField::Rest(_) => continue,
+                        }
+                    }
+
+                    true
+                }
+                _ => false,
+            },
+
+            // Ok(x), Error(msg, code)
+            Pattern::Variant { name, args, .. } => match value {
+                Value::EnumInstance { variant, args: v_args, .. } => {
+                    if variant != name {
+                        return false;
+                    }
+                    if args.len() != v_args.len() {
+                        return false;
+                    }
+
+                    for (p, v) in args.iter().zip(v_args.iter()) {
+                        if !self.bind_pattern(p, v) {
+                            return false;
+                        }
+                    }
+                    true
+                }
+
+                _ => false,
+            },
         }
+}
+
+fn match_pattern(&mut self, value: &Value, pat: &Pattern) -> bool {
+    match pat {
+        // _ wildcard
+        Pattern::Wildcard(_) => true,
+
+        // Literal numbers
+        Pattern::Number(s, _) => match value {
+            Value::Number(n) => n.to_string() == *s,
+            _ => false,
+        },
+
+        // Literal strings
+        Pattern::String(s, _) => match value {
+            Value::String(v) => v == s,
+            _ => false,
+        },
+
+        // Identifier binding: always matches
+        // (binding performed elsewhere in eval_let or eval_match)
+        Pattern::Ident(_, _) => true,
+
+        // Tuple pattern: (a, b, c)
+        Pattern::Tuple(p_items, _) => match value {
+            Value::Tuple(v_items) => {
+                if p_items.len() != v_items.len() {
+                    return false;
+                }
+                for (p, v) in p_items.iter().zip(v_items.iter()) {
+                    if !self.match_pattern(v, p) {
+                        return false;
+                    }
+                }
+                true
+            }
+            _ => false,
+        },
+
+        // Struct pattern: User { id, name }
+        Pattern::Struct { name, fields, .. } => match value {
+            Value::StructInstance { name: vname, fields: vfields } => {
+                if vname != name {
+                    return false;
+                }
+
+                for pf in fields {
+                    match pf {
+                        PatternField::Shorthand { field, .. } => {
+                            // ⬅ same name match
+                            let Some(v) =
+                                vfields.iter().find(|(k,_)| k == field).map(|(_,v)| v)
+                            else {
+                                return false;
+                            };
+                            // Shorthand: field must exist → but RECURSIVE match???
+                            // No: shorthand means binding, not matching value
+                            // So ALWAYS true
+                            continue;
+                        }
+
+                        PatternField::Assign { field, pat, .. } => {
+                            let Some(v) =
+                                vfields.iter().find(|(k,_)| k == field).map(|(_,v)| v)
+                            else {
+                                return false;
+                            };
+                            if !self.match_pattern(v, pat) {
+                                return false;
+                            }
+                        }
+
+                        PatternField::Rest(_) => {
+                            // “..” always OK
+                            continue;
+                        }
+                    }
+                }
+
+                true
+            }
+            _ => false,
+        },
+
+        // Enum pattern: Ok(v), Error(msg, code)
+        Pattern::Variant { name, args, .. } => match value {
+            Value::EnumInstance { variant, args: v_args, .. } => {
+                if variant != name { return false; }
+                if args.len() != v_args.len() { return false; }
+                for (p, v) in args.iter().zip(v_args.iter()) {
+                    if !self.match_pattern(v, p) {
+                        return false;
+                    }
+                }
+                true
+            }
+            _ => false,
+        },
     }
 }
 
@@ -258,4 +413,21 @@ fn match_pattern(&mut self, value: &Value, pat: &Pattern) -> bool {
     fn capture_env(&mut self) -> Rc<Env> {
         Rc::new(self.env.clone())
     }
+
+    fn apply_compound(&mut self, left: &Value, op: &str, right: &Value) -> Value {
+        match (left, op, right) {
+            (Value::Number(a), "+=", Value::Number(b)) => Value::Number(a + b),
+            (Value::Number(a), "-=", Value::Number(b)) => Value::Number(a - b),
+            (Value::Number(a), "*=", Value::Number(b)) => Value::Number(a * b),
+            (Value::Number(a), "/=", Value::Number(b)) => Value::Number(a / b),
+
+            // позже добавим:
+            // - string += string
+            // - list += elem
+            // - map += (k,v)
+
+            _ => Value::Unit,
+        }
+    }
+
 }
