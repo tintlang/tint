@@ -29,6 +29,8 @@ pub trait EvalHost {
     fn eval_expr(&mut self, expr: &Expr) -> Value;
     fn eval_block(&mut self, block: &Block) -> Flow;
 
+    fn assign_to(&mut self, lhs: &Expr, value: Value) -> bool;
+
     // Function Calls
 
     /// Entry point for ALL function calls.

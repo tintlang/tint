@@ -84,9 +84,6 @@ pub enum TokenKind {
     // Wildcard
     Underscore,  
 
-    // inline lambda: |x|
-    PipeLambda, // |    <-- UI and Logic pipelines use the same char, but parser distinguishes
-
     // async model
     Async,
     Await,

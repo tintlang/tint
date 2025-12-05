@@ -22,6 +22,10 @@ pub fn match_pattern(pat: &Pattern, val: &Value) -> bool {
             _ => false
         },
 
+        Pattern::Mut { inner, .. } => {
+            match_pattern(inner, val)
+        }
+
         Pattern::Struct { name, fields, .. } => match val {
             Value::StructInstance { name: inst, fields: inst_fields } if name == inst => {
                 for f in fields {

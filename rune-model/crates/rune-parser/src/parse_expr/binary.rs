@@ -1,5 +1,6 @@
 use crate::{Parser, error::*};
 use rune_ast::{Expr, Span};
+use rune_lexer::TokenKind;
 
 impl Parser {
     pub(crate) fn parse_binary_expr(&mut self, min_prec: u8) -> PResult<Expr> {
@@ -7,6 +8,19 @@ impl Parser {
 
         loop {
             let tok = self.stream.peek().clone();
+
+            // --- STOP TOKENS ---
+            match tok.kind {
+                TokenKind::RParen |
+                TokenKind::RBracket |  
+                TokenKind::RBrace |
+                TokenKind::Comma => {
+                    break;
+                }
+                _ => {}
+            }
+
+
             let prec = tok.kind.binary_precedence();
             if prec == 0 || prec < min_prec { break; }
 

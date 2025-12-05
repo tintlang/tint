@@ -8,10 +8,24 @@ use rune_lexer::TokenKind;
 impl Parser {
 
 pub fn parse_pattern(&mut self) -> PResult<Pattern> {
+
+    // HANDLE MUT PREFIX
+    if self.stream.peek().lexeme == "mut" {
+        let mut_span = self.stream.next().span; // consume mut
+
+        let inner = self.parse_pattern()?;      // parse ANY pattern after mut
+        let end = inner.span();
+
+        return Ok(Pattern::Mut {
+            inner: Box::new(inner),
+            span: Span::merge(mut_span, end),
+        });
+    }
+
+     // NORMAL PATTERN START 
     let tok = self.stream.peek();
 
     match tok.kind {
-
         TokenKind::Underscore => {
             let span = self.stream.next().span;
             return Ok(Pattern::Wildcard(span));
@@ -162,6 +176,7 @@ fn parse_variant_pattern(&mut self, name: String, start: Span) -> PResult<Patter
     // User { id, name }
     // -----------------------------------------
 fn parse_ident_based_pattern(&mut self) -> PResult<Pattern> {
+    
     let tok = self.stream.next_owned();
     let name = tok.lexeme;
     let span = tok.span;

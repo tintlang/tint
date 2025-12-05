@@ -193,6 +193,27 @@ impl IrBuilder {
         dst
     }
 
+pub fn emit_field_store(
+    &mut self,
+    block: &mut Block,
+    base: ValueId,
+    field: String,
+    src: ValueId,
+) {
+    block.instrs.push(Instr::FieldStore { base, field, src });
+}
+
+pub fn emit_index_store(
+    &mut self,
+    block: &mut Block,
+    arr: ValueId,
+    index: ValueId,
+    src: ValueId,
+) {
+    block.instrs.push(Instr::IndexStore { arr, index, src });
+}
+
+
         // ---------------------------------------
     // TUPLE: (a, b, c)
     // ---------------------------------------

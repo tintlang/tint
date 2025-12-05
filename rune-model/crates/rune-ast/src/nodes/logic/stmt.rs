@@ -37,8 +37,8 @@ pub enum Stmt {
     },
 
     Assign {
-        name: String,
-        expr: Expr,
+        lhs: Expr,
+        rhs: Expr,
         span: Span,
     },
 

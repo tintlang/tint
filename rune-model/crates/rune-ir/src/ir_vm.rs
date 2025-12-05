@@ -108,6 +108,14 @@ impl IrVM {
                     self.alloc_value(*dst, Value::Unit);
                 }
 
+                Instr::FieldStore { .. } => {
+                    println!("WARNING: field store not implemented");
+                }
+
+                Instr::IndexStore { .. } => {
+                    println!("WARNING: index store not implemented");
+                }
+
                 Instr::Match { dst, .. } => {
                     println!("WARNING: IR match not implemented");
                     self.alloc_value(*dst, Value::Unit);

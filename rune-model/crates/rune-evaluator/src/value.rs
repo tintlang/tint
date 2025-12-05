@@ -208,6 +208,50 @@ impl Value {
         match self { Value::Bool(b) => Some(*b), _ => None }
     }
 
+    /// Set struct field: obj.field = value
+    pub fn set_field(&mut self, field: &str, new_value: Value) {
+        match self {
+            Value::StructInstance { fields, .. } => {
+                for (name, val) in fields.iter_mut() {
+                    if name == field {
+                        *val = new_value;
+                        return;
+                    }
+                }
+                panic!("Field '{}' not found in struct", field);
+            }
+
+            Value::Map(map) => {
+                map.insert(field.to_string(), new_value);
+            }
+
+            _ => panic!("Cannot assign field '{}' on non-struct value {:?}", field, self),
+        }
+    }
+
+    /// Set array/list index: arr[i] = value
+    pub fn set_index(&mut self, index: i64, new_value: Value) {
+        match self {
+            Value::List(items) => {
+                let idx = index as usize;
+                if idx >= items.len() {
+                    panic!("Index {} out of bounds", index);
+                }
+                items[idx] = new_value;
+            }
+
+            Value::Tuple(items) => {
+                let idx = index as usize;
+                if idx >= items.len() {
+                    panic!("Tuple index {} out of bounds", index);
+                }
+                items[idx] = new_value;
+            }
+
+            _ => panic!("Cannot index-assign on non-list value {:?}", self),
+        }
+    }
+
     pub fn force_bool(&self) -> bool {
         self.as_bool().unwrap_or(false)
     }

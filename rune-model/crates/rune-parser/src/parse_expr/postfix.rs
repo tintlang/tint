@@ -157,11 +157,10 @@ TokenKind::Dot => {
 
             // -------- INDEXING --------
             TokenKind::LBracket => {
-                let start = self.stream.next().span; // '['
+         
                 eprintln!("[POSTFIX] start index");
 
                 let index_expr = self.parse_expr()?;
-                self.stream.expect(TokenKind::RBracket)?;
 
                 let span = Span::merge(expr.span(), index_expr.span());
                 expr = Expr::Index {

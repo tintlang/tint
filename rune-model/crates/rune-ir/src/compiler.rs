@@ -22,6 +22,39 @@ impl SsaCompiler {
         }
     }
 
+    fn lower_assignment_lhs(
+        &mut self,
+        lhs: &Expr,
+        value: ValueId,
+        block: &mut Block,
+        locals: &mut HashMap<String, ValueId>,
+    ) {
+        match lhs {
+            // x = v
+            Expr::Ident(name, _) => {
+                self.builder.emit_store(block, name.clone(), value);
+                locals.insert(name.clone(), value);
+            }
+
+            // obj.field = v
+            Expr::Field { target, field, .. } => {
+                let base = self.lower_expr(target, block, locals);
+                self.builder.emit_field_store(block, base, field.clone(), value);
+            }
+
+            // arr[i] = v
+            Expr::Index { target, index, .. } => {
+                let arr = self.lower_expr(target, block, locals);
+                let idx = self.lower_expr(index, block, locals);
+                self.builder.emit_index_store(block, arr, idx, value);
+            }
+
+            // Недопустимое LHS
+            _ => {
+                panic!("Invalid assignment LHS: {:?}", lhs);
+            }
+         }
+    }
     pub fn compile_program(&mut self, prog: &Program) -> ProgramIR {
         let mut out = ProgramIR::new();
 
@@ -77,10 +110,9 @@ impl SsaCompiler {
                 self.bind_pattern(pattern, v, locals, block);
             }
 
-            Stmt::Assign { name, expr, .. } => {
-                let v = self.lower_expr(expr, block, locals);
-                self.builder.emit_store(block, name.clone(), v);
-                locals.insert(name.clone(), v);
+            Stmt::Assign { lhs, rhs, .. } => {
+                let rv = self.lower_expr(rhs, block, locals);
+                self.lower_assignment_lhs(lhs, rv, block, locals);
             }
 
             Stmt::Return(expr, _) => {
@@ -117,8 +149,11 @@ impl SsaCompiler {
             // _
             Pattern::Wildcard(_) => {}
 
-            // NUMBER / STRING — не должны появляться в let/fn params,
-            // но если вдруг — просто игнорируем.
+              Pattern::Mut { inner, .. } => {
+                self.bind_pattern(inner, value, locals, block);
+            }
+
+            // NUMBER | STRING
             Pattern::Number(_, _) => {}
             Pattern::String(_, _) => {}
 
@@ -178,7 +213,6 @@ impl SsaCompiler {
                 println!("TODO: variant pattern in SSA");
             }
 
-            // NEW:
             // typed pattern:  pat: Type
             Pattern::Typed { pat, .. } => {
                 // просто рекурсивно обрабатываем внутренний паттерн

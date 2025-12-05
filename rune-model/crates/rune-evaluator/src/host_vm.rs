@@ -71,6 +71,30 @@ impl EvalHost for HostVM {
         Flow::Value(last)
     }
 
+    fn assign_to(&mut self, lhs: &Expr, value: Value) -> bool {
+        match lhs {
+            Expr::Ident(name, _) => {
+                self.set_var(name, value);
+                true
+            }
+
+            Expr::Field { target, field, .. } => {
+                let mut obj = self.eval_expr(target);
+                obj.set_field(field, value); // тебе нужно реализовать
+                true
+            }
+
+            Expr::Index { target, index, .. } => {
+                let mut arr = self.eval_expr(target);
+                let idx = self.eval_expr(index).as_int();
+                arr.set_index(idx, value); // тоже реализовать
+                true
+            }
+
+            _ => false,
+        }
+    }
+
     // FUNCTION CALLS
     fn call_fn(
         &mut self,
@@ -196,6 +220,11 @@ fn bind_pattern(&mut self, pat: &Pattern, value: &Value) -> bool {
             Value::String(v) => v == s,
             _ => false,
         },
+
+        Pattern::Mut { inner, .. } => {
+            self.match_pattern(value, inner)
+        }
+
 
         // (a, b, c)
         Pattern::Tuple(p_items, _) => match value {
@@ -334,6 +363,10 @@ fn match_pattern(&mut self, value: &Value, pat: &Pattern) -> bool {
             Value::String(v) => v == s,
             _ => false,
         },
+
+        Pattern::Mut { inner, .. } => {
+            self.bind_pattern(inner, value)
+        }
 
         // identifier → always matches
         // (binding is done in bind_pattern)

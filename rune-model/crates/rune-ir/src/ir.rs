@@ -101,6 +101,18 @@ pub enum Instr {
         key: String
     },
 
+  FieldStore {
+        base: ValueId,
+        field: String,
+        src: ValueId,
+    },
+
+    IndexStore {
+        arr: ValueId,
+        index: ValueId,
+        src: ValueId,
+    },
+    
     Return(ValueId),
 }
 

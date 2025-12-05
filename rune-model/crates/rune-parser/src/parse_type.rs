@@ -20,15 +20,15 @@ impl Parser {
         let name = self.parse_ident()?;
 
         // Look for generic arguments: < ... >
-        if self.stream.consume_if(TokenKind::Less) {
+        if self.stream.consume_if(TokenKind::LAngle) {
             let mut params = Vec::new();
 
             // Case: < >
-            if !self.stream.consume_if(TokenKind::Greater) {
+            if !self.stream.consume_if(TokenKind::RAngle) {
                 loop {
                     params.push(self.parse_type()?);
 
-                    if self.stream.consume_if(TokenKind::Greater) {
+                    if self.stream.consume_if(TokenKind::RAngle) {
                         break;
                     }
 

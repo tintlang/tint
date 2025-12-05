@@ -31,6 +31,11 @@ pub fn bind_pattern<H: EvalHost>(
             }
         }
 
+        Pattern::Mut { inner, .. } => {
+            // mut в паттерне просто аннотация
+            bind_pattern(host, inner, val);
+        }
+
         Pattern::Map { fields, .. } => {
             if let Value::Map(map) = val {
                 for f in fields {

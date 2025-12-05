@@ -36,6 +36,11 @@ pub enum Pattern {
         fields: Vec<PatternField>,
         span: Span,
     },
+
+    Mut {
+        inner: Box<Pattern>,
+        span: Span,
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -78,6 +83,7 @@ impl Pattern {
             | Pattern::Variant { span: s, .. }
             | Pattern::Typed { span: s, .. }
             | Pattern::Map { span: s, .. } => *s,
+            Pattern::Mut { span, .. } => *span,
         }
     }
 }

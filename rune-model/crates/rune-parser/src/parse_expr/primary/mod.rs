@@ -118,7 +118,7 @@ impl Parser {
             }
 
             TokenKind::Match      => self.parse_match_expression(),
-            TokenKind::PipeLambda => self.parse_lambda(),
+            TokenKind::Pipe => self.parse_lambda(),
 
             TokenKind::LBracket   => self.parse_array_literal(),
             TokenKind::LParen     => self.parse_paren_or_tuple(),

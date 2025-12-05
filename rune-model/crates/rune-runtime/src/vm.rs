@@ -1,7 +1,4 @@
-// RuneVM v2 — Clean Layered Runtime
-// ============================================================================
-// RuneVM v3 — Dual Runtime (IR VM + EvalHost)
-// ============================================================================
+// RuneVM v3: Dual Runtime (IR VM + EvalHost)
 
 use std::collections::HashMap;
 
@@ -30,11 +27,8 @@ use rune_evaluator::{
 use rune_evaluator::eval_host::Flow;
 use rune_evaluator::errors::EvalResult;
 
-// ============================================================================
-// RuneVM — manages two execution engines
-// ============================================================================
 pub struct RuneVM {
-    // ---------------------- Runtime ----------------------
+    // Runtime 
     pub scopes: RuntimeScopeStack,
     pub logic_functions: HashMap<String, FnDecl>,
     pub ui_functions: HashMap<String, UiFnDecl>,
@@ -45,7 +39,7 @@ pub struct RuneVM {
     pub borrow: BorrowManager,
     pub ui: UiRuntime,
 
-    // ---------------------- IR ----------------------
+    // IR 
     pub ir_program: ProgramIR,
     pub last_result: EvalValue,
 }
@@ -68,13 +62,10 @@ impl RuneVM {
         }
     }
 
-    // =========================================================================
     // PROGRAM ENTRY
-    // =========================================================================
     pub fn run_program(&mut self, program: &Program) {
         println!("Compiling to SSA IR…");
 
-        // 1) Compile to IR
         let mut compiler = SsaCompiler::new();
         self.ir_program = compiler.compile_program(program);
 
@@ -88,24 +79,15 @@ impl RuneVM {
                 }
             }
         }
+        
         println!("====================\n");
-
-        // 2) Optimize
         optimize(&mut self.ir_program);
-
-        // 3) Register functions
         self.register_functions(program);
-
-        // 4) Mount UI (optional)
         self.mount_ui(program);
-
-        // 5) No auto-run
         self.last_result = EvalValue::Unit;
     }
 
-    // =========================================================================
     // FUNCTION REGISTRATION
-    // =========================================================================
     fn register_functions(&mut self, program: &Program) {
         for item in &program.items {
             match item {
@@ -130,9 +112,7 @@ impl RuneVM {
         }
     }
 
-    // =========================================================================
     // CLASSIFICATION: UI or IR?
-    // =========================================================================
     fn is_ui_function(&self, name: &str) -> bool {
         self.ui_functions.contains_key(name)
     }
@@ -141,9 +121,7 @@ impl RuneVM {
         self.logic_functions.contains_key(name)
     }
 
-    // =========================================================================
     // Eval helpers
-    // =========================================================================
     fn eval_to_rt(v: EvalValue) -> RuntimeValue {
         match v {
             EvalValue::Number(n) => RuntimeValue::Number(n),
@@ -163,9 +141,7 @@ impl RuneVM {
         }
     }
 
-    // =========================================================================
     // Block execution for old evaluator
-    // =========================================================================
     fn eval_block_flow(&mut self, block: &Block) -> Flow {
         let mut last = Flow::Value(EvalValue::Unit);
 
@@ -178,15 +154,15 @@ impl RuneVM {
             }
         }
 
-        last
-    }
-        
-    fn call_ui_fn(
-        &mut self,
-        ui: &UiFnDecl,
-        args: &[EvalValue],
-        span: Span,
-    ) -> EvalResult<EvalValue> {
+            last
+        }
+            
+        fn call_ui_fn(
+            &mut self,
+            ui: &UiFnDecl,
+            args: &[EvalValue],
+            span: Span,
+        ) -> EvalResult<EvalValue> {
 
 
         println!("⛰ UI CALL → {}(", ui.name);
@@ -197,7 +173,7 @@ impl RuneVM {
         
         println!("UI FN CALL: {}", ui.name);
 
-        // 1) Параметры — как обычно
+        // 1) Параметры
         for (param, arg) in ui.params.iter().zip(args.iter()) {
             bind_pattern(self, &param.pattern, arg);
         }
@@ -220,14 +196,9 @@ impl RuneVM {
 
 }
 
-// ============================================================================
 // EvalHost IMPLEMENTATION — used for UI & fallback logic
-// ============================================================================
 impl EvalHost for RuneVM {
-
-    // -----------------------
     // VARIABLES
-    // -----------------------
     fn load_var(&mut self, name: &str, _span: Span) -> EvalValue {
         match self.scopes.lookup(name) {
             Some(v) => Self::rt_to_eval(&v),
@@ -246,9 +217,49 @@ impl EvalHost for RuneVM {
     fn push_scope(&mut self) { self.scopes.push(); }
     fn pop_scope(&mut self) { self.scopes.pop(); }
 
-    // -----------------------
+    fn assign_to(&mut self, lhs: &Expr, value: EvalValue) -> bool {
+        match lhs {
+            // x = value
+            Expr::Ident(name, _) => {
+                self.set_var(name, value);
+                true
+            }
+
+            // obj.field = value
+            Expr::Field { target, field, .. } => {
+                // 1) evaluate object
+                let mut obj = self.eval_expr(target);
+
+                // 2) mutate in-place
+                obj.set_field(field, value.clone());
+
+                // 3) write mutated object back
+                if !self.assign_to(target, obj) {
+                    panic!("Failed to assign back into parent object");
+                }
+
+                true
+            }
+
+            // arr[i] = value
+            Expr::Index { target, index, .. } => {
+                let mut arr = self.eval_expr(target);
+                let idx = self.eval_expr(index).as_int();
+
+                arr.set_index(idx, value.clone());
+
+                if !self.assign_to(target, arr) {
+                    panic!("Failed to assign updated array back");
+                }
+
+                true
+            }
+
+            _ => false,
+        }
+    }
+
     // EXPR & BLOCK
-    // -----------------------
     fn eval_expr(&mut self, expr: &Expr) -> EvalValue {
         eval_expr::eval_expr(self, expr)
     }
@@ -272,7 +283,7 @@ impl EvalHost for RuneVM {
             return Ok(v);
         }
 
-        // 2) UI functions → EvalHost
+        // 2) UI functions -> EvalHost
         if self.is_ui_function(name) {
             // TAKE OWNERSHIP (clone) to avoid holding immutable borrow on self
             let ui = self.ui_functions.get(name).cloned().unwrap();
@@ -280,7 +291,7 @@ impl EvalHost for RuneVM {
         }
 
 
-        // 3) Logic functions → IR VM
+        // 3) Logic functions -> IR VM
         if self.is_ir_function(name) {
             let mut irvm = IrVM::new(self.ir_program.clone());
             let out = irvm.run(name);
@@ -306,7 +317,6 @@ impl EvalHost for RuneVM {
             }),
         };
 
-        // new scope
         self.scopes.push();
 
         // bind params
@@ -328,9 +338,7 @@ impl EvalHost for RuneVM {
         Ok(result)
     }
 
-    // ------------------------------------------------------------------------
     // unsupported features for now
-    // ------------------------------------------------------------------------
     fn call_value(&mut self, v: EvalValue, args: &[EvalValue], span: Span) -> EvalValue {
         match v {
             // если IR передал имя функции как строку
@@ -339,7 +347,7 @@ impl EvalHost for RuneVM {
                     .unwrap_or(EvalValue::Unit);
             }
 
-            // если IR передал Unit — считаем это no-op
+            // если IR передал Unit: считаем это no-op
             EvalValue::Unit => EvalValue::Unit,
 
             other => panic!("call_value not supported: {:?}", other),
@@ -353,9 +361,12 @@ impl EvalHost for RuneVM {
         Pattern::Wildcard(_) => true,
 
         Pattern::Ident(name, _) => {
-            // bind ident = value
             self.define_var(name, value.clone());
             true
+        }
+
+        Pattern::Mut { inner, .. } => {
+            self.bind_pattern(inner, value)
         }
 
         Pattern::Number(s, _) => match value {
@@ -435,7 +446,7 @@ impl EvalHost for RuneVM {
             EvalValue::Map(hm) => {
                 for pf in fields {
                     match pf {
-                        // x  → bind variable x = hm["x"]
+                        // x  -> bind variable x = hm["x"]
                         PatternField::Shorthand { field, .. } => {
                             let Some(v) = hm.get(field) else {
                                 return false;
@@ -443,7 +454,7 @@ impl EvalHost for RuneVM {
                             self.define_var(field, v.clone());
                         }
 
-                        // x: pat → recursively bind
+                        // x: pat -> recursively bind
                         PatternField::Assign { field, pat, .. } => {
                             let Some(v) = hm.get(field) else {
                                 return false;
@@ -453,7 +464,7 @@ impl EvalHost for RuneVM {
                             }
                         }
 
-                        // .. → allow extra keys
+                        // .. -> allow extra keys
                         PatternField::Rest(_) => continue,
                     }
                 }
@@ -464,67 +475,67 @@ impl EvalHost for RuneVM {
             _ => false,
         },
 
-        // Enum pattern: Ok(x), Error(msg)
-        Pattern::Variant { name, args, .. } => match value {
-            EvalValue::EnumInstance { variant, args: v_args, .. } => {
-                if variant != name {
-                    return false;
-                }
-                if args.len() != v_args.len() {
-                    return false;
-                }
-                for (p, v) in args.iter().zip(v_args.iter()) {
-                    if !self.bind_pattern(p, v) {
+            // Enum pattern: Ok(x), Error(msg)
+            Pattern::Variant { name, args, .. } => match value {
+                EvalValue::EnumInstance { variant, args: v_args, .. } => {
+                    if variant != name {
                         return false;
                     }
+                    if args.len() != v_args.len() {
+                        return false;
+                    }
+                    for (p, v) in args.iter().zip(v_args.iter()) {
+                        if !self.bind_pattern(p, v) {
+                            return false;
+                        }
+                    }
+                    true
                 }
-                true
-            }
-            _ => false,
-        },
+                _ => false,
+            },
 
-        Pattern::Typed { pat, ty, .. } => {
-            if !value.matches_type(ty) {
-                return false;
+            Pattern::Typed { pat, ty, .. } => {
+                if !value.matches_type(ty) {
+                    return false;
+                }
+                return self.bind_pattern(pat, value);
             }
-            return self.bind_pattern(pat, value);
         }
     }
-}
 
-fn apply_compound(
-    &mut self,
-    left: &EvalValue,
-    op: &str,
-    right: &EvalValue
-) -> EvalValue {
-    match (left, op, right) {
-        (EvalValue::Number(a), "+=", EvalValue::Number(b)) =>
-            EvalValue::Number(a + b),
+    fn apply_compound(
+        &mut self,
+        left: &EvalValue,
+        op: &str,
+        right: &EvalValue
+    ) -> EvalValue {
+        match (left, op, right) {
+            (EvalValue::Number(a), "+=", EvalValue::Number(b)) =>
+                EvalValue::Number(a + b),
 
-        (EvalValue::Number(a), "-=", EvalValue::Number(b)) =>
-            EvalValue::Number(a - b),
+            (EvalValue::Number(a), "-=", EvalValue::Number(b)) =>
+                EvalValue::Number(a - b),
 
-        (EvalValue::Number(a), "*=", EvalValue::Number(b)) =>
-            EvalValue::Number(a * b),
+            (EvalValue::Number(a), "*=", EvalValue::Number(b)) =>
+                EvalValue::Number(a * b),
 
-        (EvalValue::Number(a), "/=", EvalValue::Number(b)) =>
-            EvalValue::Number(a / b),
+            (EvalValue::Number(a), "/=", EvalValue::Number(b)) =>
+                EvalValue::Number(a / b),
 
-        // Strings: s += "text"
-        (EvalValue::String(a), "+=", EvalValue::String(b)) =>
-            EvalValue::String(format!("{}{}", a, b)),
+            // Strings: s += "text"
+            (EvalValue::String(a), "+=", EvalValue::String(b)) =>
+                EvalValue::String(format!("{}{}", a, b)),
 
-        // Lists: list += elem
-        (EvalValue::List(a), "+=", v) => {
-            let mut out = a.clone();
-            out.push(v.clone());
-            EvalValue::List(out)
+            // Lists: list += elem
+            (EvalValue::List(a), "+=", v) => {
+                let mut out = a.clone();
+                out.push(v.clone());
+                EvalValue::List(out)
+            }
+
+            _ => EvalValue::Unit,
         }
-
-        _ => EvalValue::Unit,
     }
-}
 
 
     fn namespace_lookup(&mut self, _ns: EvalValue, item: &str) -> EvalValue {
@@ -551,7 +562,12 @@ fn apply_compound(
             // `_`
             Pattern::Wildcard(_) => true,
 
-            // `_ = expr` — всегда матчит
+            // `mut x`
+            Pattern::Mut { inner, .. } => {
+                self.match_pattern(value, inner)
+            }
+
+            // `_ = expr`
             Pattern::Ident(_, _) => true,
 
             // literal numbers
@@ -635,7 +651,7 @@ fn apply_compound(
                                 }
                             }
 
-                            // x: pat → recursively match
+                            // x: pat -> recursively match
                             PatternField::Assign { field, pat, .. } => {
                                 let Some(v) = hm.get(field) else {
                                     return false;

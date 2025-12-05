@@ -16,7 +16,7 @@ impl Parser {
             }
         }
 
-        self.stream.expect(TokenKind::PipeLambda)?; // closing |
+        self.stream.expect(TokenKind::Pipe)?; // closing |
 
         let body = self.parse_expr()?;
         let span = Span::merge(start, body.span());

@@ -12,6 +12,97 @@ fn test_rune_capabilities() {
     println!("\n===================== RUNE TEST START =====================\n");
 
 let code = r#"
+fn TestStructUpdateField() {
+    let u = User { id{1}, name{"A"}, age{10} };
+    let u2 = User { age{u.age + 1}, ..u };
+    u2.age
+}
+
+fn TestDefaultParams(a, b{10}, c: i32{5}) {
+    a + b + c
+}
+
+fn TestDefaultParams2(x{1}) { x * 2 }
+
+fn make_user(name, age) {
+    User { name{name}, age{age}, id{0} }
+}
+
+fn TestNamedCalls() {
+    let u = make_user { name{"Rune"}, age{20} };
+    u.age + 1
+}
+
+fn TestTypedArrays() {
+    let xs: List<i32> = [1,2,3];
+    xs[0] + xs[2]
+}
+
+fn TestLambdas() {
+    let add1 = |x| x + 1;
+    let mul = |a, b| a * b;
+
+    let r1 = add1(9);
+    let r2 = mul(2, 3);
+
+    r1 + r2 // 10 + 6 = 16
+}
+
+    fn MakePair() {
+    (10, 20)
+}
+
+fn TestTupleReturn() {
+    let (a, b) = MakePair();
+    a * b
+}
+
+fn TestArrayAssign() {
+    let mut arr = [1,2,3];
+    arr[1] = 10;
+    arr[1] + arr[2]
+}
+
+fn TestMapAssign() {
+    let mut m = map { a{1}, b{2} };
+    m.b = 5;
+    m.b * 2
+}
+
+fn TestMutParam(mut x) {
+    x = x + 10;
+    x
+}
+
+export fn exported_fn(a) { a + 1 }
+export struct Ex { id{i32} }
+
+Number = union(i32 | f32 | f64)
+
+fn TestUnionParsing(x: Number) {
+    1  // dummy
+}
+
+fn TestMoveSemantics() {
+    let s = "Rune";
+    let t = s;
+    t.len()   // s is moved, but runtime ignore for now
+}
+
+fn TestMutLocal() {
+    let mut x = 10;
+    x = x + 1;
+    x
+}
+
+
+fn TestStructFieldAssign() {
+    let mut u = User { id{1}, name{"M"}, age{10} };
+    u.age = 20;
+    u.age
+}
+
+
 //     MODULE + IMPORTS
 
 mod math {
@@ -215,9 +306,7 @@ fn TestMapPattern() {
     }
 }
 
-    // ======================================================
 //     GENERIC ENUM TESTS — RUNE STYLE vs RUST STYLE
-// ======================================================
 
 // ------------ Rune-style generic enums ------------
 // Rune-style позволяет:

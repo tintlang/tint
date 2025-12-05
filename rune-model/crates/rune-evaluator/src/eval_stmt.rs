@@ -28,11 +28,15 @@ pub fn eval_stmt<H: EvalHost>(host: &mut H, stmt: &Stmt) -> Flow {
             Flow::Value(Value::Unit)
         }
 
-        Stmt::Assign { name, expr, .. } => {
-            let val = host.eval_expr(expr);
-            host.set_var(name, val.clone());
-            Flow::Value(val)
+         // NEW: universal assignment — lhs = rhs
+        Stmt::Assign { lhs, rhs, .. } => {
+            let r = host.eval_expr(rhs);
+            if !host.assign_to(lhs, r.clone()) {
+                panic!("Invalid assignment target");
+            }
+            Flow::Value(r)
         }
+
 
         Stmt::CompoundAssign { name, op, expr, .. } => {
             let left  = host.load_var(name, expr.span());

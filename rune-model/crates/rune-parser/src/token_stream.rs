@@ -35,6 +35,16 @@ pub fn next(&mut self) -> Token {
     t
 }
 
+    /// Save current token index for speculative parsing
+    pub fn checkpoint(&self) -> usize {
+        self.pos
+    }
+
+    /// Restore stream to earlier position
+    pub fn restore(&mut self, checkpoint: usize) {
+        self.pos = checkpoint;
+    }
+
 /// consume_if with log
 pub fn consume_if(&mut self, kind: TokenKind) -> bool {
     if self.peek().kind == kind {

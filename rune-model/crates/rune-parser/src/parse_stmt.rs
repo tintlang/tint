@@ -146,99 +146,61 @@ impl Parser {
         })
     }
 
-    // ASSIGNMENT
-    // x = y
-    // x += y
-    fn parse_assignment(&mut self) -> PResult<Stmt> {
-        let name = self.parse_ident()?;
+    // MAIN SWITCH — parse_stmt()
+ pub fn parse_stmt(&mut self) -> PResult<Stmt> {
+    let tok = self.stream.peek().clone();
 
-        let op_tok = self.stream.next_owned(); // =, +=, -= ...
+    // ----------------------------------------
+    // Universal assignment
+    // ----------------------------------------
+    {
+        let checkpoint = self.stream.checkpoint();
 
-        let expr = self.parse_expr()?;
-        let end = expr.span();
+        // parse LHS as postfix-only expression (no binary ops)
+        if let Ok(lhs) = self.parse_postfix() {
+            if self.stream.consume_if(TokenKind::Eq) {
+                let rhs = self.parse_expr()?;
+                self.stream.consume_if(TokenKind::Semicolon);
 
-        Ok(Stmt::Assign {
-            name,
-            expr,
-            span: Span::merge(op_tok.span, end),
-        })
+                let lhs_span = lhs.span();
+                let rhs_span = rhs.span();
+                let span = Span::merge(lhs_span, rhs_span);
+
+                return Ok(Stmt::Assign { lhs, rhs, span });
+            }
+        }
+
+        self.stream.restore(checkpoint);
     }
 
-    // MAIN SWITCH — parse_stmt()
-    pub fn parse_stmt(&mut self) -> PResult<Stmt> {
-        let tok = self.stream.peek().clone();
+    match tok.kind {
+        TokenKind::Let => {
+            let start = self.stream.next().span;
+            return self.parse_let_stmt(start);
+        }
 
-        match tok.kind {
-            // let
-            TokenKind::Let => {
-                let start = self.stream.next().span; // consume 'let'
-                self.parse_let_stmt(start)
-            }
-            
-            // return
-            TokenKind::Return => self.parse_return_stmt(),
+        TokenKind::Return => return self.parse_return_stmt(),
+        TokenKind::If => return self.parse_if_stmt(),
+        TokenKind::Loop => return self.parse_loop_stmt(),
+        TokenKind::While => return self.parse_while_stmt(),
+        TokenKind::Break => return self.parse_break_stmt(),
+        TokenKind::Continue => return self.parse_continue_stmt(),
 
-            // if / else
-            TokenKind::If => self.parse_if_stmt(),
+        TokenKind::Match => {
+            let expr = self.parse_expr()?;
+            self.stream.consume_if(TokenKind::Semicolon);
+            return Ok(Stmt::Expr(expr));
+        }
 
-            // loop
-            TokenKind::Loop => self.parse_loop_stmt(),
+        TokenKind::For => return self.parse_for_stmt(),
 
-            // while
-            TokenKind::While => self.parse_while_stmt(),
-
-            // break / continue
-            TokenKind::Break => self.parse_break_stmt(),
-            TokenKind::Continue => self.parse_continue_stmt(),
-
-            TokenKind::Match => {
-                let expr = self.parse_expr()?;  // match — это expression
-                self.stream.consume_if(TokenKind::Semicolon);
-                Ok(Stmt::Expr(expr))
-            },
-
-            // for
-            TokenKind::For => self.parse_for_stmt(),
-
-            // assignment: Ident '=' ...
-            TokenKind::Ident => {
-                // Look ahead
-                if self.stream.peek_n(1).kind == TokenKind::Eq
-                    || self.stream.peek_n(1).kind == TokenKind::PlusEq
-                    || self.stream.peek_n(1).kind == TokenKind::MinusEq
-                    || self.stream.peek_n(1).kind == TokenKind::StarEq
-                    || self.stream.peek_n(1).kind == TokenKind::SlashEq
-                {
-                    return self.parse_assignment();
-                }
-
-                // Otherwise -> expression
-                let expr = self.parse_expr()?;
-                self.stream.consume_if(TokenKind::Semicolon);
-                Ok(Stmt::Expr(expr))
-            }
-
-            // Fallback → expression
-            TokenKind::Number
-            | TokenKind::String
-            | TokenKind::True
-            | TokenKind::False
-            | TokenKind::Ident
-            | TokenKind::LParen
-            | TokenKind::LBracket
-            | TokenKind::Bang
-            | TokenKind::Minus
-            | TokenKind::PipeLambda
-            => {
-                let expr = self.parse_expr()?;
-                self.stream.consume_if(TokenKind::Semicolon);
-                Ok(Stmt::Expr(expr))
-            }
-
-            _ => Err(ParserError::Message {
-                msg: format!("Unexpected token in statement: {:?}", tok.kind),
-                span: tok.span,
-            }),
+        // Default: expression statement
+        _ => {
+            let expr = self.parse_expr()?;
+            self.stream.consume_if(TokenKind::Semicolon);
+            return Ok(Stmt::Expr(expr));
         }
     }
+}
+
 }
