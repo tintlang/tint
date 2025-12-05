@@ -71,42 +71,42 @@ pub fn eval_expr<H: EvalHost>(host: &mut H, expr: &Expr) -> Value {
             }
         }
 
-        // ARRAY → LIST
+        // ARRAY: LIST
         Expr::Array { items, .. } => {
             let vals = items.iter().map(|e| eval_expr(host, e)).collect();
             Value::List(vals)
         }
 
         // MATCH EXPRESSION
-Expr::Match { scrutinee, arms, .. } => {
-    let val = eval_expr(host, scrutinee);
+        Expr::Match { scrutinee, arms, .. } => {
+            let val = eval_expr(host, scrutinee);
 
-    for arm in arms {
-        // 1. PATTERN CHECK
-        if match_pattern(&arm.pattern, &val) {
-            
-            // 2. OPTIONAL GUARD
-            if let Some(ref guard_expr) = arm.guard {
-                let guard_val = eval_expr(host, guard_expr);
+            for arm in arms {
+                // 1. PATTERN CHECK
+                if match_pattern(&arm.pattern, &val) {
+                    
+                    // 2. OPTIONAL GUARD
+                    if let Some(ref guard_expr) = arm.guard {
+                        let guard_val = eval_expr(host, guard_expr);
 
-                match guard_val {
-                    Value::Bool(true) => {
-                        return eval_expr(host, &arm.expr);
+                        match guard_val {
+                            Value::Bool(true) => {
+                                return eval_expr(host, &arm.expr);
+                            }
+                            Value::Bool(false) => {
+                                continue; // skip this arm
+                            }
+                            _ => panic!("Match guard must evaluate to bool"),
+                        }
                     }
-                    Value::Bool(false) => {
-                        continue; // skip this arm
-                    }
-                    _ => panic!("Match guard must evaluate to bool"),
+
+                    // 3. NO GUARD → MATCHED
+                    return eval_expr(host, &arm.expr);
                 }
             }
 
-            // 3. NO GUARD → MATCHED
-            return eval_expr(host, &arm.expr);
+            Value::Unit
         }
-    }
-
-    Value::Unit
-}
 
         // FIELD: obj.field
         Expr::Field { target, field, .. } => {
@@ -221,6 +221,57 @@ Expr::Match { scrutinee, arms, .. } => {
         Expr::Tuple { items, .. } => {
             let vals = items.iter().map(|e| eval_expr(host, e)).collect();
             Value::Tuple(vals)
+        }
+
+        // TUPLE INDEX:  v.0, v.1, ...
+        Expr::TupleIndex { target, index, .. } => {
+            let val = eval_expr(host, target);
+
+            match val {
+                Value::Tuple(items) => {
+                    items
+                        .get(*index)
+                        .cloned()
+                        .unwrap_or_else(|| panic!("Tuple index {} out of bounds", index))
+                }
+                other => panic!("TupleIndex used on non-tuple value: {:?}", other),
+            }
+        }
+
+        // VARIANT INIT:  E2::A { x{10}, y{20} }
+        Expr::VariantInit { enum_name, variant, fields, .. } => {
+            // evaluate all struct-like fields
+            let mut out_fields = Vec::new();
+
+            for f in fields {
+                match f {
+                    StructInitField::Assign { name, expr, .. } => {
+                        let v = eval_expr(host, expr);
+                        out_fields.push((name.clone(), v));
+                    }
+                    StructInitField::Rune { name, expr, .. } => {
+                        let v = eval_expr(host, expr);
+                        out_fields.push((name.clone(), v));
+                    }
+                }
+            }
+
+            Value::EnumInstance {
+                enum_name: enum_name.clone(),
+                variant: variant.clone(),
+                args: out_fields.into_iter().map(|(_,v)| v).collect(),
+            }
+        }
+
+        Expr::MapInit { entries, .. } => {
+            let mut m = std::collections::HashMap::new();
+
+            for (k, e) in entries {
+                let v = eval_expr(host, e);
+                m.insert(k.clone(), v);
+            }
+
+            Value::Map(m)
         }
 
         // PAREN

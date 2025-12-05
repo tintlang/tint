@@ -10,11 +10,13 @@ impl Parser {
         name: String,
         start_span: Span,
     ) -> PResult<Expr> {
+
         self.stream.expect(TokenKind::LBrace)?;
 
         let mut fields = Vec::new();
+        let mut base_expr: Option<Expr> = None;
 
-        // empty: MyType {}
+        // empty struct {}
         if self.stream.consume_if(TokenKind::RBrace) {
             let end = self.stream.last_span();
             return Ok(Expr::StructInit {
@@ -24,37 +26,24 @@ impl Parser {
             });
         }
 
-        // STYLE GUARD: "colon" | "rune"
-        let mut style: Option<&'static str> = None;
-
         loop {
-            // parse one field
-            let field = self.parse_struct_init_field()?;
+            // -------------------------------
+            // CASE 1: Struct Update prefix → ..ident
+            // -------------------------------
+            if self.stream.consume_if(TokenKind::DotDot) {
+                let ident = self.parse_ident()?;
+                let span = self.stream.last_span();
 
-            // detect field style
-            let this_style = match &field {
-                StructInitField::Assign { .. } => "colon",
-                StructInitField::Rune { .. }   => "rune",
-            };
-
-            // first field → set style
-            if style.is_none() {
-                style = Some(this_style);
-            } else if style.unwrap() != this_style {
-                return Err(ParserError::Message {
-                    msg: format!(
-                        "Mixed struct-init field styles are not allowed. \
-                         Expected all `{}`, but found `{}`.",
-                         style.unwrap(),
-                         this_style
-                    ),
-                    span: field.span(),
-                });
+                base_expr = Some(Expr::Ident(ident, span));
+            } else {
+                // -------------------------------
+                // CASE 2: Normal struct field
+                // -------------------------------
+                let field = self.parse_struct_init_field()?;
+                fields.push(field);
             }
 
-            fields.push(field);
-
-            // comma or end
+            // break if no comma
             if !self.stream.consume_if(TokenKind::Comma) {
                 break;
             }
@@ -63,8 +52,18 @@ impl Parser {
             }
         }
 
-        self.stream.expect(TokenKind::RBrace)?;
-        let end = self.stream.last_span();
+        let end = self.stream.expect(TokenKind::RBrace)?.span;
+
+        // -------------------------------
+        // Decide which Expr to return
+        // -------------------------------
+        if let Some(base) = base_expr {
+            return Ok(Expr::StructUpdate {
+                base: Box::new(base),
+                updates: fields,
+                span: Span::merge(start_span, end),
+            });
+        }
 
         Ok(Expr::StructInit {
             name,
@@ -72,7 +71,6 @@ impl Parser {
             span: Span::merge(start_span, end),
         })
     }
-
 
     /// Parse one struct init field:
     ///   id: expr

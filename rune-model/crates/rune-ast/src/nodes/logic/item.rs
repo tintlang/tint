@@ -1,4 +1,7 @@
 use crate::Span;
+use crate::Stmt;
+use crate::pattern::Pattern;
+
 use super::{
     stmt::{Block},
     expr::Expr,
@@ -7,11 +10,27 @@ use super::{
 };
 
 #[derive(Debug, Clone)]
+pub struct UseDecl {
+    pub path: Vec<String>, // ["math", "vec3"]
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct ModDecl {
+    pub name: String,
+    pub items: Vec<Item>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
 pub enum Item {
     Fn(FnDecl),
     UiFn(UiFnDecl),
     Struct(StructDecl),
     Enum(EnumDecl),
+    Mod(ModDecl),
+    Use(UseDecl),
+    GlobalLet(Stmt),
 }
 
 // -----------------------------------------------------------
@@ -44,7 +63,7 @@ pub struct UiFnDecl {
 
 #[derive(Debug, Clone)]
 pub struct Param {
-    pub name: String,
+    pub pattern: Pattern,
     pub ty: Option<Type>, 
     pub default: Option<Expr>,
 }
@@ -85,6 +104,7 @@ pub enum StructField {
 #[derive(Debug, Clone)]
 pub struct EnumDecl {
     pub name: String,
+    pub generics: Vec<String>,
     pub variants: Vec<EnumVariant>,
     pub span: Span,
 }

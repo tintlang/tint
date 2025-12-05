@@ -35,6 +35,10 @@ pub fn parse_pattern(&mut self) -> PResult<Pattern> {
             return Ok(Pattern::String(t.lexeme, t.span));
         }
 
+        TokenKind::MapLit => {
+            self.parse_map_pattern()
+        }
+
         _ => Err(ParserError::Message {
             msg: "Unexpected token in pattern".into(),
             span: tok.span,
@@ -71,28 +75,64 @@ pub fn parse_pattern(&mut self) -> PResult<Pattern> {
         Ok(Pattern::Tuple(items, Span::merge(start, end)))
     }
 
+pub(crate) fn parse_map_pattern(&mut self) -> PResult<Pattern> {
+    let start = self.stream.expect(TokenKind::MapLit)?.span;
+    self.stream.expect(TokenKind::LBrace)?;
 
-pub fn parse_let_pattern(&mut self) -> PResult<Pattern> {
-    match self.stream.peek_kind() {
+    let mut fields = Vec::new();
 
-        TokenKind::Ident => {
-            // SPAN копируем до parse_ident()
-            let span = self.stream.peek().span;
-            let id = self.parse_ident()?;
-            Ok(Pattern::Ident(id, span))
-        }
-
-        TokenKind::LParen => {
-            // tuple pattern
-            self.parse_tuple_pattern()
-        }
-
-        _ => Err(ParserError::Message {
-            msg: "Invalid pattern in let (only `name` or `(x,y)` allowed)".into(),
-            span: self.stream.peek().span,
-        })
+    if self.stream.consume_if(TokenKind::RBrace) {
+        return Ok(Pattern::Map {
+            fields,
+            span: Span::merge(start, self.stream.last_span()),
+        });
     }
+
+    loop {
+        let field = self.parse_ident()?;
+        let fspan = self.stream.last_span();
+
+        match self.stream.peek_kind() {
+            TokenKind::Comma | TokenKind::RBrace => {
+                // shorthand: map { x, y }
+                fields.push(PatternField::Shorthand {
+                    field,
+                    span: fspan,
+                });
+            }
+
+            TokenKind::Colon => {
+                let inner = self.parse_pattern()?;
+                let inner_span = inner.span(); // <<< взять span ДО move
+
+                fields.push(PatternField::Assign {
+                    field,
+                    pat: inner,              // <- move OK
+                    span: Span::merge(fspan, inner_span),
+                });
+            }
+
+            _ => {
+                return Err(ParserError::Message {
+                    msg: "Invalid field in map-pattern".into(),
+                    span: self.stream.peek().span,
+                });
+            }
+        }
+
+        if !self.stream.consume_if(TokenKind::Comma) {
+            break;
+        }
+    }
+
+    self.stream.expect(TokenKind::RBrace)?;
+
+    Ok(Pattern::Map {
+        fields,
+        span: Span::merge(start, self.stream.last_span()),
+    })
 }
+
 
 fn parse_variant_pattern(&mut self, name: String, start: Span) -> PResult<Pattern> {
     self.stream.expect(TokenKind::LParen)?;
@@ -127,6 +167,16 @@ fn parse_ident_based_pattern(&mut self) -> PResult<Pattern> {
     let span = tok.span;
 
     let next = self.stream.peek_kind();
+    
+    if self.stream.peek_kind() == TokenKind::Colon {
+        self.stream.next(); // consume ':'
+        let ty = self.parse_type()?;
+        return Ok(Pattern::Typed {
+            pat: Box::new(Pattern::Ident(name.clone(), span)),
+            ty,
+            span,
+        });
+    }
 
     let first_upper = name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false);
 

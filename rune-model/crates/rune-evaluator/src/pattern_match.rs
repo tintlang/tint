@@ -51,6 +51,41 @@ pub fn match_pattern(pat: &Pattern, val: &Value) -> bool {
             _ => false
         },
 
+        Pattern::Map { fields, .. } => match val {
+            Value::Map(map) => {
+                for f in fields {
+                    match f {
+                        // shorthand: map { x }
+                        PatternField::Shorthand { field, .. } => {
+                            if !map.contains_key(field) {
+                                return false;
+                            }
+                        }
+
+                        // assign: map { x: pat }
+                        PatternField::Assign { field, pat, .. } => {
+                            match map.get(field) {
+                                Some(v) => {
+                                    if !match_pattern(pat, v) {
+                                        return false;
+                                    }
+                                }
+                                None => return false,
+                            }
+                        }
+
+                        // rest not implemented for Map yet
+                        PatternField::Rest(_) => { /* ignore */ }
+                    }
+                }
+
+                true
+            }
+
+            _ => false,
+        },
+
+
         Pattern::Variant { name, args, .. } => match val {
             Value::EnumInstance { enum_name, variant, args: inst_args }
                 if variant == name => {
@@ -65,5 +100,13 @@ pub fn match_pattern(pat: &Pattern, val: &Value) -> bool {
             }
             _ => false,
         },
+
+       // typed patterns: x:i32, p:User, (a,b):(i32,f32)
+        Pattern::Typed { pat, ty, .. } => {
+            if !val.matches_type(ty) {
+                return false;
+            }
+            match_pattern(pat, val)
+        }
     }
 }

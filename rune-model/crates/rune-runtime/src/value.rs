@@ -21,6 +21,8 @@ pub enum RuntimeValue {
         args: Vec<RuntimeValue>,
     },
 
+    Map(std::collections::HashMap<String, RuntimeValue>),
+
     // low-level VM handles
     Struct(usize),
     Enum(usize, usize),

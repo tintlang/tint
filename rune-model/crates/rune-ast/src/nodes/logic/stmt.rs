@@ -18,6 +18,14 @@ pub enum LetInit {
     Rune(Expr),     // let a{expr}
 }
 
+impl LetInit {
+    pub fn span(&self) -> Span {
+        match self {
+            LetInit::Assign(expr) => expr.span(),
+            LetInit::Rune(expr) => expr.span(),
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub enum Stmt {

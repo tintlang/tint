@@ -5,6 +5,7 @@ use crate::eval_block::eval_block_flow;
 use crate::eval_expr::eval_expr;
 use rune_ast::{Block, Expr, FnDecl, FnBody, Span};
 use crate::eval_host::Flow; 
+use crate::eval_pattern::bind_pattern;
 
 #[derive(Clone)]
 pub enum FnBodyKind {
@@ -21,9 +22,8 @@ pub fn eval_user_fn<H: EvalHost>(
     // Открываем новый scope перед вызовом
     host.push_scope();
 
-    // Связываем параметры
     for (param, arg) in f.params.iter().zip(args.iter()) {
-        host.define_var(&param.name, arg.clone());
+        bind_pattern(host, &param.pattern, arg);
     }
 
     // EXECUTE BODY 

@@ -118,6 +118,23 @@ impl IrVM {
                     self.alloc_value(*dst, Value::Unit);
                 }
 
+                Instr::VariantInit { dst, enum_name, variant, fields } => {
+                    let mut args = Vec::new();
+
+                    for (_, src) in fields {
+                        let v = self.get_value(*src);
+                        args.push(v);
+                    }
+
+                    let v = Value::EnumInstance {
+                        enum_name: enum_name.clone(),
+                        variant: variant.clone(),
+                        args,
+                    };
+
+                    self.alloc_value(*dst, v);
+                }
+
                 Instr::StructUpdate { dst, base, updates } => {
                     println!("WARNING: struct update not implemented, returning unit");
                     self.alloc_value(*dst, Value::Unit);
@@ -153,6 +170,30 @@ impl IrVM {
                         out.push(self.get_value(*id));
                     }
                     self.alloc_value(*dst, Value::List(out));
+                }
+
+                Instr::MapInit { dst, entries } => {
+                    let mut m = std::collections::HashMap::new();
+                    for (k, id) in entries {
+                        m.insert(k.clone(), self.get_value(*id));
+                    }
+                    self.alloc_value(*dst, Value::Map(m));
+                }
+
+                Instr::MapAccess { dst, map, key } => {
+                    let m = self.get_value(*map); 
+
+                    match m {
+                        Value::Map(ref hm) => {
+                            // HashMap<String, Value>, key: String -> hm.get(&key)
+                            if let Some(v) = hm.get(key) {    
+                                self.alloc_value(*dst, v.clone()); 
+                            } else {
+                                panic!("Map missing key `{}`", key);
+                            }
+                        }
+                        other => panic!("MapAccess on non-map: {:?}", other),
+                    }
                 }
 
                 Instr::Return(id) => {

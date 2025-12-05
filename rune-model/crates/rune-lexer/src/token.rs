@@ -110,6 +110,8 @@ pub enum TokenKind {
     Signal,
     Computed,
 
+    MapLit,  // map
+
     // Keywords — GPU2D DSL
     Rune2d,  
 

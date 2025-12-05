@@ -55,17 +55,13 @@ impl Parser {
 
             // LATER SUPPORT:
             TokenKind::Module => {
-                Err(ParserError::Message {
-                    msg: "`module` parsing not implemented yet".into(),
-                    span: self.stream.peek().span,
-                })
+                let m = self.parse_mod()?;
+                return Ok(Item::Mod(m));
             }
 
             TokenKind::Use => {
-                Err(ParserError::Message {
-                    msg: "`use` import syntax not implemented yet".into(),
-                    span: self.stream.peek().span,
-                })
+                let u = self.parse_use()?;
+                return Ok(Item::Use(u));
             }
 
             TokenKind::Impl => {
@@ -75,6 +71,12 @@ impl Parser {
                 })
             }
 
+            TokenKind::Let => {
+                let start = self.stream.next().span;
+                let stmt = self.parse_let_stmt(start)?;
+                Ok(Item::GlobalLet(stmt))
+            }
+
             // FALLBACK ERROR
             other => Err(ParserError::Message {
                 msg: format!("Unexpected token {:?}, expected fn/ui/struct/enum", other),
@@ -82,6 +84,41 @@ impl Parser {
             }),
         }
     }
+
+    pub(crate) fn parse_use(&mut self) -> PResult<UseDecl> {
+    let start = self.stream.expect(TokenKind::Use)?.span;
+
+    let mut path = Vec::new();
+    let first = self.parse_ident()?;
+    path.push(first);
+
+    while self.stream.consume_if(TokenKind::PathSep) {
+        let seg = self.parse_ident()?;
+        path.push(seg);
+    }
+
+    self.stream.expect(TokenKind::Semicolon)?;
+
+    let end = self.stream.last_span();
+    Ok(UseDecl { path, span: Span::merge(start, end) })
+}
+
+pub(crate) fn parse_mod(&mut self) -> PResult<ModDecl> {
+    let start = self.stream.expect(TokenKind::Module)?.span;
+
+    let name = self.parse_ident()?;
+
+    self.stream.expect(TokenKind::LBrace)?;
+
+    let mut items = Vec::new();
+    while !self.stream.consume_if(TokenKind::RBrace) {
+        items.push(self.parse_item()?);
+    }
+
+    let end = self.stream.last_span();
+    Ok(ModDecl { name, items, span: Span::merge(start, end) })
+}
+
 
     pub fn new_expr_only(expr_src: String, _span: Span) -> Self {
         use rune_lexer::Lexer;
@@ -93,7 +130,7 @@ impl Parser {
     }
 
     /// Parse function parameters:  (name: Type, name: Type, ...)
-    pub(crate) fn parse_params(&mut self) -> PResult<Vec<Param>> {
+   pub(crate) fn parse_params(&mut self) -> PResult<Vec<Param>> {
         let mut params = Vec::new();
         let mut seen_default = false;
 
@@ -103,24 +140,26 @@ impl Parser {
         }
 
         loop {
-            // 1) parse name
-            let name = self.parse_ident()?;
+            // PATTERN (а не имя)
+            self.in_pattern = true;
+            let pattern = self.parse_pattern()?;    // <-- ВАЖНО
+            self.in_pattern = false;
 
+            // optional ": type"
             let ty = if self.stream.consume_if(TokenKind::Colon) {
                 Some(self.parse_type()?)
             } else {
                 None
             };
 
-            // 4) default value — Rune style: { expr }
+            // default: {expr}
             let default = if self.stream.consume_if(TokenKind::LBrace) {
                 let expr = self.parse_expr()?;
                 self.stream.expect(TokenKind::RBrace)?;
                 seen_default = true;
                 Some(expr)
             } else {
-                // если уже были default-параметры → нельзя дальше без них
-                if seen_default {
+                if seen_default && ty.is_none() {
                     return Err(ParserError::Message {
                         msg: "Cannot mix parameters with and without default values".into(),
                         span: self.stream.peek().span,
@@ -129,7 +168,7 @@ impl Parser {
                 None
             };
 
-            params.push(Param { name, ty, default });
+            params.push(Param { pattern, ty, default });
 
             // comma?
             if !self.stream.consume_if(TokenKind::Comma) {

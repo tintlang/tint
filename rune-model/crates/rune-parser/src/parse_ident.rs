@@ -15,9 +15,6 @@ impl Parser {
                 return Ok(tok.lexeme.clone());
             }
 
-            // UI component names (PascalCase) come as Ident already,
-            // no special handling required.
-
             // DISALLOWED KEYWORDS:
             TokenKind::Fn
             | TokenKind::Let

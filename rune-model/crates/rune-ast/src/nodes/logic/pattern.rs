@@ -1,5 +1,7 @@
 use crate::Span;
+use crate::Type;
 use super::expr::Expr;
+use crate::StructInitField;
 
 #[derive(Debug, Clone)]
 pub enum Pattern {
@@ -22,6 +24,16 @@ pub enum Pattern {
     Variant {
         name: String,
         args: Vec<Pattern>,
+        span: Span,
+    },
+
+    Typed {
+        pat: Box<Pattern>,
+        ty: Type,
+        span: Span },
+
+    Map {
+        fields: Vec<PatternField>,
         span: Span,
     },
 }
@@ -63,7 +75,9 @@ impl Pattern {
             | Pattern::Wildcard(s)
             | Pattern::Tuple(_, s)
             | Pattern::Struct { span: s, .. }
-            | Pattern::Variant { span: s, .. } => *s,
+            | Pattern::Variant { span: s, .. }
+            | Pattern::Typed { span: s, .. }
+            | Pattern::Map { span: s, .. } => *s,
         }
     }
 }

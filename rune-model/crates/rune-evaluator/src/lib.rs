@@ -11,6 +11,7 @@ pub mod errors;
 pub mod eval_host;
 pub mod host_vm;
 pub mod pattern_match;
+pub mod eval_pattern;
 
 
 pub use eval_host::EvalHost;

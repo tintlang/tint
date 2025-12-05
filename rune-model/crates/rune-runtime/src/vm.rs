@@ -15,6 +15,7 @@ use crate::{
     value::RuntimeValue,
 };
 
+use rune_evaluator::eval_pattern::bind_pattern;
 use rune_ir::{SsaCompiler, optimize, IrVM, ProgramIR};
 
 use rune_ast::{
@@ -197,9 +198,8 @@ impl RuneVM {
         println!("UI FN CALL: {}", ui.name);
 
         // 1) Параметры — как обычно
-        self.push_scope();
-        for (param, arg) in ui.params.iter().zip(args) {
-            self.define_var(&param.name, arg.clone());
+        for (param, arg) in ui.params.iter().zip(args.iter()) {
+            bind_pattern(self, &param.pattern, arg);
         }
 
         // 2) Здесь ПОКА НИЧЕГО НЕ ДЕЛАЕМ.
@@ -311,7 +311,7 @@ impl EvalHost for RuneVM {
 
         // bind params
         for (param, arg) in func.params.iter().zip(args.iter()) {
-            self.define_var(&param.name, arg.clone());
+            bind_pattern(self, &param.pattern, arg);
         }
 
         // execute
@@ -430,6 +430,40 @@ impl EvalHost for RuneVM {
             _ => false,
         },
 
+        // Map pattern: map { x, y: pat, .. }
+        Pattern::Map { fields, .. } => match value {
+            EvalValue::Map(hm) => {
+                for pf in fields {
+                    match pf {
+                        // x  → bind variable x = hm["x"]
+                        PatternField::Shorthand { field, .. } => {
+                            let Some(v) = hm.get(field) else {
+                                return false;
+                            };
+                            self.define_var(field, v.clone());
+                        }
+
+                        // x: pat → recursively bind
+                        PatternField::Assign { field, pat, .. } => {
+                            let Some(v) = hm.get(field) else {
+                                return false;
+                            };
+                            if !self.bind_pattern(pat, v) {
+                                return false;
+                            }
+                        }
+
+                        // .. → allow extra keys
+                        PatternField::Rest(_) => continue,
+                    }
+                }
+
+                true
+            }
+
+            _ => false,
+        },
+
         // Enum pattern: Ok(x), Error(msg)
         Pattern::Variant { name, args, .. } => match value {
             EvalValue::EnumInstance { variant, args: v_args, .. } => {
@@ -448,8 +482,16 @@ impl EvalHost for RuneVM {
             }
             _ => false,
         },
+
+        Pattern::Typed { pat, ty, .. } => {
+            if !value.matches_type(ty) {
+                return false;
+            }
+            return self.bind_pattern(pat, value);
+        }
     }
 }
+
 fn apply_compound(
     &mut self,
     left: &EvalValue,
@@ -581,10 +623,50 @@ fn apply_compound(
                 _ => false,
             },
 
+            // map { x, y: pat, .. }
+            Pattern::Map { fields, .. } => match value {
+                EvalValue::Map(hm) => {
+                    for pf in fields {
+                        match pf {
+                            // shorthand: x → must contain key "x"
+                            PatternField::Shorthand { field, .. } => {
+                                if !hm.contains_key(field) {
+                                    return false;
+                                }
+                            }
+
+                            // x: pat → recursively match
+                            PatternField::Assign { field, pat, .. } => {
+                                let Some(v) = hm.get(field) else {
+                                    return false;
+                                };
+                                if !self.match_pattern(v, pat) {
+                                    return false;
+                                }
+                            }
+
+                            // { .. } — allow other keys
+                            PatternField::Rest(_) => continue,
+                        }
+                    }
+                    true
+                }
+                _ => false,
+            },
+
             // enums unsupported (как ты и хотел)
             Pattern::Variant { .. } => {
                 panic!("Pattern matching on variants not supported");
             }
+
+            // typed pattern: x: i32
+            Pattern::Typed { pat, ty, .. } => {
+                if !value.matches_type(ty) {
+                    return false;
+                }
+                return self.match_pattern(value, pat);
+            }
+
         }
     }
 }

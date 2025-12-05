@@ -88,6 +88,33 @@ impl Env {
         None
     }
 
+     pub fn lookup_path(&self, path: &[String]) -> Option<Value> {
+        let mut current: Option<Rc<Env>> = Some(Rc::new(self.clone()));
+
+        for (i, seg) in path.iter().enumerate() {
+            let env = current.clone()?;
+
+            // Если это последний сегмент → ищем значение или namespace
+            if i == path.len() - 1 {
+                if let Some(v) = env.lookup(seg) {
+                    return Some(v);
+                }
+                if let Some(ns) = env.lookup_namespace(seg) {
+                    return Some(Value::Namespace {
+                        name: seg.clone(),
+                        items: ns,
+                    });
+                }
+                return None;
+            }
+
+            // иначе сегмент → должен быть namespace
+            current = env.lookup_namespace(seg);
+        }
+
+        None
+    }
+
     // STRUCT DEFINITIONS
     pub fn define_struct(&mut self, name: &str, fields: Vec<String>) {
         self.structs.insert(name.to_string(), StructInfo { name: name.into(), fields });
@@ -100,6 +127,10 @@ impl Env {
     // ENUM DEFINITIONS
     pub fn define_enum(&mut self, name: &str, variants: Vec<String>) {
         self.enums.insert(name.to_string(), EnumInfo { name: name.into(), variants });
+    }
+
+    pub fn define_alias(&mut self, alias: &str, value: Value) {
+        self.frames.last_mut().unwrap().insert(alias.to_string(), value);
     }
 
     pub fn get_enum(&self, name: &str) -> Option<EnumInfo> {
@@ -116,10 +147,11 @@ impl Env {
     }
 
     pub fn extend_from(&mut self, other: &Env) {
-        for frame in &other.frames {
-            for (k, v) in frame {
-                self.define(k, v.clone());
-            }
+        let dst = self.frames.last_mut().unwrap();
+        let src = &other.frames[0];
+
+        for (k, v) in src {
+            dst.insert(k.clone(), v.clone());
         }
     }
 

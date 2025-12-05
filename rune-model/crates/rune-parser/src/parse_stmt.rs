@@ -11,57 +11,42 @@ impl Parser {
     ///   let name: Type = expr;
     ///   let name { expr };
     ///   let name: Type { expr };
-fn parse_let_stmt(&mut self, start: Span) -> PResult<Stmt> {
-    // already consumed `let`
+   pub(crate) fn parse_let_stmt(&mut self, start: Span) -> PResult<Stmt> {
+        // Pattern parsing (tuple, struct, ident)
+        let old = self.in_pattern;
+        self.in_pattern = true;
+        let pattern = self.parse_pattern()?;
+        self.in_pattern = old;
 
-    // ▼▼▼ KEY FIX ▼▼▼
-    let old = self.in_pattern;
-    self.in_pattern = true;
-    let pattern = self.parse_let_pattern()?;
-    self.in_pattern = old;
-    // ▲▲▲ KEY FIX ▲▲▲
+        // Optional type
+        let ty = if self.stream.consume_if(TokenKind::Colon) {
+            Some(self.parse_type()?)
+        } else {
+            None
+        };
 
-    // Optional type
-    let ty = if self.stream.consume_if(TokenKind::Colon) {
-        Some(self.parse_type()?)
-    } else {
-        None
-    };
+        // Init (=expr  OR  {expr})
+        let init = if self.stream.consume_if(TokenKind::Eq) {
+            LetInit::Assign(self.parse_expr()?)
+        } else {
+            self.stream.expect(TokenKind::LBrace)?;
+            let expr = self.parse_expr()?;
+            self.stream.expect(TokenKind::RBrace)?;
+            LetInit::Rune(expr)
+        };
 
-    // Must have "=" or "{ expr }"
-    if self.stream.peek_kind() != TokenKind::Eq
-        && self.stream.peek_kind() != TokenKind::LBrace
-    {
-        return Err(ParserError::Message {
-            msg: "let must have either `= expr` or `{ expr }`".into(),
-            span: start,
-        });
+        self.stream.consume_if(TokenKind::Semicolon);
+
+        // ★ FIX: take span BEFORE moving init
+        let end_span = init.span();
+
+        Ok(Stmt::Let {
+            pattern,
+            ty,
+            init,              // here init is moved
+            span: Span::merge(start, end_span),
+        })
     }
-
-    let init = if self.stream.consume_if(TokenKind::Eq) {
-        LetInit::Assign(self.parse_expr()?)
-    } else {
-        self.stream.expect(TokenKind::LBrace)?;
-        let expr = self.parse_expr()?;
-        self.stream.expect(TokenKind::RBrace)?;
-        LetInit::Rune(expr)
-    };
-
-    self.stream.consume_if(TokenKind::Semicolon);
-
-    let end = match &init {
-        LetInit::Assign(e) => e.span(),
-        LetInit::Rune(e) => e.span(),
-    };
-
-    Ok(Stmt::Let {
-        pattern,
-        ty,
-        init,
-        span: Span::merge(start, end),
-    })
-}
-
 
     // RETURN statement
     fn parse_return_stmt(&mut self) -> PResult<Stmt> {

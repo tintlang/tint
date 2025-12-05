@@ -9,6 +9,23 @@ impl Parser {
         let start = self.stream.expect(TokenKind::Enum)?.span;
         let name = self.parse_ident()?;
 
+        // GENERIC PARAMETERS: <T, E>
+        let mut generics = Vec::new();
+
+        if self.stream.consume_if(TokenKind::LAngle) {
+            loop {
+                let g = self.parse_ident()?;
+                generics.push(g);
+
+                if self.stream.consume_if(TokenKind::Comma) {
+                    continue;
+                }
+
+                self.stream.expect(TokenKind::RAngle)?;
+                break;
+            }
+        }
+
         self.stream.expect(TokenKind::LBrace)?;
 
         let mut variants = Vec::new();
@@ -22,15 +39,13 @@ impl Parser {
 
                     let mut fields = Vec::new();
                     let mut style: Option<&'static str> = None;
-                    // allowed: "typed", "rune"
 
+                    // allowed: "typed", "rune"
                     if !self.stream.consume_if(TokenKind::RBrace) {
                         loop {
                             let field_name = self.parse_ident()?;
 
-                            // ────────────────────────────────
                             // TYPED FIELD  (name : Type)
-                            // ────────────────────────────────
                             if self.stream.consume_if(TokenKind::Colon) {
                                 if let Some(s) = style {
                                     if s != "typed" {
@@ -51,9 +66,7 @@ impl Parser {
                                 });
                             }
 
-                            // ────────────────────────────────
                             // RUNE FIELD  (name)
-                            // ────────────────────────────────
                             else {
                                 if let Some(s) = style {
                                     if s != "rune" {
@@ -83,7 +96,7 @@ impl Parser {
                     EnumVariant::Struct(variant_name, fields)
                 }
 
-                // Tuple variants → запрещены
+                // Tuple variants -> запрещены
                 TokenKind::LParen => {
                     return self.stream.error_here(
                         "Tuple variants like Foo(T) are not allowed in Rune"
@@ -102,6 +115,7 @@ impl Parser {
 
         Ok(EnumDecl {
             name,
+            generics,
             variants,
             span: Span::merge(start, end),
         })

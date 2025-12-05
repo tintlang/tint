@@ -2,6 +2,7 @@
 
 use std::{fmt, rc::Rc};
 use crate::env::Env;
+use rune_ast::Type;
 
 /// Runtime value for RuneLang
 #[derive(Clone)]
@@ -29,6 +30,8 @@ pub enum Value {
 
     // List / array: [a, b, c]
     List(Vec<Value>),
+
+    Map(std::collections::HashMap<String, Value>),
 
     // Runtime lambda (|x| x+1)
     Lambda {
@@ -113,6 +116,17 @@ impl fmt::Display for Value {
                 write!(f, ")")
             }
 
+            Value::Map(map) => {
+                write!(f, "map {{ ")?;
+                let mut first = true;
+                for (k, v) in map {
+                    if !first { write!(f, ", ")?; }
+                    first = false;
+                    write!(f, "{}: {}", k, v)?;
+                }
+                write!(f, " }}")
+            }
+
             Value::Lambda { .. } => write!(f, "<lambda>"),
             Value::Function { name, .. } => write!(f, "<fn {}>", name),
             Value::HostFunction(_) => write!(f, "<host-fn>"),
@@ -161,6 +175,15 @@ impl fmt::Debug for Value {
 
             Value::List(list) => write!(f, "{:?}", list),
 
+            Value::Map(map) => {
+                write!(f, "map {{ ")?;
+                for (i, (k, v)) in map.iter().enumerate() {
+                    write!(f, "{}: {:?}", k, v)?;
+                    if i + 1 < map.len() { write!(f, ", ")?; }
+                }
+                write!(f, " }}")
+            }
+
             Value::Lambda { .. } =>
                 write!(f, "<lambda>"),
 
@@ -195,4 +218,40 @@ impl Value {
             _ => 0,
         }
     }
+
+    pub fn matches_type(&self, ty: &Type) -> bool {
+        match (self, ty) {
+            // -------- PRIMITIVES --------
+            (Value::Number(_), Type::Simple(t)) 
+                if t == "i32" || t == "f32" => true,
+
+            (Value::Bool(_), Type::Simple(t)) if t == "bool" => true,
+
+            (Value::String(_), Type::Simple(t)) if t == "string" => true,
+
+            (Value::Unit, Type::Unit) => true,
+
+            // -------- STRUCT --------
+            (Value::StructInstance { name, .. }, Type::Simple(t)) 
+                if name == t => true,
+
+            // -------- ENUM --------
+            (Value::EnumInstance { enum_name, .. }, Type::Simple(t)) 
+                if enum_name == t => true,
+
+            // -------- TUPLES (когда Type::Tuple будет добавлен) --------
+            // (Value::Tuple(vals), Type::Tuple(types))
+            //     if vals.len() == types.len() => true,
+
+            // -------- GENERIC (Option<T>, Result<T>) пока заглушка --------
+            (v, Type::Generic(tname, _args)) => {
+                // временно считаем, что generic всегда проходит
+                // позже добавим строгую проверку
+                true
+            }
+
+            _ => false,
+        }
+    }
 }
+

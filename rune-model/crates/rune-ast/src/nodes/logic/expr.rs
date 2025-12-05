@@ -125,6 +125,24 @@ pub enum Expr {
         span: Span,
     },
     
+    TupleIndex {
+        target: Box<Expr>,
+        index: usize,
+        span: Span,
+    },
+
+    VariantInit {
+        enum_name: String,
+        variant: String,
+        fields: Vec<StructInitField>,
+        span: Span,
+    },
+
+    MapInit {
+        entries: Vec<(String, Expr)>,
+        span: Span,
+    },
+
 }
 
 impl Expr {
@@ -152,6 +170,9 @@ impl Expr {
             | Expr::Tuple { span, .. }
             | Expr::Block(_, span)
             | Expr::Match { span, .. } => *span,
+            Expr::TupleIndex { span, .. } => *span,
+            Expr::VariantInit { span, .. } => *span,
+            Expr::MapInit { span, .. } => *span,
         }
     }
 }

@@ -100,7 +100,7 @@ impl IrBuilder {
         block.instrs.push(Instr::Call { dst, func, args });
         dst
     }
-
+    
     // ---------------------------------------
     // FIELD: obj.field
     // ---------------------------------------
@@ -143,9 +143,7 @@ impl IrBuilder {
         dst
     }
 
-    // ---------------------------------------
     // STRUCT INIT
-    // ---------------------------------------
     pub fn emit_struct_init(
         &mut self,
         block: &mut Block,
@@ -154,6 +152,44 @@ impl IrBuilder {
     ) -> ValueId {
         let dst = self.fresh_value();
         block.instrs.push(Instr::StructInit { dst, name, fields });
+        dst
+    }
+
+    pub fn emit_variant_init(
+        &mut self,
+        block: &mut Block,
+        enum_name: String,
+        variant: String,
+        fields: Vec<(String, ValueId)>,
+    ) -> ValueId {
+        let dst = self.fresh_value();
+        block.instrs.push(Instr::VariantInit {
+            dst,
+            enum_name,
+            variant,
+            fields,
+        });
+        dst
+    }
+
+    pub fn emit_map_init(
+        &mut self,
+        block: &mut Block,
+        entries: Vec<(String, ValueId)>
+    ) -> ValueId {
+        let dst = self.fresh_value();
+        block.instrs.push(Instr::MapInit { dst, entries });
+        dst
+    }
+
+    pub fn emit_map_access(
+        &mut self,
+        block: &mut Block,
+        map: ValueId,
+        key: String,
+    ) -> ValueId {
+        let dst = self.fresh_value();
+        block.instrs.push(Instr::MapAccess { dst, map, key });
         dst
     }
 

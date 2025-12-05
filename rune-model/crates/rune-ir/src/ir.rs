@@ -15,6 +15,14 @@ pub enum Value {
 
     Tuple(Vec<Value>),
     List(Vec<Value>),  
+
+    EnumInstance {
+        enum_name: String,
+        variant: String,
+        args: Vec<Value>,
+    },
+
+     Map(std::collections::HashMap<String, Value>), 
 }
 
 #[derive(Debug, Clone)]
@@ -40,12 +48,23 @@ pub enum Instr {
 
     Index { dst: ValueId, arr: ValueId, index: ValueId },
 
-    StructInit { dst: ValueId, name: String, fields: Vec<(String, ValueId)> },
+    StructInit {
+        dst: ValueId,
+        name: String,
+        fields: Vec<(String, ValueId)>
+    },
 
     StructUpdate {
         dst: ValueId,
         base: ValueId,
         updates: Vec<(String, ValueId)>,
+    },
+
+    VariantInit {
+        dst: ValueId,
+        enum_name: String,
+        variant: String,
+        fields: Vec<(String, ValueId)>,
     },
 
     Array {
@@ -59,10 +78,28 @@ pub enum Instr {
         arms: Vec<(Pattern, Option<ValueId>, ValueId)>,
     },
 
-    Tuple { dst: ValueId, items: Vec<ValueId> },
+    Tuple {
+        dst: ValueId,
+        items: Vec<ValueId>
+    },
 
-    TupleExtract { dst: ValueId, tuple: ValueId, index: usize },
 
+    TupleExtract {
+        dst: ValueId,
+        tuple: ValueId,
+        index: usize
+    },
+
+    MapInit {
+        dst: ValueId,
+        entries: Vec<(String, ValueId)>,
+    },
+
+    MapAccess {
+        dst: ValueId,
+        map: ValueId,
+        key: String
+    },
 
     Return(ValueId),
 }

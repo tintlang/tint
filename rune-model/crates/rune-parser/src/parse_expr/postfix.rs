@@ -28,6 +28,7 @@ impl Parser {
         // otherwise normal expression
         self.parse_expr()
     }
+    
     pub(crate) fn parse_postfix(&mut self) -> PResult<Expr> {
     if self.in_pattern {
         eprintln!(
@@ -90,22 +91,52 @@ impl Parser {
                 eprintln!("[POSTFIX] parsed call OK");
             }
 
-            // -------- FIELD ACCESS --------
-            TokenKind::Dot => {
-                let dot = self.stream.next(); // '.'
-                eprintln!("[POSTFIX] start field");
+            
+// -------- FIELD ACCESS OR TUPLE INDEX --------
+TokenKind::Dot => {
+    let dot = self.stream.next(); // '.'
+    eprintln!("[POSTFIX] start field or tuple index");
 
-                let field = self.parse_ident()?;
-                let span = Span::merge(expr.span(), dot.span);
+    match self.stream.peek_kind() {
 
-                expr = Expr::Field {
-                    target: Box::new(expr),
-                    field: field.clone(),
-                    span,
-                };
+        // tuple index: v.0, v.1, v.2, ...
+        TokenKind::Number => {
+            let num_tok = self.stream.next_owned();
+            let index: usize = num_tok.lexeme.parse().unwrap();
 
-                eprintln!("[POSTFIX] parsed field '{}'", field);
-            }
+            let span = Span::merge(expr.span(), num_tok.span);
+            expr = Expr::TupleIndex {
+                target: Box::new(expr),
+                index,
+                span,
+            };
+
+            eprintln!("[POSTFIX] parsed tuple index .{}", index);
+        }
+
+        // normal field: v.x
+        TokenKind::Ident => {
+            let field = self.parse_ident()?;
+
+            let span = Span::merge(expr.span(), dot.span);
+            expr = Expr::Field {
+                target: Box::new(expr),
+                field: field.clone(),
+                span,
+            };
+
+            eprintln!("[POSTFIX] parsed field '{}'", field);
+        }
+
+        other => {
+            return Err(ParserError::Message {
+                msg: format!("Expected field or tuple index after '.', found {:?}", other),
+                span: self.stream.peek().span,
+            });
+        }
+    }
+    
+}
 
             // -------- NAMESPACE ACCESS --------
             TokenKind::PathSep => {

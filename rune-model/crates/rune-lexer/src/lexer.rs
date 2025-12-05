@@ -275,8 +275,11 @@ impl<'a> Lexer<'a> {
             "rune2d" => TokenKind::Rune2d,
 
             "module" => TokenKind::Module,
+            "mod" => TokenKind::Module,
             "export" => TokenKind::Export,
             "use" => TokenKind::Use,
+
+            "map" => TokenKind::MapLit, 
 
             _ => TokenKind::Ident,
         };

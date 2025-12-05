@@ -9,6 +9,7 @@ use rune_ast::{Program, Item, Expr, Stmt, FnBody, Pattern};
 use rune_ast::PatternField;
 use rune_ast::StringPart;
 use std::collections::HashMap;
+use rune_ast::StructInitField;
 
 pub struct SsaCompiler {
     builder: IrBuilder,
@@ -56,10 +57,8 @@ impl SsaCompiler {
             locals,
         }
     }
-
-    // ---------------------------------------------
-    // LOWERING STATEMENTS
-    // ---------------------------------------------
+    
+    // LOWERING STATEMENT
     fn lower_stmt(
         &mut self,
         s: &Stmt,
@@ -100,58 +99,95 @@ impl SsaCompiler {
         }
     }
 
-    // ---------------------------------------------
-    // PATTERN BINDING in SSA
-    // ---------------------------------------------
-fn bind_pattern(
-    &mut self,
-    pat: &Pattern,
-    value: ValueId,
-    locals: &mut HashMap<String, ValueId>,
-    block: &mut Block,
-) {
-    match pat {
-        Pattern::Ident(name, _) => {
-            locals.insert(name.clone(), value);
-        }
+    // PATTERN BINDING in SS
+    fn bind_pattern(
+        &mut self,
+        pat: &Pattern,
+        value: ValueId,
+        locals: &mut HashMap<String, ValueId>,
+        block: &mut Block,
+    ) {
+        match pat {
 
-        Pattern::Tuple(items, _) => {
-            for (i, subpat) in items.iter().enumerate() {
-                let elem = self.builder.emit_tuple_extract(block, value, i);
-                self.bind_pattern(subpat, elem, locals, block);
+            // x
+            Pattern::Ident(name, _) => {
+                locals.insert(name.clone(), value);
             }
-        }
 
-        Pattern::Struct { fields, .. } => {
-            for f in fields {
-                match f {
-                    PatternField::Shorthand { field, .. } => {
-                        let fld = self.builder.emit_field_access(block, value, field.clone());
-                        locals.insert(field.clone(), fld);
-                    }
+            // _
+            Pattern::Wildcard(_) => {}
 
-                    PatternField::Assign { field, pat, .. } => {
-                        let fld = self.builder.emit_field_access(block, value, field.clone());
-                        self.bind_pattern(pat, fld, locals, block);
-                    }
+            // NUMBER / STRING — не должны появляться в let/fn params,
+            // но если вдруг — просто игнорируем.
+            Pattern::Number(_, _) => {}
+            Pattern::String(_, _) => {}
 
-                    PatternField::Rest(_) => {}
+            // (a, b, c)
+            Pattern::Tuple(items, _) => {
+                for (i, subpat) in items.iter().enumerate() {
+                    let elem = self.builder.emit_tuple_extract(block, value, i);
+                    self.bind_pattern(subpat, elem, locals, block);
                 }
             }
-        }
 
-        Pattern::Wildcard(_) => {}
-        Pattern::Number(_, _) => {}
-        Pattern::String(_, _) => {}
-        Pattern::Variant { .. } => {
-            println!("TODO: variant pattern in SSA");
+            // User { id, name }
+            Pattern::Struct { fields, .. } => {
+                for f in fields {
+                    match f {
+                        PatternField::Shorthand { field, .. } => {
+                            let fld = self.builder.emit_field_access(block, value, field.clone());
+                            locals.insert(field.clone(), fld);
+                        }
+
+                        PatternField::Assign { field, pat, .. } => {
+                            let fld = self.builder.emit_field_access(block, value, field.clone());
+                            self.bind_pattern(pat, fld, locals, block);
+                        }
+
+                        PatternField::Rest(_) => {}
+                    }
+                }
+            }
+
+            // map { x, y: pat, .. }
+            Pattern::Map { fields, .. } => {
+                for f in fields {
+                    match f {
+                        // shorthand: map { x }
+                        PatternField::Shorthand { field, .. } => {
+                            let elem =
+                                self.builder.emit_map_access(block, value, field.clone());
+                            locals.insert(field.clone(), elem);
+                        }
+
+                        // field: pat
+                        PatternField::Assign { field, pat, .. } => {
+                            let elem =
+                                self.builder.emit_map_access(block, value, field.clone());
+                            self.bind_pattern(pat, elem, locals, block);
+                        }
+
+                        // ..
+                        PatternField::Rest(_) => {}
+                    }
+                }
+            }
+
+            // Some(x), Ok(v) — пока заглушка
+            Pattern::Variant { .. } => {
+                println!("TODO: variant pattern in SSA");
+            }
+
+            // NEW:
+            // typed pattern:  pat: Type
+            Pattern::Typed { pat, .. } => {
+                // просто рекурсивно обрабатываем внутренний паттерн
+                self.bind_pattern(pat, value, locals, block);
+            }
         }
     }
-}
 
-    // ---------------------------------------------
-    // LOWERING EXPRESSIONS
-    // ---------------------------------------------
+    // LOWERING EXPRESSION
     fn lower_expr(
         &mut self,
         e: &Expr,
@@ -192,9 +228,9 @@ fn bind_pattern(
                 last
             }
 
-            // ---------------------------------------------
+
             // INTERPOLATED STRING → sequence of concat ops
-            // ---------------------------------------------
+
             Expr::InterpolatedString { parts, .. } => {
                 let mut acc = self.builder.emit_const(block, Value::String(String::new()));
 
@@ -213,7 +249,7 @@ fn bind_pattern(
                 acc
             }
 
-            // ---------------------------------------------
+
             Expr::Binary { left, op, right, .. } => {
                 let lv = self.lower_expr(left, block, locals);
                 let rv = self.lower_expr(right, block, locals);
@@ -228,9 +264,8 @@ fn bind_pattern(
             Expr::Paren(expr, _) =>
                 self.lower_expr(expr, block, locals),
 
-            // ---------------------------------------------
+
             // CALL: foo(a,b)
-            // ---------------------------------------------
             Expr::Call { target, args, .. } => {
                 let fn_val = self.lower_expr(target, block, locals);
                 let lowered = args
@@ -260,34 +295,61 @@ fn bind_pattern(
                 self.builder.emit_index(block, arr, idx)
             }
 
-Expr::Match { scrutinee, arms, .. } => {
-    let scr = self.lower_expr(scrutinee, block, locals);
+            Expr::VariantInit { enum_name, variant, fields, .. } => {
+                // 1) Lower each field expression to SSA ValueId
+                let mut lowered_fields = Vec::new();
 
-    let mut lowered_arms = Vec::new();
+                for f in fields {
+                    let val = match f {
+                        StructInitField::Assign { expr, .. } =>
+                            self.lower_expr(expr, block, locals),
 
-    for arm in arms {
-        let pat = arm.pattern.clone();
+                        StructInitField::Rune { expr, .. } =>
+                            self.lower_expr(expr, block, locals),
+                    };
 
-        // Lower the guard, if present
-        let guard_val = if let Some(ref guard_expr) = arm.guard {
-            Some(self.lower_expr(guard_expr, block, locals))
-        } else {
-            None
-        };
+                    let name = match f {
+                        StructInitField::Assign { name, .. } => name.clone(),
+                        StructInitField::Rune   { name, .. } => name.clone(),
+                    };
 
-        // Lower the body expression
-        let body_val = self.lower_expr(&arm.expr, block, locals);
+                    lowered_fields.push((name, val));
+                }
 
-        lowered_arms.push((pat, guard_val, body_val));
-    }
+                // 2) Emit a new VariantInstance value
+                self.builder.emit_variant_init(
+                    block,
+                    enum_name.clone(),
+                    variant.clone(),
+                    lowered_fields,
+                )
+            }
 
-    self.builder.emit_match(block, scr, lowered_arms)
-}
+            Expr::Match { scrutinee, arms, .. } => {
+                let scr = self.lower_expr(scrutinee, block, locals);
 
+                let mut lowered_arms = Vec::new();
 
-            // ---------------------------------------------
+                for arm in arms {
+                    let pat = arm.pattern.clone();
+
+                    // Lower the guard, if present
+                    let guard_val = if let Some(ref guard_expr) = arm.guard {
+                        Some(self.lower_expr(guard_expr, block, locals))
+                    } else {
+                        None
+                    };
+
+                    // Lower the body expression
+                    let body_val = self.lower_expr(&arm.expr, block, locals);
+
+                    lowered_arms.push((pat, guard_val, body_val));
+                }
+
+                self.builder.emit_match(block, scr, lowered_arms)
+            }
+
             // STRUCT INIT
-            // ---------------------------------------------
             Expr::StructInit { name, fields, .. } => {
                 let mut fv = Vec::new();
 
@@ -307,9 +369,8 @@ Expr::Match { scrutinee, arms, .. } => {
                 self.builder.emit_struct_init(block, name.clone(), fv)
             }
 
-            // ---------------------------------------------
+
             // STRUCT UPDATE: base { f = 10, y{expr} }
-            // ---------------------------------------------
             Expr::StructUpdate { base, updates, .. } => {
                 let base_val = self.lower_expr(base, block, locals);
                 let mut upd_vec = Vec::new();
@@ -339,9 +400,7 @@ Expr::Match { scrutinee, arms, .. } => {
                 self.builder.emit_array(block, vals)
             }
 
-            // ---------------------------------------------
             // TUPLE: (a,b,c)
-            // ---------------------------------------------
             Expr::Tuple { items, .. } => {
                 let vals = items
                     .iter()
@@ -351,16 +410,28 @@ Expr::Match { scrutinee, arms, .. } => {
                 self.builder.emit_tuple(block, vals)
             }
 
-            // ---------------------------------------------
+            // TUPLE: (v.0, v.1 , v.2)
+            Expr::TupleIndex { target, index, .. } => {
+                let base = self.lower_expr(target, block, locals);
+                self.builder.emit_tuple_extract(block, base, *index)
+            }
+
+            Expr::MapInit { entries, .. } => {
+                let mut lowered = Vec::new();
+                for (k, e) in entries {
+                    let id = self.lower_expr(e, block, locals);
+                    lowered.push((k.clone(), id));
+                }
+                self.builder.emit_map_init(block, lowered)
+            }
+
             // NAMED ARG — cannot be lowered outside call
-            // ---------------------------------------------
             Expr::NamedArg { name, .. } => {
                 panic!("Named argument `{}` cannot appear as bare expression", name);
             }
 
-            // ---------------------------------------------
+
             // TODO λ
-            // ---------------------------------------------
             Expr::Lambda { .. } => {
                 println!("TODO: lambda lowering");
                 self.builder.emit_const(block, Value::Unit)
