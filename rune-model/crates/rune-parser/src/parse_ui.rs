@@ -13,6 +13,9 @@ impl Parser {
         // fn
         self.stream.expect(TokenKind::Fn)?;
 
+        // OPTIONAL ATTRIBUTES: [@(strict, speed)]
+        let attributes = self.parse_attributes()?;  
+
         // fn name
         let name = self.parse_ident()?;
 
@@ -31,6 +34,7 @@ impl Parser {
         let end_tok = self.stream.expect(TokenKind::RBrace)?;
 
         Ok(UiFnDecl {
+            attributes,
             name,
             params,
             body,

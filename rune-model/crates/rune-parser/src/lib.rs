@@ -4,9 +4,15 @@ pub mod parser;
 pub mod token_stream;
 pub mod error;
 pub mod parse_expr;
+pub mod parse_export;
 pub mod ui;
 pub mod parse_block;
 pub mod parse_type;
+pub mod parse_type_alias;
+pub mod symbols;
+pub mod skip_parens;
+pub mod parse_attribute;
+pub mod parse_file;
 
 mod parse_stmt;
 mod parse_fn;

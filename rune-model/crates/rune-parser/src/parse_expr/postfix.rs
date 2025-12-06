@@ -156,20 +156,23 @@ TokenKind::Dot => {
             }
 
             // -------- INDEXING --------
-            TokenKind::LBracket => {
-         
-                eprintln!("[POSTFIX] start index");
+            TokenKind::LBrace => {
+                // Named-call allowed ONLY if expr is a function name
+                if let Expr::Ident(ref fname, _) = expr {
+                    if self.symbols.is_function(fname) {
+                        let args = self.parse_named_call_args()?;
+                        let span = Span::merge(expr.span(), self.stream.last_span());
 
-                let index_expr = self.parse_expr()?;
+                        expr = Expr::Call {
+                            target: Box::new(expr),
+                            args,
+                            span,
+                        };
+                        continue; // продолжать postfix!
+                    }
+                }
 
-                let span = Span::merge(expr.span(), index_expr.span());
-                expr = Expr::Index {
-                    target: Box::new(expr),
-                    index: Box::new(index_expr),
-                    span,
-                };
-
-                eprintln!("[POSTFIX] parsed index");
+                break; // иначе — это НЕ named-call
             }
 
             _ => break,

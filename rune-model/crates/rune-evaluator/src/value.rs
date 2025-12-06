@@ -266,8 +266,9 @@ impl Value {
     pub fn matches_type(&self, ty: &Type) -> bool {
         match (self, ty) {
             // -------- PRIMITIVES --------
-            (Value::Number(_), Type::Simple(t)) 
-                if t == "i32" || t == "f32" => true,
+            (Value::Number(_), Type::Simple(t))
+                    if t == "i32" || t == "f32" || t == "f64" || t == "number"
+                    => true,
 
             (Value::Bool(_), Type::Simple(t)) if t == "bool" => true,
 
@@ -288,11 +289,7 @@ impl Value {
             //     if vals.len() == types.len() => true,
 
             // -------- GENERIC (Option<T>, Result<T>) пока заглушка --------
-            (v, Type::Generic(tname, _args)) => {
-                // временно считаем, что generic всегда проходит
-                // позже добавим строгую проверку
-                true
-            }
+            (_, Type::Generic(_, _)) => true,
 
             _ => false,
         }

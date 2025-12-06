@@ -1,7 +1,7 @@
-pub mod mode;
+pub mod kind;
 pub mod lifetime;
 pub mod annotation;
 
-pub use mode::*;
+pub use kind::*;
 pub use lifetime::*;
 pub use annotation::*;

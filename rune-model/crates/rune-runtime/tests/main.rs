@@ -12,6 +12,129 @@ fn test_rune_capabilities() {
     println!("\n===================== RUNE TEST START =====================\n");
 
 let code = r#"
+
+
+fn TestFor1(n) {
+    let mut sum = 0;
+
+    for i in 0..n {
+        sum = sum + i;
+    }
+
+    sum
+}
+    
+fn TestIf1(x) {
+    if (x > 10) {
+        1
+    } else {
+        0
+    }
+}
+
+fn TestIf2(x) {
+    let mut a = 0;
+    if (x == 5) {
+        a = 10;
+    }
+    a
+}
+
+fn TestIfNested(x, y) {
+    if (x > y) {
+        if (x > 100) { 1 } else { 2 }
+    } else {
+        3
+    }
+}
+
+fn TestWhile1(n) {
+    let mut sum = 0;
+    let mut i = 0;
+
+    while (i < n) {
+        sum = sum + i;
+        i = i + 1;
+    }
+
+    sum
+}
+
+fn TestWhileBreak() {
+    let mut i = 0;
+
+    while (true) {
+        if (i == 3) { break; }
+        i = i + 1;
+    }
+
+    i
+}
+
+fn TestForBreak() {
+    let mut res = 0;
+
+    for i in 0..10 {
+        if (i == 4) { break; }
+        res = res + i;
+    }
+
+    res
+}
+
+export fn exported_fn(a) { a + 1 }
+export struct Ex { id{i32} }
+
+type Number = union(i32 | f32 | f64)
+
+fn TestUnionParsing(x: Number) {
+    1  // dummy
+}
+
+fn TestTupleDefault1((a, b, c) {10}) {
+    a + b + c     // 10 + 10 + 10 = 30
+}
+
+fn TestTupleDefault2((x, (y, z)) {5}) {
+    x * y + z     // 5 * 5 + 5 = 30
+}
+
+fn inner((p1, p2) {3}) {
+    (p1, p2)
+}
+
+fn TestTupleDefaultMatch2() {
+    let tmp = (x, y);
+
+    match tmp {
+        (3, 3) => 1,
+        _ => 0,
+    }
+}
+
+struct User {
+    id{i32},
+    name{string},
+}
+
+fn TestStructDefault1(User { id, name } {"X"}) {
+    id.len() + name.len()  // "X".len = 1 → 1 + 1 = 2
+}
+
+fn TestStructDefault2(User { id, name } { 99 }) {
+    id + name.len()        // id=99, name=99?? (string?)  
+}
+
+struct Pair {
+    a{i32},
+    b{i32},
+}
+
+fn TestStructDefault3(Pair { a, b } {7}) {
+    a + b   // 14
+}
+
+
 fn TestStructUpdateField() {
     let u = User { id{1}, name{"A"}, age{10} };
     let u2 = User { age{u.age + 1}, ..u };
@@ -72,15 +195,6 @@ fn TestMapAssign() {
 fn TestMutParam(mut x) {
     x = x + 10;
     x
-}
-
-export fn exported_fn(a) { a + 1 }
-export struct Ex { id{i32} }
-
-Number = union(i32 | f32 | f64)
-
-fn TestUnionParsing(x: Number) {
-    1  // dummy
 }
 
 fn TestMoveSemantics() {
@@ -279,7 +393,7 @@ fn TestMapBasic() {
     let m = map { 
         a{1}, 
         b{2}, 
-        c: 3 
+        c{3}, 
     };
 
     return m.a + m.b + m.c;
@@ -409,7 +523,6 @@ fn TestRustResult() {
             if let Some(span) = match &e {
                 ParserError::Message { span, .. } => Some(span),
                 ParserError::Unexpected { span, .. } => Some(span),
-                _ => None,
             } {
                 println!(
                     "At {}..{} → `{}`",

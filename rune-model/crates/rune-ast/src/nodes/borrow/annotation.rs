@@ -1,7 +1,9 @@
-use super::{BorrowMode, LifetimeId};
+use super::{BorrowKind, LifetimeId};
 
 #[derive(Debug, Clone)]
 pub struct BorrowAnnotation {
-    pub mode: BorrowMode,
-    pub lifetime: LifetimeId,
+    pub kind: BorrowKind,
+
+    // For strict borrow only
+    pub lifetime: Option<LifetimeId>,
 }

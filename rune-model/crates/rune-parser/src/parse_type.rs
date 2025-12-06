@@ -16,8 +16,25 @@ impl Parser {
             return Ok(Type::Unit);
         }
 
-        // First parse type ident, e.g. "Vec"
-        let name = self.parse_ident()?;
+        let name = self.parse_ident()?; 
+
+        // Если имя == "union", то начинаем парсить union(...)
+        if name == "union" && self.stream.consume_if(TokenKind::LParen) {
+
+            let mut types = Vec::new();
+
+            // минимум один тип
+            types.push(self.parse_type()?);
+
+            // остальные через |
+            while self.stream.consume_if(TokenKind::Pipe) {
+                types.push(self.parse_type()?);
+            }
+
+            self.stream.expect(TokenKind::RParen)?;
+
+            return Ok(Type::Union(types));
+        }
 
         // Look for generic arguments: < ... >
         if self.stream.consume_if(TokenKind::LAngle) {

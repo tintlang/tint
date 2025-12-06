@@ -8,6 +8,7 @@ mod binary;
 mod expr_until;
 mod match_expr;
 mod struct_init;
+mod parse_named_call_args;
 
 use crate::{Parser, error::*};
 use rune_ast::Expr;

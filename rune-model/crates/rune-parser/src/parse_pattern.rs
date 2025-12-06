@@ -63,31 +63,34 @@ pub fn parse_pattern(&mut self) -> PResult<Pattern> {
     // -----------------------------------------
     // (a, b, c)
     // -----------------------------------------
-    pub(crate) fn parse_tuple_pattern(&mut self) -> PResult<Pattern> {
-        let start_tok = self.stream.expect(TokenKind::LParen)?;
-        let start = start_tok.span;
+pub(crate) fn parse_tuple_pattern(&mut self) -> PResult<Pattern> {
+    let start_tok = self.stream.expect(TokenKind::LParen)?;
+    let start = start_tok.span;
 
-        let mut items = Vec::new();
+    let mut items = Vec::new();
 
-        // ()
-        if self.stream.consume_if(TokenKind::RParen) {
-            return Ok(Pattern::Tuple(items, start));
-        }
-
-        // (x, y, ...)
-        loop {
-            let pat = self.parse_pattern()?;
-            items.push(pat);
-
-            if !self.stream.consume_if(TokenKind::Comma) {
-                break;
-            }
-        }
-
-        let end = self.stream.expect(TokenKind::RParen)?.span;
-
-        Ok(Pattern::Tuple(items, Span::merge(start, end)))
+    // empty tuple ()
+    if self.stream.consume_if(TokenKind::RParen) {
+        return Ok(Pattern::Tuple(items, start));
     }
+
+    loop {
+        let pat = self.parse_pattern()?;
+        items.push(pat);
+
+        // конец: (x, y)
+        if self.stream.consume_if(TokenKind::RParen) {
+            break;
+        }
+
+        // иначе ожидаем ,
+        self.stream.expect(TokenKind::Comma)?;
+    }
+
+    let end = self.stream.last_span();
+    Ok(Pattern::Tuple(items, Span::merge(start, end)))
+}
+
 
 pub(crate) fn parse_map_pattern(&mut self) -> PResult<Pattern> {
     let start = self.stream.expect(TokenKind::MapLit)?.span;

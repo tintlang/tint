@@ -63,6 +63,7 @@ impl Parser {
         Ok(StructDecl {
             name,
             fields,
+            exported: false,
             span: Span::merge(start, end),
         })
     }

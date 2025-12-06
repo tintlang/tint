@@ -14,6 +14,13 @@ impl TokenStream {
         Self { tokens, pos: 0 }
     }
 
+     pub fn clone_with_reset(&self) -> TokenStream {
+        TokenStream {
+            tokens: self.tokens.clone(),
+            pos: 0,
+        }
+    }
+
     /// Peek token safely + log
 pub fn peek(&self) -> &Token {
     let t = self.tokens.get(self.pos).unwrap();
@@ -22,6 +29,7 @@ pub fn peek(&self) -> &Token {
     );
     t
 }
+
 
 /// Move stream forward + log
 pub fn next(&mut self) -> Token {
@@ -75,6 +83,7 @@ pub fn expect(&mut self, kind: TokenKind) -> Result<Token, ParserError> {
         })
     }
 }
+
 
 
 

@@ -6,26 +6,24 @@ use rune_ast::*;
 use rune_lexer::TokenKind;
 
 impl Parser {
- /// Parse a let-statement:
-    ///   let name = expr;
-    ///   let name: Type = expr;
-    ///   let name { expr };
-    ///   let name: Type { expr };
-   pub(crate) fn parse_let_stmt(&mut self, start: Span) -> PResult<Stmt> {
-        // Pattern parsing (tuple, struct, ident)
+
+    // ────────────────────────────────────────────────
+    // LET statement
+    // ────────────────────────────────────────────────
+    pub(crate) fn parse_let_stmt(&mut self, start: Span) -> PResult<Stmt> {
         let old = self.in_pattern;
         self.in_pattern = true;
         let pattern = self.parse_pattern()?;
         self.in_pattern = old;
 
-        // Optional type
+        // optional type
         let ty = if self.stream.consume_if(TokenKind::Colon) {
             Some(self.parse_type()?)
         } else {
             None
         };
 
-        // Init (=expr  OR  {expr})
+        // init
         let init = if self.stream.consume_if(TokenKind::Eq) {
             LetInit::Assign(self.parse_expr()?)
         } else {
@@ -37,30 +35,35 @@ impl Parser {
 
         self.stream.consume_if(TokenKind::Semicolon);
 
-        // ★ FIX: take span BEFORE moving init
-        let end_span = init.span();
+        let end = init.span();
 
         Ok(Stmt::Let {
             pattern,
             ty,
-            init,              // here init is moved
-            span: Span::merge(start, end_span),
+            init,
+            span: Span::merge(start, end),
         })
     }
 
-    // RETURN statement
+    // ────────────────────────────────────────────────
+    // RETURN
+    // ────────────────────────────────────────────────
     fn parse_return_stmt(&mut self) -> PResult<Stmt> {
-        let start = self.stream.next().span; // consume 'return'
+        let start = self.stream.next().span; // 'return'
+
         let expr = self.parse_expr()?;
-        let end = expr.span();
+        let end = expr.span();            
+
         self.stream.consume_if(TokenKind::Semicolon);
 
         Ok(Stmt::Return(expr, Span::merge(start, end)))
     }
 
+    // ────────────────────────────────────────────────
     // IF / ELSE
+    // ────────────────────────────────────────────────
     fn parse_if_stmt(&mut self) -> PResult<Stmt> {
-        let start = self.stream.next().span; // consume `if`
+        let start = self.stream.next().span;
 
         let cond = self.parse_expr()?;
         let then_block = self.parse_block()?;
@@ -71,7 +74,10 @@ impl Parser {
             None
         };
 
-        let end = else_block.as_ref().map(|b| b.span).unwrap_or(then_block.span);
+        let end = else_block
+            .as_ref()
+            .map(|b| b.span)
+            .unwrap_or(then_block.span);
 
         Ok(Stmt::If {
             cond,
@@ -81,60 +87,67 @@ impl Parser {
         })
     }
 
+    // ────────────────────────────────────────────────
     // WHILE
+    // ────────────────────────────────────────────────
     fn parse_while_stmt(&mut self) -> PResult<Stmt> {
         let start = self.stream.next().span;
         let cond = self.parse_expr()?;
         let body = self.parse_block()?;
-        let end = body.span;
 
-        Ok(Stmt::Match {
-            expr: cond,
-            arms: vec![], // временно пусто, чтобы типы прошли
+        let end = body.span;     
+
+        Ok(Stmt::While {
+            cond,
+            body,                
             span: Span::merge(start, end),
         })
-    }
+}
 
-    // LOOP (infinite)
+    // ────────────────────────────────────────────────
+    // LOOP
+    // ────────────────────────────────────────────────
     fn parse_loop_stmt(&mut self) -> PResult<Stmt> {
         let start = self.stream.next().span;
         let body = self.parse_block()?;
-        let end = body.span;
 
-        Ok(Stmt::For {
-            var: "_loop".into(),
-            start: Expr::Number("0".into(), start),
-            end: Expr::Number("0".into(), end),
+        let end = body.span;  
+
+        Ok(Stmt::Loop {
             body,
             span: Span::merge(start, end),
         })
     }
 
+    // ────────────────────────────────────────────────
     // BREAK / CONTINUE
+    // ────────────────────────────────────────────────
     fn parse_break_stmt(&mut self) -> PResult<Stmt> {
         let tok = self.stream.next();
-        Ok(Stmt::Expr(Expr::Ident("break".into(), tok.span)))
+        Ok(Stmt::Break(tok.span))
     }
 
     fn parse_continue_stmt(&mut self) -> PResult<Stmt> {
         let tok = self.stream.next();
-        Ok(Stmt::Expr(Expr::Ident("continue".into(), tok.span)))
+        Ok(Stmt::Continue(tok.span))
     }
 
-    // FOR loop
-    // for i in 0..10 { ... }
+    // ────────────────────────────────────────────────
+    // FOR i in a..b
+    // ────────────────────────────────────────────────
     fn parse_for_stmt(&mut self) -> PResult<Stmt> {
-        let start = self.stream.next().span; // "for"
+        let start = self.stream.next().span; // for
 
         let var = self.parse_ident()?;
-
         self.stream.expect(TokenKind::In)?;
+
         let start_expr = self.parse_expr()?;
 
-        self.stream.expect(TokenKind::DotDot)?; // range
+        self.stream.expect(TokenKind::DotDot)?;
         let end_expr = self.parse_expr()?;
 
         let body = self.parse_block()?;
+
         let end = body.span;
 
         Ok(Stmt::For {
@@ -146,61 +159,104 @@ impl Parser {
         })
     }
 
-    // MAIN SWITCH — parse_stmt()
- pub fn parse_stmt(&mut self) -> PResult<Stmt> {
-    let tok = self.stream.peek().clone();
+    // ────────────────────────────────────────────────
+    // LHS for assignment:  a, a.b, a[x]
+    // ────────────────────────────────────────────────
+    fn parse_lhs_for_assignment(&mut self) -> PResult<Expr> {
+        let start = self.stream.peek().span;
 
-    // ----------------------------------------
-    // Universal assignment
-    // ----------------------------------------
-    {
-        let checkpoint = self.stream.checkpoint();
+        let mut expr = if let TokenKind::Ident = self.stream.peek().kind {
+            let name = self.stream.next().lexeme.clone();
+            Expr::Ident(name, start)
+        } else {
+            return Err(ParserError::Message {
+                msg: "Expected identifier for assignment".into(),
+                span: start,
+            });
+        };
 
-        // parse LHS as postfix-only expression (no binary ops)
-        if let Ok(lhs) = self.parse_postfix() {
-            if self.stream.consume_if(TokenKind::Eq) {
-                let rhs = self.parse_expr()?;
-                self.stream.consume_if(TokenKind::Semicolon);
-
-                let lhs_span = lhs.span();
-                let rhs_span = rhs.span();
-                let span = Span::merge(lhs_span, rhs_span);
-
-                return Ok(Stmt::Assign { lhs, rhs, span });
+        loop {
+            if self.stream.consume_if(TokenKind::Dot) {
+                let field = self.parse_ident()?;
+                let span = Span::merge(start, self.stream.last_span());
+                expr = Expr::Field { target: Box::new(expr), field, span };
+                continue;
             }
+
+            if self.stream.consume_if(TokenKind::LBracket) {
+                let idx = self.parse_expr()?;
+                self.stream.expect(TokenKind::RBracket)?;
+                let span = Span::merge(start, idx.span());
+                expr = Expr::Index { target: Box::new(expr), index: Box::new(idx), span };
+                continue;
+            }
+
+            break;
         }
 
-        self.stream.restore(checkpoint);
+        Ok(expr)
     }
 
-    match tok.kind {
-        TokenKind::Let => {
-            let start = self.stream.next().span;
-            return self.parse_let_stmt(start);
+    // ────────────────────────────────────────────────
+    // MAIN: parse_stmt()
+    // ────────────────────────────────────────────────
+    pub fn parse_stmt(&mut self) -> PResult<Stmt> {
+        let tok = self.stream.peek().clone();
+
+        // ─────────────────────────────────────
+        // Try assignment
+        // ─────────────────────────────────────
+        {
+            let checkpoint = self.stream.checkpoint();
+
+            if let Ok(lhs) = self.parse_lhs_for_assignment() {
+                if self.stream.consume_if(TokenKind::Eq) {
+                    let rhs = self.parse_expr()?;
+                    self.stream.consume_if(TokenKind::Semicolon);
+
+                    // FIX: Get spans BEFORE moving lhs/rhs
+                    let lhs_span = lhs.span();
+                    let rhs_span = rhs.span();
+                    let span = Span::merge(lhs_span, rhs_span);
+
+                    return Ok(Stmt::Assign {
+                        lhs,
+                        rhs,
+                        span,
+                    });
+                }
+            }
+
+            self.stream.restore(checkpoint);
         }
 
-        TokenKind::Return => return self.parse_return_stmt(),
-        TokenKind::If => return self.parse_if_stmt(),
-        TokenKind::Loop => return self.parse_loop_stmt(),
-        TokenKind::While => return self.parse_while_stmt(),
-        TokenKind::Break => return self.parse_break_stmt(),
-        TokenKind::Continue => return self.parse_continue_stmt(),
+        // ─────────────────────────────────────
+        // Let / return / if / while / for ...
+        // ─────────────────────────────────────
+        match tok.kind {
+            TokenKind::Let => {
+                let start = self.stream.next().span;
+                return self.parse_let_stmt(start);
+            }
 
-        TokenKind::Match => {
-            let expr = self.parse_expr()?;
-            self.stream.consume_if(TokenKind::Semicolon);
-            return Ok(Stmt::Expr(expr));
+            TokenKind::Return => return self.parse_return_stmt(),
+            TokenKind::If => return self.parse_if_stmt(),
+            TokenKind::While => return self.parse_while_stmt(),
+            TokenKind::Loop => return self.parse_loop_stmt(),
+            TokenKind::Break => return self.parse_break_stmt(),
+            TokenKind::Continue => return self.parse_continue_stmt(),
+            TokenKind::For => return self.parse_for_stmt(),
+            TokenKind::Match => {
+                let expr = self.parse_expr()?;
+                return Ok(Stmt::Expr(expr));
+            }
+
+            _ => {}
         }
 
-        TokenKind::For => return self.parse_for_stmt(),
-
-        // Default: expression statement
-        _ => {
-            let expr = self.parse_expr()?;
-            self.stream.consume_if(TokenKind::Semicolon);
-            return Ok(Stmt::Expr(expr));
-        }
+        // DEFAULT = Expression statement
+        let expr = self.parse_expr()?;
+        self.stream.consume_if(TokenKind::Semicolon);
+        Ok(Stmt::Expr(expr))
     }
-}
-
 }

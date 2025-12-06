@@ -1,6 +1,7 @@
 use crate::Span;
 use crate::Stmt;
 use crate::pattern::Pattern;
+use crate::AttributeList;
 
 use super::{
     stmt::{Block},
@@ -23,6 +24,13 @@ pub struct ModDecl {
 }
 
 #[derive(Debug, Clone)]
+pub struct TypeAliasDecl {
+    pub name: String,
+    pub ty: Type,     // сюда попадёт union(i32 | f32 | f64)
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
 pub enum Item {
     Fn(FnDecl),
     UiFn(UiFnDecl),
@@ -31,6 +39,12 @@ pub enum Item {
     Mod(ModDecl),
     Use(UseDecl),
     GlobalLet(Stmt),
+
+    TypeAlias(TypeAliasDecl),
+
+    ExportFn(FnDecl, Span),
+    ExportStruct(StructDecl),
+    ExportEnum(EnumDecl),
 }
 
 // -----------------------------------------------------------
@@ -39,10 +53,12 @@ pub enum Item {
 
 #[derive(Debug, Clone)]
 pub struct FnDecl {
+    pub attributes: AttributeList, 
     pub name: String,
     pub params: Vec<Param>,
     pub ret_ty: Option<Type>,
     pub async_: bool,
+    pub exported: bool,
     pub body: FnBody,
     pub span: Span,
 }
@@ -55,6 +71,7 @@ pub enum FnBody {
 
 #[derive(Debug, Clone)]
 pub struct UiFnDecl {
+    pub attributes: AttributeList,   
     pub name: String,
     pub params: Vec<Param>,
     pub body: crate::ui::UiNode,
@@ -62,10 +79,16 @@ pub struct UiFnDecl {
 }
 
 #[derive(Debug, Clone)]
+pub enum DefaultValue {
+    Single(Expr),      // x {10}
+    Broadcast(Expr),   // (a,b,c) {10}
+}
+
+#[derive(Debug, Clone)]
 pub struct Param {
     pub pattern: Pattern,
     pub ty: Option<Type>, 
-    pub default: Option<Expr>,
+    pub default: Option<DefaultValue>,
 }
 
 // -----------------------------------------------------------
@@ -76,6 +99,7 @@ pub struct Param {
 pub struct StructDecl {
     pub name: String,
     pub fields: Vec<StructField>,
+    pub exported: bool, 
     pub span: Span,
 }
 
@@ -106,6 +130,7 @@ pub struct EnumDecl {
     pub name: String,
     pub generics: Vec<String>,
     pub variants: Vec<EnumVariant>,
+    pub exported: bool, 
     pub span: Span,
 }
 

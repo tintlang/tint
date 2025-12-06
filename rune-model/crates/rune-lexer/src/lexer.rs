@@ -92,6 +92,8 @@ impl<'a> Lexer<'a> {
             '|' => return self.single(TokenKind::Pipe),
             '=' => return self.single(TokenKind::Eq),
 
+            '@' => return self.single(TokenKind::At),
+
             '"' => return self.lex_string(start),
 
             c if c.is_ascii_digit() => return self.lex_number(start),
@@ -210,6 +212,15 @@ impl<'a> Lexer<'a> {
         let mut s = String::new();
 
         while let Some(c) = self.peek() {
+            // STOP before ".." range operator
+            if c == '.' {
+                if let Some((_, next2)) = self.peek2() {
+                    if next2 == '.' {
+                        break; // don't consume the '.'
+                    }
+                }
+            }
+
             if c.is_ascii_digit() || c == '.' {
                 s.push(self.bump().unwrap());
             } else {
@@ -280,6 +291,8 @@ impl<'a> Lexer<'a> {
             "use" => TokenKind::Use,
 
             "map" => TokenKind::MapLit, 
+
+            "type" => TokenKind::Type,
 
             _ => TokenKind::Ident,
         };

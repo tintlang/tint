@@ -109,6 +109,9 @@ pub enum TokenKind {
 
     MapLit,  // map
 
+    // type system
+    Type,
+
     // Keywords — GPU2D DSL
     Rune2d,  
 
@@ -118,6 +121,7 @@ pub enum TokenKind {
     Use,   
 
     // Misc
+    At,             // @
     Eof,
 }
 

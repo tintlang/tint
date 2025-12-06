@@ -16,6 +16,13 @@ impl Parser {
         let mut fields = Vec::new();
         let mut base_expr: Option<Expr> = None;
 
+        // -------------------------------
+        // StyleDetector: None / Rune / Colon
+        // -------------------------------
+        #[derive(PartialEq)]
+        enum Style { Rune, Colon }
+        let mut style: Option<Style> = None;
+
         // empty struct {}
         if self.stream.consume_if(TokenKind::RBrace) {
             let end = self.stream.last_span();
@@ -27,20 +34,76 @@ impl Parser {
         }
 
         loop {
-            // -------------------------------
-            // CASE 1: Struct Update prefix → ..ident
-            // -------------------------------
+            // --------------------------------
+            // struct update: ..base
+            // --------------------------------
             if self.stream.consume_if(TokenKind::DotDot) {
                 let ident = self.parse_ident()?;
                 let span = self.stream.last_span();
 
                 base_expr = Some(Expr::Ident(ident, span));
             } else {
-                // -------------------------------
-                // CASE 2: Normal struct field
-                // -------------------------------
-                let field = self.parse_struct_init_field()?;
-                fields.push(field);
+                // --------------------------------
+                // detect style BEFORE parsing field
+                // --------------------------------
+                let field_name = self.parse_ident()?;
+                let field_span = self.stream.last_span();
+
+                let next = self.stream.peek_kind();
+
+                match next {
+                    TokenKind::LBrace => {
+                        // rune-style
+                        match style {
+                            None => style = Some(Style::Rune),
+                            Some(Style::Rune) => {}
+                            Some(Style::Colon) => {
+                                return Err(ParserError::Message {
+                                    msg: "Struct initializer mixes Rune `{}` and Colon `:` styles".into(),
+                                    span: field_span,
+                                });
+                            }
+                        }
+
+                        self.stream.next(); // consume `{`
+                        let expr = self.parse_expr()?;
+                        self.stream.expect(TokenKind::RBrace)?;
+                        fields.push(StructInitField::Rune {
+                            name: field_name,
+                            expr,
+                            span: field_span,
+                        });
+                    }
+
+                    TokenKind::Colon => {
+                        // colon-style
+                        match style {
+                            None => style = Some(Style::Colon),
+                            Some(Style::Colon) => {}
+                            Some(Style::Rune) => {
+                                return Err(ParserError::Message {
+                                    msg: "Struct initializer mixes Rune `{}` and Colon `:` styles".into(),
+                                    span: field_span,
+                                });
+                            }
+                        }
+
+                        self.stream.next(); // consume `:`
+                        let expr = self.parse_expr()?;
+                        fields.push(StructInitField::Assign {
+                            name: field_name,
+                            expr,
+                            span: field_span,
+                        });
+                    }
+
+                    _ => {
+                        return Err(ParserError::Message {
+                            msg: "Expected `{` or `:` in struct field".into(),
+                            span: field_span,
+                        });
+                    }
+                }
             }
 
             // break if no comma
@@ -54,9 +117,6 @@ impl Parser {
 
         let end = self.stream.expect(TokenKind::RBrace)?.span;
 
-        // -------------------------------
-        // Decide which Expr to return
-        // -------------------------------
         if let Some(base) = base_expr {
             return Ok(Expr::StructUpdate {
                 base: Box::new(base),
@@ -69,43 +129,6 @@ impl Parser {
             name,
             fields,
             span: Span::merge(start_span, end),
-        })
-    }
-
-    /// Parse one struct init field:
-    ///   id: expr
-    ///   id { expr }   ← named block argument
-   pub(crate) fn parse_struct_init_field(&mut self) -> PResult<StructInitField> {
-        let name = self.parse_ident()?;
-        let start = self.stream.last_span();
-
-        // colon-style: id: expr
-        if self.stream.consume_if(TokenKind::Colon) {
-            let expr = self.parse_expr()?;
-            let end = expr.span();
-            return Ok(StructInitField::Assign {
-                name,
-                expr,
-                span: Span::merge(start, end),
-            });
-        }
-
-        // rune-style: id { expr }
-        if self.stream.consume_if(TokenKind::LBrace) {
-            let expr = self.parse_expr()?;
-            self.stream.expect(TokenKind::RBrace)?;
-            let end = self.stream.last_span();
-
-            return Ok(StructInitField::Rune {
-                name,
-                expr,
-                span: Span::merge(start, end),
-            });
-        }
-
-        Err(ParserError::Message {
-            msg: "Invalid field in struct init".into(),
-            span: start,
         })
     }
 }

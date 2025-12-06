@@ -34,67 +34,72 @@ impl Parser {
             let variant_name = self.parse_ident()?;
 
             let variant = match self.stream.peek_kind() {
-                TokenKind::LBrace => {
-                    self.stream.next(); // consume '{'
+    TokenKind::LBrace => {
+        self.stream.next(); // consume '{'
 
-                    let mut fields = Vec::new();
-                    let mut style: Option<&'static str> = None;
+        let mut fields = Vec::new();
 
-                    // allowed: "typed", "rune"
-                    if !self.stream.consume_if(TokenKind::RBrace) {
-                        loop {
-                            let field_name = self.parse_ident()?;
+        #[derive(PartialEq)]
+        enum Style { Rune, Typed }
+        let mut style: Option<Style> = None;
 
-                            // TYPED FIELD  (name : Type)
-                            if self.stream.consume_if(TokenKind::Colon) {
-                                if let Some(s) = style {
-                                    if s != "typed" {
-                                        return self.stream.error_here::<_>(
-                                            "Cannot mix typed-fields and rune-fields in one enum variant"
-                                        );
-                                    }
-                                } else {
-                                    style = Some("typed");
-                                }
+        // empty variant {}
+        if self.stream.consume_if(TokenKind::RBrace) {
+            variants.push(EnumVariant::Struct(variant_name, fields));
+            continue; // идём парсить следующий variant
+        }
 
-                                let ty = self.parse_type()?;
+        loop {
+            let field_name = self.parse_ident()?;
+            let field_span = self.stream.last_span();
 
-                                fields.push(StructField::Typed {
-                                    name: field_name,
-                                    ty,
-                                    span: self.stream.last_span(),
-                                });
-                            }
-
-                            // RUNE FIELD  (name)
-                            else {
-                                if let Some(s) = style {
-                                    if s != "rune" {
-                                        return self.stream.error_here::<_>(
-                                            "Cannot mix typed-fields and rune-fields in one enum variant"
-                                        );
-                                    }
-                                } else {
-                                    style = Some("rune");
-                                }
-
-                                fields.push(StructField::RuneField {
-                                    name: field_name,
-                                    span: self.stream.last_span(),
-                                });
-                            }
-
-                            // Close variant?
-                            if self.stream.consume_if(TokenKind::RBrace) {
-                                break;
-                            }
-
-                            self.stream.expect(TokenKind::Comma)?;
-                        }
+            if self.stream.consume_if(TokenKind::Colon) {
+                // --- Typed style ---
+                match style {
+                    None => style = Some(Style::Typed),
+                    Some(Style::Typed) => {}
+                    Some(Style::Rune) => {
+                        return self.stream.error_here::<_>(
+                            "Cannot mix Rune `{field}` and typed `field: T` enum fields"
+                        );
                     }
-
-                    EnumVariant::Struct(variant_name, fields)
                 }
+
+                let ty = self.parse_type()?;
+
+                fields.push(StructField::Typed {
+                    name: field_name,
+                    ty,
+                    span: field_span,
+                });
+            }
+            else {
+                // --- Rune style ---
+                match style {
+                    None => style = Some(Style::Rune),
+                    Some(Style::Rune) => {}
+                    Some(Style::Typed) => {
+                        return self.stream.error_here::<_>(
+                            "Cannot mix typed `field: T` and Rune `field` enum fields"
+                        );
+                    }
+                }
+
+                fields.push(StructField::RuneField {
+                    name: field_name,
+                    span: field_span,
+                });
+            }
+
+            if self.stream.consume_if(TokenKind::RBrace) {
+                break;
+            }
+
+            self.stream.expect(TokenKind::Comma)?;
+        }
+
+        EnumVariant::Struct(variant_name, fields)
+    }
 
                 // Tuple variants -> запрещены
                 TokenKind::LParen => {
@@ -117,6 +122,7 @@ impl Parser {
             name,
             generics,
             variants,
+            exported: false,
             span: Span::merge(start, end),
         })
     }

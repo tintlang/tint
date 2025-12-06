@@ -3,24 +3,76 @@
 use rune_lexer::{Token, TokenKind};
 use crate::{ token_stream::TokenStream, error::* };
 use rune_ast::*;
+use crate::symbols::Symbols;
 
 pub struct Parser {
     pub(crate) stream: TokenStream,
+    pub symbols: Symbols,
     pub(crate) in_pattern: bool,
 }
 
 impl Parser {
-    pub fn new(tokens: Vec<Token>) -> Self {
-        Self { stream: TokenStream::new(tokens), in_pattern: false}
+   pub fn new(tokens: Vec<Token>) -> Self {
+        Self {
+            stream: TokenStream::new(tokens),
+            symbols: Symbols::default(),
+            in_pattern: false,
+        }
+    }
+    
+    fn clone_for_first_pass(&self) -> Self {
+        Self {
+            stream: self.stream.clone_with_reset(),
+            symbols: Symbols::default(),
+            in_pattern: false,
+        }
     }
 
     // PROGRAM
     pub fn parse_program(&mut self) -> PResult<Program> {
+        // -------------------------------------
+        // FIRST PASS — Collect function/type names
+        // -------------------------------------
+        {
+            let mut shadow = self.clone_for_first_pass();
+
+            while shadow.stream.peek_kind() != TokenKind::Eof {
+                match shadow.stream.peek_kind() {
+                    TokenKind::Fn => {
+                        shadow.stream.next();
+                        let name = shadow.parse_ident()?;
+                        self.symbols.functions.insert(name);
+                        shadow.skip_fn_decl()?;
+                    }
+
+                    TokenKind::Struct => {
+                        shadow.stream.next();
+                        let name = shadow.parse_ident()?;
+                        self.symbols.types.insert(name);
+                        shadow.skip_struct_decl()?;
+                    }
+
+                    TokenKind::Enum => {
+                        shadow.stream.next();
+                        let name = shadow.parse_ident()?;
+                        self.symbols.types.insert(name);
+                        shadow.skip_enum_decl()?;
+                    }
+
+                    _ => {
+                        shadow.stream.next(); // пропускаем токены
+                    }
+                }
+            }
+        }
+
+        // -------------------------------------
+        // SECOND PASS — реальный парсинг
+        // -------------------------------------
         let mut items = Vec::new();
 
-        while !self.stream.at_end() {
-            let item = self.parse_item()?;
-            items.push(item);
+        while self.stream.peek_kind() != TokenKind::Eof {
+            items.push(self.parse_item()?);
         }
 
         Ok(Program { items })
@@ -28,6 +80,12 @@ impl Parser {
 
     pub fn parse_item(&mut self) -> PResult<Item> {
         match self.stream.peek_kind() {
+
+            TokenKind::Type => {
+                return self.parse_type_alias();
+            }
+
+            TokenKind::Export => self.parse_export_item(),
 
             // FUNCTION or ASYNC FUNCTION
             TokenKind::Fn | TokenKind::Async => {
@@ -48,9 +106,10 @@ impl Parser {
             }
 
             // ENUM DECL
+
             TokenKind::Enum => {
-                let e = self.parse_enum()?;
-                Ok(Item::Enum(e))
+                let en = self.parse_enum()?;   
+                Ok(Item::Enum(en))             
             }
 
             // LATER SUPPORT:
@@ -157,14 +216,13 @@ pub(crate) fn parse_mod(&mut self) -> PResult<ModDecl> {
                 let expr = self.parse_expr()?;
                 self.stream.expect(TokenKind::RBrace)?;
                 seen_default = true;
-                Some(expr)
-            } else {
-                if seen_default && ty.is_none() {
-                    return Err(ParserError::Message {
-                        msg: "Cannot mix parameters with and without default values".into(),
-                        span: self.stream.peek().span,
-                    });
+
+                // NOW CORRECT:
+                match &pattern {
+                    Pattern::Ident(_, _) => Some(DefaultValue::Single(expr)),
+                    _ => Some(DefaultValue::Broadcast(expr)),
                 }
+            } else {
                 None
             };
 
