@@ -1,6 +1,7 @@
 use crate::Span;
 use super::stmt::Block;
 use crate::MatchArm;
+use crate::BorrowKind;
 
 #[derive(Debug, Clone)]
 pub enum StructInitField {
@@ -143,6 +144,13 @@ pub enum Expr {
         span: Span,
     },
 
+       Borrow {
+        kind: BorrowKind,
+        target: Box<Expr>,
+        block: Option<Block>,   // borrow(x) { ... }
+        span: Span,
+    },
+
 }
 
 impl Expr {
@@ -173,6 +181,7 @@ impl Expr {
             Expr::TupleIndex { span, .. } => *span,
             Expr::VariantInit { span, .. } => *span,
             Expr::MapInit { span, .. } => *span,
+            Expr::Borrow { span, .. } => *span,
         }
     }
 }

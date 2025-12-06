@@ -13,8 +13,57 @@ fn test_rune_capabilities() {
 
 let code = r#"
 
+[@(main.att)]
 
-fn TestFor1(n) {
+
+fn [@(strict)] gpu() {
+    let r = borrow(frame)
+}
+
+fn gpu() {
+    let r = borrow @strict (frame)
+}
+
+fn [@(strict)] f() {
+    borrow(x)       
+    borrow@group(x)  
+    borrow@strict(x) 
+}
+
+fn normal() {
+    borrow(x)         
+    borrow@strict(x)  
+    borrow@group(x)   
+}
+
+fn [@(strict)] gpu_process() {
+    borrow(frame) {          // становится core borrow
+        sobel(frame)
+    }
+
+    borrow@group(kernel) {   // используется group borrow
+        sort(kernel)
+    }
+}
+
+mod engine {
+    fn blur() {
+        borrow(img) { sobel(img) } // strict по умолчанию
+    }
+}
+
+fn [@(strict)] gpu() {
+    borrow(frame) {   // strict
+        convolve(frame, kernel)
+        normalize(frame)
+    }
+
+    borrow@group(samples) {   // high-level
+        samples.push(42)
+    }
+}
+
+fn [@(speed, speed)] TestFor1(n) {
     let mut sum = 0;
 
     for i in 0..n {
@@ -234,9 +283,11 @@ use math;
 
 //     GLOBAL DESTRUCT PATTERNS
 
-let (x, y) = p;
-let (a, (b, c)) = nested;
-let (_, y2) = pair;
+fn __global_tests__() {
+    let (x, y) = p;
+    let (a, (b, c)) = nested;
+    let (_, y2) = pair;
+}
 
 
 

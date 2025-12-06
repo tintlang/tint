@@ -9,6 +9,7 @@ mod expr_until;
 mod match_expr;
 mod struct_init;
 mod parse_named_call_args;
+mod parse_borrow;
 
 use crate::{Parser, error::*};
 use rune_ast::Expr;

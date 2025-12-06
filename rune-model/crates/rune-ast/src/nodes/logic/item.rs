@@ -26,7 +26,7 @@ pub struct ModDecl {
 #[derive(Debug, Clone)]
 pub struct TypeAliasDecl {
     pub name: String,
-    pub ty: Type,     // сюда попадёт union(i32 | f32 | f64)
+    pub ty: Type,     // union(i32 | f32 | f64)
     pub span: Span,
 }
 
@@ -47,10 +47,7 @@ pub enum Item {
     ExportEnum(EnumDecl),
 }
 
-// -----------------------------------------------------------
 // FUNCTION DECLARATIONS
-// -----------------------------------------------------------
-
 #[derive(Debug, Clone)]
 pub struct FnDecl {
     pub attributes: AttributeList, 
@@ -91,10 +88,7 @@ pub struct Param {
     pub default: Option<DefaultValue>,
 }
 
-// -----------------------------------------------------------
 // STRUCTS & ENUMS
-// -----------------------------------------------------------
-
 #[derive(Debug, Clone)]
 pub struct StructDecl {
     pub name: String,
@@ -105,7 +99,7 @@ pub struct StructDecl {
 
 #[derive(Debug, Clone)]
 pub enum StructField {
-    // Rust style: name: Type
+    // Column style: name: Type
     Typed {
         name: String,
         ty: Type,
@@ -153,8 +147,8 @@ impl StructField {
 
 impl FnDecl {
     /// Ensure parameters do not mix styles:
-    /// - no normal param after default-param
-    /// - default params can only appear at the END
+    /// -> no normal param after default-param
+    /// -> default params can only appear at the END
     pub fn validate(&self) -> Result<(), String> {
         let mut seen_default = false;
 
@@ -165,7 +159,7 @@ impl FnDecl {
                     seen_default = true;
                 }
                 None => {
-                    // default was already seen → illegal pattern
+                    // default was already seen -> illegal pattern
                     if seen_default {
                         return Err(format!(
                             "Cannot mix parameters with and without default values in function '{}'",

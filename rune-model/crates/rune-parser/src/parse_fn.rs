@@ -12,9 +12,6 @@ impl Parser {
     // fn name(params...) = expr
     pub(crate) fn parse_fn_decl(&mut self) -> PResult<FnDecl> {
 
-        // OPTIONAL ATTRIBUTES: [@(strict, speed)]
-        let attributes = self.parse_attributes()?;  
-
         // async
         let async_span = if self.stream.consume_if(TokenKind::Async) {
             Some(self.stream.last_span())
@@ -24,6 +21,24 @@ impl Parser {
 
         // "fn"
         let start = self.stream.expect(TokenKind::Fn)?.span;
+
+        // attributes
+        let mut local_attrs = AttributeList::empty();
+
+        if self.stream.peek_kind() == TokenKind::LBracket {
+            // parse *only one* attribute block
+            let a = self.parse_attributes()?;
+            local_attrs.extend(a);
+
+            // forbid second block
+            if self.stream.peek_kind() == TokenKind::LBracket {
+                return Err(ParserError::Message {
+                    msg: "Only one attribute block allowed after `fn`. Use [@(a, b)] instead of multiple blocks."
+                        .into(),
+                    span: self.stream.peek().span,
+                });
+            }
+        }
 
         // -------- NAME (НЕ ПАТТЕРН!) --------
         let name = self.parse_ident()?; // имя функции должно быть идентификатором
@@ -44,7 +59,7 @@ impl Parser {
             let span = Span::merge(start, expr.span());
 
             return Ok(FnDecl {
-                attributes,
+                attributes: local_attrs,
                 name,
                 params,
                 ret_ty,
@@ -60,7 +75,7 @@ impl Parser {
         let span = Span::merge(start, block.span);
 
         Ok(FnDecl {
-            attributes,
+            attributes: local_attrs,
             name,
             params,
             ret_ty,

@@ -200,6 +200,31 @@ impl Parser {
     // ────────────────────────────────────────────────
     // MAIN: parse_stmt()
     // ────────────────────────────────────────────────
+
+fn can_start_stmt(kind: &TokenKind) -> bool {
+    matches!(*kind,
+        TokenKind::Let |
+        TokenKind::If |
+        TokenKind::While |
+        TokenKind::Loop |
+        TokenKind::For |
+        TokenKind::Return |
+        TokenKind::Break |
+        TokenKind::Continue |
+        TokenKind::Match |
+
+        TokenKind::Borrow |
+        TokenKind::Ident |
+        TokenKind::Number |
+        TokenKind::String |
+        TokenKind::True |
+        TokenKind::False |
+        TokenKind::LParen |
+        TokenKind::LBracket |
+        TokenKind::LBrace
+    )
+}
+
     pub fn parse_stmt(&mut self) -> PResult<Stmt> {
         let tok = self.stream.peek().clone();
 
@@ -256,7 +281,29 @@ impl Parser {
 
         // DEFAULT = Expression statement
         let expr = self.parse_expr()?;
-        self.stream.consume_if(TokenKind::Semicolon);
-        Ok(Stmt::Expr(expr))
+        let next = self.stream.peek_kind();
+
+        // 1) Стейтмент завершён через ";"?
+        if next == TokenKind::Semicolon {
+            self.stream.next(); // eat ';'
+            return Ok(Stmt::Expr(expr));
+        }
+
+        // 2) Стейтмент завершён закрытием блока?
+        if next == TokenKind::RBrace {
+            return Ok(Stmt::Expr(expr));
+        }
+
+        // 3) Начинается новый стейтмент?
+if Parser::can_start_stmt(&next) {
+    return Ok(Stmt::Expr(expr));
+}
+
+        // 4) Иначе — мусор
+        Err(ParserError::Message {
+            msg: format!("Unexpected token after expression: {:?}", next),
+            span: self.stream.peek().span,
+        })
+
     }
 }

@@ -3,44 +3,43 @@ use rune_ast::attr::{Attribute, AttributeList};
 use rune_lexer::TokenKind;
 
 impl Parser {
-     pub(crate) fn try_parse_attributes(&mut self) -> PResult<Option<AttributeList>> {
-        if self.stream.peek_kind() == TokenKind::LBracket {
-            let attrs = self.parse_attributes()?;
-            Ok(Some(attrs))
-        } else {
-            Ok(None)
+    pub(crate) fn try_parse_attributes(&mut self) -> PResult<Option<AttributeList>> {
+        if self.stream.peek_kind() != TokenKind::LBracket {
+            return Ok(None);
         }
+        self.parse_attributes().map(Some)
     }
 
     pub(crate) fn parse_attributes(&mut self) -> PResult<AttributeList> {
-        let mut items = Vec::new();
+        self.stream.expect(TokenKind::LBracket)?; // '['
+        self.stream.expect(TokenKind::At)?;       // '@'
+        self.stream.expect(TokenKind::LParen)?;   // '('
+
+        let mut list = AttributeList::empty();
 
         loop {
-            // ищем "["
-            if !self.stream.consume_if(TokenKind::LBracket) {
-                break;
+            // --- parse dotted attribute name ---
+            let mut full_name = self.parse_ident()?; // first segment
+
+            // read ".seg" multiple times
+            while self.stream.consume_if(TokenKind::Dot) {
+                let seg = self.parse_ident()?;
+                full_name.push('.');
+                full_name.push_str(&seg);
             }
 
-            // ждём "@"
-            self.stream.expect(TokenKind::At)?;
-            self.stream.expect(TokenKind::LParen)?;
+            list.items.push(Attribute { name: full_name });
 
-            // читаем список идентификаторов
-            loop {
-                let name = self.parse_ident()?;
-                items.push(Attribute { name });
-
-                if self.stream.consume_if(TokenKind::Comma) {
-                    continue; // ещё атрибут
-                }
-
+            // comma? if no — break
+            if !self.stream.consume_if(TokenKind::Comma) {
                 break;
             }
-
-            self.stream.expect(TokenKind::RParen)?;
-            self.stream.expect(TokenKind::RBracket)?;
         }
 
-        Ok(AttributeList { items })
+        self.stream.expect(TokenKind::RParen)?;  // ')'
+        self.stream.expect(TokenKind::RBracket)?; // ']'
+
+        Ok(list)
     }
 }
+     

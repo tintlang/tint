@@ -77,6 +77,10 @@ impl Parser {
     pub(crate) fn parse_primary(&mut self) -> PResult<Expr> {
         let tok = self.stream.peek().clone();
 
+        if self.stream.peek_kind() == TokenKind::Borrow {
+            return self.parse_borrow_expr();
+        }
+        
         match tok.kind {
             TokenKind::Number     => self.parse_number(),
             TokenKind::String     => self.parse_string_or_interpolated(),

@@ -40,6 +40,9 @@ impl Parser {
                 match shadow.stream.peek_kind() {
                     TokenKind::Fn => {
                         shadow.stream.next();
+                        while shadow.stream.peek_kind() == TokenKind::LBracket {
+                            shadow.skip_attributes()?;  
+                        }
                         let name = shadow.parse_ident()?;
                         self.symbols.functions.insert(name);
                         shadow.skip_fn_decl()?;
@@ -71,11 +74,18 @@ impl Parser {
         // -------------------------------------
         let mut items = Vec::new();
 
+        // GLOBAL ATTRIBUTES
+        let mut globals = AttributeList::empty();
+        while let Some(a) = self.try_parse_attributes()? {
+            globals.extend(a);
+        }
+
+        // ITEMS
         while self.stream.peek_kind() != TokenKind::Eof {
             items.push(self.parse_item()?);
         }
 
-        Ok(Program { items })
+        Ok(Program { globals, items })
     }
 
     pub fn parse_item(&mut self) -> PResult<Item> {
@@ -101,15 +111,14 @@ impl Parser {
 
             // STRUCT DECL
             TokenKind::Struct => {
-                let s = self.parse_struct()?;
-                Ok(Item::Struct(s))
+                let decl = self.parse_struct()?;
+                Ok(Item::Struct(decl))
             }
 
             // ENUM DECL
-
             TokenKind::Enum => {
-                let en = self.parse_enum()?;   
-                Ok(Item::Enum(en))             
+                let decl = self.parse_enum()?;
+                Ok(Item::Enum(decl))
             }
 
             // LATER SUPPORT:

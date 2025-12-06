@@ -241,6 +241,11 @@ impl SsaCompiler {
             Expr::Unit(_) =>
                 self.builder.emit_const(block, Value::Unit),
 
+            Expr::Borrow { target, .. } => {
+                // lowering: borrow(x) просто становится значением x
+                self.lower_expr(target, block, locals)
+            }
+
             Expr::Ident(name, _) => {
                 if let Some(&id) = locals.get(name) {
                     id

@@ -24,6 +24,12 @@ pub fn eval_expr<H: EvalHost>(host: &mut H, expr: &Expr) -> Value {
         Expr::Unit(_) =>
             Value::Unit,
 
+        // BORROW (strict / group / high-level)
+        Expr::Borrow { target, .. } => {
+            // временная реализация: возвращаем результат аналога "target"
+            eval_expr(host, target)
+        }
+
         // IDENT
         Expr::Ident(name, span) =>
             host.load_var(name, *span),
