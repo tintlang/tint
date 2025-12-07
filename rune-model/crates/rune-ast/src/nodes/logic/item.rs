@@ -40,6 +40,31 @@ pub struct KernelDecl {
 }
 
 #[derive(Debug, Clone)]
+pub struct ImplBlock {
+    pub span: Span,
+    pub generics: Vec<String>,   // <T, U>
+    pub target: Type,            // Vec3<T>, Texture, List<i32>
+    pub methods: Vec<FnDecl>,    // fn foo() {}
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+pub enum SpaceKind {
+    Auto,      
+    All,       
+    GPU,       
+    UI,        
+    Logic,      
+}
+
+#[derive(Debug, Clone)]
+pub struct SpaceDecl {
+    pub name: String,
+    pub kind: SpaceKind,     // Auto until items parsed
+    pub items: Vec<Item>,    // fn, kernel, ui fn, struct, impl, etc.
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
 pub enum Item {
     Fn(FnDecl),
     UiFn(UiFnDecl),
@@ -48,14 +73,13 @@ pub enum Item {
     Mod(ModDecl),
     Use(UseDecl),
     GlobalLet(Stmt),
-
+    Impl(ImplBlock), 
     TypeAlias(TypeAliasDecl),
-
     ExportFn(FnDecl, Span),
     ExportStruct(StructDecl),
     ExportEnum(EnumDecl),
-
-     Kernel(KernelDecl), 
+    Kernel(KernelDecl), 
+    Space(SpaceDecl),
 }
 
 // FUNCTION DECLARATIONS

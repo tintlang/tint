@@ -245,8 +245,8 @@ impl SsaCompiler {
         }
     }
 
-    // LOWERING EXPRESSION
-    fn lower_expr(
+ // LOWERING EXPRESSION
+ fn lower_expr(
         &mut self,
         e: &Expr,
         block: &mut Block,
@@ -275,6 +275,14 @@ impl SsaCompiler {
                     id
                 } else {
                     self.builder.emit_load(block, name.clone())
+                }
+            }
+
+            Expr::SelfKw(span) => {
+                if let Some(&id) = locals.get("self") {
+                    id
+                } else {
+                    self.builder.emit_load(block, "self".into())
                 }
             }
 

@@ -15,6 +15,157 @@ let code = r#"
 
 [@(main.att)]
 
+ui fn Main() {
+    Rectangle { width{100}, height{50} }
+}
+
+ui fn Main() {
+    Text {
+        value{"Hello"},
+        size{16},
+        color{white}
+    }
+}
+
+space Logic {
+
+    struct Node<T> {
+        id{i32},
+        value{T},
+        next{Option<Node<T>>},
+    }
+
+    impl Node<T> {
+        fn sum(self) {
+            match self.next {
+                Some { value, next } => self.value + value + match next {
+                    Some { value, .. } => value,
+                    None {} => 0
+                },
+                None {} => self.value
+            }
+        }
+    }
+
+    struct Vec2 {
+        x{f32},
+        y{f32},
+    }
+
+    impl Vec2 {
+        fn len(self) {
+            (self.x * self.x + self.y * self.y).sqrt()
+        }
+    }
+
+    fn deep_mix(a, b) {
+        let n = Node {
+            id{1},
+            value{10},
+            next{
+                Option::Some {
+                    value{20},
+                    next{
+                        Option::Some { value{30} }
+                    }
+                }
+            }
+        };
+
+        let v = Vec2 { x{3.0}, y{4.0} };
+        let s = n.sum() + v.len();
+
+        let m = map {
+            user{
+                User {
+                    id{ a + b },
+                    name{"A"},
+                    age{ s }
+                }
+            },
+            arr{ [ (1,2) (3,4) (5, [6,7,8]) ] },
+            nested{
+                map {
+                    x{ map { y{ map { z{99} } } } }
+                }
+            }
+        };
+
+        let r = match m {
+            map {
+                user{ User { id, age } },
+                arr,
+                nested{ map { x{ map { y{ map { z } } } } } }
+            } => {
+                id + age + arr[2][1] + z
+            },
+            _ => 0
+        };
+
+        r + s
+    }
+}
+
+fn AdvancedMonster(x, y {10}) {
+    let a = (1, (2, (3, (4, [x, y, x+y]))));
+
+    let b = match a {
+        (x, (y, (z, (k, arr)))) => {
+            let f = |u| u * 2;
+            f(x + y + z + k + arr[2])
+        }
+    };
+
+    let c = borrow(x) {
+        borrow@group(y) {
+            x + y + b
+        }
+    };
+
+    let d = Logic::deep_mix(x, y);
+
+    (b + c + d) * 2
+}
+
+fn MonsterTestMaster() {
+    AdvancedMonster(5)
+}
+
+
+// IMPL — simple
+impl Texture {
+    fn reset() { 0 }
+}
+
+impl Box<T> {
+    fn unwrap(self) { self.value }
+}
+
+fn TestImplCall(tex: Texture) {
+    tex.downscale();
+}
+
+space LogicTest {
+    impl Texture {
+        fn apply(self) { 1 }
+    }
+
+    fn run(t: Texture) {
+        t.apply()
+    }
+}
+
+space G1 {
+    kernel blur(img: Texture) -> Texture {
+        img
+    }
+}
+
+space L1 {
+    fn add(a, b) { a + b }
+    struct User { id{i32} }
+}
+
 kernel invert(tex: Texture) -> Texture {
     let id = global_id();
     let px = tex.read(id);

@@ -15,6 +15,8 @@ pub mod parse_attribute;
 pub mod parse_file;
 pub mod parse_generics;
 pub mod parse_kernel;
+pub mod parse_impl;
+pub mod parse_space;
 
 mod parse_stmt;
 mod parse_fn;

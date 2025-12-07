@@ -28,6 +28,11 @@ impl Parser {
             });
         }
 
+        if self.stream.peek_kind() == TokenKind::SelfKw {
+            let tok = self.stream.next();
+            return Ok(Pattern::Ident("self".into(), tok.span));
+        }
+
         let tok = self.stream.peek();
 
         match tok.kind {

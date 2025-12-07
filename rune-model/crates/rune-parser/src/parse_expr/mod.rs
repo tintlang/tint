@@ -1,14 +1,10 @@
 // rune-parser/parse_expr/mod.rs
 
 mod primary;
-mod primary_strict;
 mod postfix;
-mod postfix_cont;
 mod binary;
-mod expr_until;
 mod match_expr;
 mod struct_init;
-mod parse_named_call_args;
 mod parse_borrow;
 
 use crate::{Parser, error::*};

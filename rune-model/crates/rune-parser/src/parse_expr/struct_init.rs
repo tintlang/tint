@@ -65,9 +65,10 @@ impl Parser {
                             }
                         }
 
-                        self.stream.next(); // consume `{`
-                        let expr = self.parse_expr()?;
-                        self.stream.expect(TokenKind::RBrace)?;
+
+                        self.stream.expect(TokenKind::LBrace)?;   // открыть { 
+                        let expr = self.parse_expr()?;           // parse_expr съедает содержимое, НО НЕ ЗАКРЫВАЮЩУЮ }
+                        self.stream.expect(TokenKind::RBrace)?;  // закрыть }
                         fields.push(StructInitField::Rune {
                             name: field_name,
                             expr,

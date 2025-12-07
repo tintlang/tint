@@ -7,38 +7,48 @@ use rune_lexer::TokenKind;
 
 impl Parser {
     /// Parse:  ui fn Name(params...) { <UI> }
-    pub(crate) fn parse_ui_fn(&mut self) -> PResult<UiFnDecl> {
-        // ui
-        let start_tok = self.stream.expect(TokenKind::Ui)?;
-        // fn
+   pub(crate) fn parse_ui_fn(&mut self) -> PResult<UiFnDecl> {
+        // "ui"
+        let start = self.stream.expect(TokenKind::Ui)?.span;
+
+        // "fn"
         self.stream.expect(TokenKind::Fn)?;
 
-        // OPTIONAL ATTRIBUTES: [@(strict, speed)]
-        let attributes = self.parse_attributes()?;  
+        // LOCAL ATTRIBUTES: ui fn [@(strict, speed)]
+        let mut local_attrs = AttributeList::empty();
 
-        // fn name
+        if self.stream.peek_kind() == TokenKind::LBracket {
+            let a = self.parse_attributes()?; 
+            local_attrs.extend(a);
+
+            // forbid SECOND block (как в fn)
+            if self.stream.peek_kind() == TokenKind::LBracket {
+                return Err(ParserError::Message {
+                    msg: "Only one attribute block allowed after `ui fn`".into(),
+                    span: self.stream.peek().span,
+                });
+            }
+        }
+
+        // NAME
         let name = self.parse_ident()?;
 
-        // parameters (...)
+        // PARAMS (...)
         self.stream.expect(TokenKind::LParen)?;
-        let params = self.parse_params()?;        // ✔ now supported
+        let params = self.parse_params()?;
         self.stream.expect(TokenKind::RParen)?;
 
-        // "{"
+        // UI BODY
         self.stream.expect(TokenKind::LBrace)?;
-
-        // Parse exactly ONE top-level UI node
-        let body = self.parse_ui_node()?;         // ✔ handled in ui.rs
-
-        // "}"
-        let end_tok = self.stream.expect(TokenKind::RBrace)?;
+        let body = self.parse_ui_node()?;
+        let end = self.stream.expect(TokenKind::RBrace)?.span;
 
         Ok(UiFnDecl {
-            attributes,
+            attributes: local_attrs,
             name,
             params,
             body,
-            span: Span::merge(start_tok.span, end_tok.span),
+            span: Span::merge(start, end),
         })
     }
 }

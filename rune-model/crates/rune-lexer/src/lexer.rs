@@ -299,6 +299,7 @@ impl<'a> Lexer<'a> {
             "struct" => TokenKind::Struct,
             "impl" => TokenKind::Impl,
             "self" => TokenKind::SelfKw,
+            "space" => TokenKind::Space,
 
             "borrow" => TokenKind::Borrow,
             "immut" => TokenKind::Immut,

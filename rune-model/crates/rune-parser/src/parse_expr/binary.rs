@@ -20,7 +20,6 @@ impl Parser {
                 _ => {}
             }
 
-
             let prec = tok.kind.binary_precedence();
             if prec == 0 || prec < min_prec { break; }
 

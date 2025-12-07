@@ -30,6 +30,11 @@ pub fn eval_expr<H: EvalHost>(host: &mut H, expr: &Expr) -> Value {
             eval_expr(host, target)
         }
 
+        // SELF KEYWORD
+        Expr::SelfKw(_) => {
+            host.load_var("self", expr.span())
+        }
+
         // IDENT
         Expr::Ident(name, span) =>
             host.load_var(name, *span),

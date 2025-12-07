@@ -114,7 +114,14 @@ impl Parser {
                     }
 
                     // fallback — allow postfix, treat as namespace Expr
-                    return self.parse_ident_or_struct();
+                    let expr = Expr::Namespace {
+                        base: Box::new(Expr::Ident(enum_name.clone(), tok.span)),
+                        item: variant.clone(),
+                        span: Span::merge(tok.span, self.stream.last_span()),
+                    };
+
+                    return self.parse_postfix_with(expr);
+
                 }
 
                 // normal identifier
@@ -136,6 +143,11 @@ impl Parser {
                 let block = self.parse_block()?;
                 let span = block.span; // block already contains its full span
                 return Ok(Expr::Block(block, span));
+            }
+
+            TokenKind::SelfKw => {
+                let tok = self.stream.next();
+                return Ok(Expr::SelfKw(tok.span));
             }
 
             TokenKind::Kernel => {

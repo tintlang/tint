@@ -38,6 +38,7 @@ pub enum Expr {
     Bool(bool, Span),  
     Unit(Span),   
     Ident(String, Span),
+    SelfKw(Span),
 
     InterpolatedString {
         parts: Vec<StringPart>,
@@ -161,6 +162,7 @@ impl Expr {
             | Expr::Ident(_, s)
             | Expr::Bool(_, s)
             | Expr::Unit(s)
+            | Expr::SelfKw(s)
             | Expr::Paren(_, s) => *s,
 
             Expr::Unary { span, .. }

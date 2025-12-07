@@ -68,14 +68,25 @@ impl Parser {
 
         loop {
 
-             // 1) SPECIAL POSTFIX: .gpu(...)
+            // 0 STOP TOKENS 
+            match self.stream.peek_kind() {
+                TokenKind::Comma |
+                TokenKind::RParen |
+                TokenKind::RBracket |
+                TokenKind::RBrace |
+                TokenKind::Semicolon => {
+                    return Ok(expr);
+                }
+                _ => {}
+            }
+
+             // 1 SPECIAL POSTFIX: .gpu(...)
             if let Some(new_expr) = self.try_parse_gpu(&expr)? {
                 expr = new_expr;
                 continue;
             }
 
             match self.stream.peek_kind() {
-
                 // FUNCTION CALL
                 TokenKind::LParen => {
                     expr = self.parse_call(expr)?;
@@ -113,11 +124,9 @@ impl Parser {
                     // OTHERWISE this is NOT postfix —> this is struct-init scope
                     break;
                 }
-
-                _ => break,
+                 _ => break,
+                }
             }
-        }
-
         Ok(expr)
     }
 

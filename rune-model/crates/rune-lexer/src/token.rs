@@ -95,6 +95,8 @@ pub enum TokenKind {
     Impl,
     SelfKw, // "self"
 
+    Space,
+
     // GPU
     Kernel,
 

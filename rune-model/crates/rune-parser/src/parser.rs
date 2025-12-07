@@ -30,9 +30,7 @@ impl Parser {
 
     // PROGRAM
     pub fn parse_program(&mut self) -> PResult<Program> {
-        // -------------------------------------
         // FIRST PASS — Collect function/type names
-        // -------------------------------------
         {
             let mut shadow = self.clone_for_first_pass();
 
@@ -69,9 +67,7 @@ impl Parser {
             }
         }
 
-        // -------------------------------------
         // SECOND PASS — реальный парсинг
-        // -------------------------------------
         let mut items = Vec::new();
 
         // GLOBAL ATTRIBUTES
@@ -90,6 +86,13 @@ impl Parser {
 
     pub fn parse_item(&mut self) -> PResult<Item> {
         match self.stream.peek_kind() {
+
+            TokenKind::Space => {
+                let s = self.parse_space()?;
+                return Ok(Item::Space(s));
+            }
+
+            TokenKind::Impl => self.parse_impl(),
 
             TokenKind::Type => {
                 return self.parse_type_alias();
@@ -248,4 +251,11 @@ pub(crate) fn parse_mod(&mut self) -> PResult<ModDecl> {
         Ok(params)
     }
     
+    pub fn error<T>(&self, msg: impl Into<String>) -> PResult<T> {
+        let span = self.stream.peek().span;
+        Err(crate::error::ParserError::Message {
+            msg: msg.into(),
+            span,
+        })
+    }
 }
