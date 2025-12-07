@@ -31,6 +31,15 @@ pub struct TypeAliasDecl {
 }
 
 #[derive(Debug, Clone)]
+pub struct KernelDecl {
+    pub name: String,
+    pub params: Vec<Param>,
+    pub ret_ty: Option<Type>,
+    pub body: Block,       // kernel body 
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
 pub enum Item {
     Fn(FnDecl),
     UiFn(UiFnDecl),
@@ -45,6 +54,8 @@ pub enum Item {
     ExportFn(FnDecl, Span),
     ExportStruct(StructDecl),
     ExportEnum(EnumDecl),
+
+     Kernel(KernelDecl), 
 }
 
 // FUNCTION DECLARATIONS

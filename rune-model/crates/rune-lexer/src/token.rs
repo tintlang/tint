@@ -95,6 +95,9 @@ pub enum TokenKind {
     Impl,
     SelfKw, // "self"
 
+    // GPU
+    Kernel,
+
     // Ownership model
     Borrow,
     Immut,

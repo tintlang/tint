@@ -15,6 +15,53 @@ let code = r#"
 
 [@(main.att)]
 
+kernel invert(tex: Texture) -> Texture {
+    let id = global_id();
+    let px = tex.read(id);
+    write(px);
+}
+
+fn TestGpuCall(frame: Texture) -> Texture {
+    let out = invert.gpu(frame);
+    out
+}
+
+fn TestGpuChain(frame: Texture) -> Texture {
+    let a = preprocess(frame).gpu(frame);
+    let b = invert.gpu(a);
+    b
+}
+
+fn TestGpuNested(frame: Texture) -> Texture {
+    invert.gpu( preprocess(frame).gpu(frame) )
+}
+
+fn TestGpuBinary(frame: Texture) -> Texture {
+    let x = invert.gpu(frame);
+    x
+}
+
+
+fn TestKernelBasic(frame: Texture) {
+    let out = invert.gpu(frame);
+    out // return texture reference
+}
+
+fn TestGpuReturn(frame: Texture) -> Texture {
+    return invert.gpu(frame);
+}
+
+kernel brightness(tex: Texture, amount: f32) -> Texture {
+    let id = global_id();
+    let px = tex.read(id);
+    write(px * amount);
+}
+
+fn TestKernelParams(frame: Texture) {
+    let out = brightness.gpu(frame, 2.0);
+    out
+}
+
 fn MegaNested() {
     let a = (
         1,
@@ -74,9 +121,9 @@ fn MegaNested() {
     };
 
     borrow(frame) {
-        borrow@group(kernel) {
+        borrow@group(invert) {
             // nested borrow blocks allowed
-            convolve(frame, kernel)
+            convolve(frame, invert)
         }
     }
 
@@ -211,8 +258,8 @@ fn [@(strict)] gpu_process() {
         sobel(frame)
     }
 
-    borrow@group(kernel) {   // используется group borrow
-        sort(kernel)
+    borrow@group(invert) {   // используется group borrow
+        sort(invert)
     }
 }
 
@@ -224,7 +271,7 @@ mod engine {
 
 fn [@(strict)] gpu() {
     borrow(frame) {   // strict
-        convolve(frame, kernel)
+        convolve(frame, invert)
         normalize(frame)
     }
 

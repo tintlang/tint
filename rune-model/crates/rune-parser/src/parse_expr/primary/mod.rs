@@ -137,6 +137,17 @@ impl Parser {
                 let span = block.span; // block already contains its full span
                 return Ok(Expr::Block(block, span));
             }
+
+            TokenKind::Kernel => {
+                let start = self.stream.next().span;
+
+                let name = self.parse_ident()?;
+                let end = self.stream.last_span();
+
+                let span = Span::merge(start, end);
+
+                Ok(Expr::Ident(name, span))
+            }
             
             _ => Err(ParserError::Message {
                 msg: format!("Unexpected token in expression: {:?}", tok.kind),

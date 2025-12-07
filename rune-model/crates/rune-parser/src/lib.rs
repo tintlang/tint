@@ -14,6 +14,7 @@ pub mod skip_parens;
 pub mod parse_attribute;
 pub mod parse_file;
 pub mod parse_generics;
+pub mod parse_kernel;
 
 mod parse_stmt;
 mod parse_fn;

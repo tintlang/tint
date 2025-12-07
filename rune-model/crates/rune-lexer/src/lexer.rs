@@ -221,9 +221,6 @@ impl<'a> Lexer<'a> {
         }
 
         // CASE: dot belongs to tuple/index/field, NOT float
-        //
-        // If next is '.' but next-after is NOT digit → STOP.
-        //
         // Examples:
         //  p.1.len   -> stop BEFORE '.', number="1"
         //  v.0       -> stop BEFORE '.', number="0"
@@ -250,8 +247,6 @@ impl<'a> Lexer<'a> {
                     return Token::new(TokenKind::Number, Span::new(start, self.position()), s);
                 }
 
-                // dot NOT followed by digit → NOT float (tuple/index!)
-                // Example: "1." in "p.1.len" — the "." is NOT part of number
                 return Token::new(TokenKind::Number, Span::new(start, self.position()), s);
             }
         }
@@ -323,6 +318,8 @@ impl<'a> Lexer<'a> {
             "map" => TokenKind::MapLit, 
 
             "type" => TokenKind::Type,
+
+            "kernel" => TokenKind::Kernel,
 
             _ => TokenKind::Ident,
         };

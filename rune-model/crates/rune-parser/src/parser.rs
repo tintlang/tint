@@ -109,6 +109,8 @@ impl Parser {
                 Ok(Item::UiFn(u))
             }
 
+            TokenKind::Kernel => Ok(Item::Kernel(self.parse_kernel()?)),
+
             // STRUCT DECL
             TokenKind::Struct => {
                 let decl = self.parse_struct()?;

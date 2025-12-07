@@ -7,10 +7,57 @@ use rune_lexer::TokenKind;
 
 impl Parser {
 
-    /// Top-level postfix entry
+    // Top-level postfix entry
     pub(crate) fn parse_postfix(&mut self) -> PResult<Expr> {
         let primary = self.parse_primary()?;
         self.parse_postfix_with(primary)
+    }
+
+    pub(crate) fn try_parse_gpu(&mut self, base: &Expr) -> PResult<Option<Expr>> {
+        // save stream position BEFORE trying to parse .gpu(...)
+        let checkpoint = self.stream.checkpoint();
+
+        // must start with '.'
+        if !self.stream.consume_if(TokenKind::Dot) {
+            return Ok(None);
+        }
+
+        // must be ident 'gpu'
+        if self.stream.peek().lexeme != "gpu" {
+            self.stream.restore(checkpoint);
+            return Ok(None);
+        }
+
+        let gpu_tok = self.stream.next(); // consume 'gpu'
+        let gpu_span = gpu_tok.span;
+
+        // must have '('
+        if !self.stream.consume_if(TokenKind::LParen) {
+            self.stream.restore(checkpoint);
+            return Ok(None);
+        }
+
+        // parse args: kernel + user args
+        let mut args = vec![base.clone()];
+
+        if !self.stream.consume_if(TokenKind::RParen) {
+            loop {
+                args.push(self.parse_expr()?);
+
+                if !self.stream.consume_if(TokenKind::Comma) {
+                    break;
+                }
+            }
+            self.stream.expect(TokenKind::RParen)?;
+        }
+
+        let span = Span::merge(base.span(), self.stream.last_span());
+
+        Ok(Some(Expr::Call {
+            target: Box::new(Expr::Ident("gpu$call".into(), gpu_span)),
+            args,
+            span,
+        }))
     }
 
     /// Main postfix reducer: repeatedly applies suffix operators
@@ -20,6 +67,13 @@ impl Parser {
         }
 
         loop {
+
+             // 1) SPECIAL POSTFIX: .gpu(...)
+            if let Some(new_expr) = self.try_parse_gpu(&expr)? {
+                expr = new_expr;
+                continue;
+            }
+
             match self.stream.peek_kind() {
 
                 // FUNCTION CALL

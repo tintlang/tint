@@ -64,28 +64,25 @@ pub fn consume_if(&mut self, kind: TokenKind) -> bool {
     }
 }
 
-/// expect with log
-pub fn expect(&mut self, kind: TokenKind) -> Result<Token, ParserError> {
-    let t = self.peek().clone();
+    // expect with log
+    pub fn expect(&mut self, kind: TokenKind) -> Result<Token, ParserError> {
+        let t = self.peek().clone();
 
-    if t.kind == kind {
-        eprintln!("✔️  EXPECT OK: {:?}", kind);
-        self.pos += 1;
-        Ok(t)
-    } else {
-        eprintln!("❌ EXPECT FAIL: expected {:?}, found {:?} @ {:?}", 
-            kind, t.kind, t.span
-        );
-        Err(ParserError::Unexpected {
-            expected: kind,
-            found: t.kind,
-            span: t.span,
-        })
+        if t.kind == kind {
+            eprintln!("✔️  EXPECT OK: {:?}", kind);
+            self.pos += 1;
+            Ok(t)
+        } else {
+            eprintln!("❌ EXPECT FAIL: expected {:?}, found {:?} @ {:?}", 
+                kind, t.kind, t.span
+            );
+            Err(ParserError::Unexpected {
+                expected: kind,
+                found: t.kind,
+                span: t.span,
+            })
+        }
     }
-}
-
-
-
 
     /// Peek token N positions ahead safely
     pub fn peek_n(&self, n: usize) -> &Token {
