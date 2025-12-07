@@ -7,9 +7,7 @@ use rune_lexer::TokenKind;
 
 impl Parser {
 
-    // ────────────────────────────────────────────────
     // LET statement
-    // ────────────────────────────────────────────────
     pub(crate) fn parse_let_stmt(&mut self, start: Span) -> PResult<Stmt> {
         let old = self.in_pattern;
         self.in_pattern = true;
@@ -197,40 +195,35 @@ impl Parser {
         Ok(expr)
     }
 
-    // ────────────────────────────────────────────────
     // MAIN: parse_stmt()
-    // ────────────────────────────────────────────────
+    fn can_start_stmt(kind: &TokenKind) -> bool {
+        matches!(*kind,
+            TokenKind::Let |
+            TokenKind::If |
+            TokenKind::While |
+            TokenKind::Loop |
+            TokenKind::For |
+            TokenKind::Return |
+            TokenKind::Break |
+            TokenKind::Continue |
+            TokenKind::Match |
 
-fn can_start_stmt(kind: &TokenKind) -> bool {
-    matches!(*kind,
-        TokenKind::Let |
-        TokenKind::If |
-        TokenKind::While |
-        TokenKind::Loop |
-        TokenKind::For |
-        TokenKind::Return |
-        TokenKind::Break |
-        TokenKind::Continue |
-        TokenKind::Match |
-
-        TokenKind::Borrow |
-        TokenKind::Ident |
-        TokenKind::Number |
-        TokenKind::String |
-        TokenKind::True |
-        TokenKind::False |
-        TokenKind::LParen |
-        TokenKind::LBracket |
-        TokenKind::LBrace
-    )
-}
+            TokenKind::Borrow |
+            TokenKind::Ident |
+            TokenKind::Number |
+            TokenKind::String |
+            TokenKind::True |
+            TokenKind::False |
+            TokenKind::LParen |
+            TokenKind::LBracket |
+            TokenKind::LBrace
+        )
+    }
 
     pub fn parse_stmt(&mut self) -> PResult<Stmt> {
         let tok = self.stream.peek().clone();
 
-        // ─────────────────────────────────────
         // Try assignment
-        // ─────────────────────────────────────
         {
             let checkpoint = self.stream.checkpoint();
 
@@ -255,9 +248,7 @@ fn can_start_stmt(kind: &TokenKind) -> bool {
             self.stream.restore(checkpoint);
         }
 
-        // ─────────────────────────────────────
         // Let / return / if / while / for ...
-        // ─────────────────────────────────────
         match tok.kind {
             TokenKind::Let => {
                 let start = self.stream.next().span;

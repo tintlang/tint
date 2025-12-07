@@ -132,6 +132,12 @@ impl Parser {
             TokenKind::Bang
             | TokenKind::Minus    => self.parse_unary(),
 
+           TokenKind::LBrace => {
+                let block = self.parse_block()?;
+                let span = block.span; // block already contains its full span
+                return Ok(Expr::Block(block, span));
+            }
+            
             _ => Err(ParserError::Message {
                 msg: format!("Unexpected token in expression: {:?}", tok.kind),
                 span: tok.span,

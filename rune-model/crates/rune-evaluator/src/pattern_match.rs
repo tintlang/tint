@@ -26,6 +26,39 @@ pub fn match_pattern(pat: &Pattern, val: &Value) -> bool {
             match_pattern(inner, val)
         }
 
+        Pattern::Group { fields, .. } => match val {
+            Value::Map(map) => {
+                for f in fields {
+                    match f {
+                        // shorthand: { x }
+                        PatternField::Shorthand { field, .. } => {
+                            if !map.contains_key(field) {
+                                return false;
+                            }
+                        }
+
+                        // assign: { x: pat }
+                        PatternField::Assign { field, pat, .. } => {
+                            match map.get(field) {
+                                Some(v) => {
+                                    if !match_pattern(pat, v) {
+                                        return false;
+                                    }
+                                }
+                                None => return false,
+                            }
+                        }
+
+                        // rest: { x, .. }
+                        PatternField::Rest(_) => { /* ignore */ }
+                    }
+                }
+                true
+            }
+
+            _ => false,
+        },
+
         Pattern::Struct { name, fields, .. } => match val {
             Value::StructInstance { name: inst, fields: inst_fields } if name == inst => {
                 for f in fields {

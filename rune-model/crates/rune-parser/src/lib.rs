@@ -13,6 +13,7 @@ pub mod symbols;
 pub mod skip_parens;
 pub mod parse_attribute;
 pub mod parse_file;
+pub mod parse_generics;
 
 mod parse_stmt;
 mod parse_fn;

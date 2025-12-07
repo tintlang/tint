@@ -1,5 +1,4 @@
-use rune_ast::Pattern;
-use rune_ast::PatternField;
+use rune_ast::*;
 use crate::{value::Value, EvalHost};
 
 pub fn bind_pattern<H: EvalHost>(
@@ -17,8 +16,7 @@ pub fn bind_pattern<H: EvalHost>(
         }
 
         Pattern::Number(_, _) | Pattern::String(_, _) => {
-            // нельзя “bind”, это только для match;  
-            // но в параметрах функции такие не должны появляться
+            // literal patterns shouldn't appear in bindings normally
         }
 
         Pattern::Tuple(items, _) => {
@@ -32,29 +30,55 @@ pub fn bind_pattern<H: EvalHost>(
         }
 
         Pattern::Mut { inner, .. } => {
-            // mut в паттерне просто аннотация
             bind_pattern(host, inner, val);
         }
 
-        Pattern::Map { fields, .. } => {
+        // ----------------------------------------------
+        // NEW: anonymous map/group pattern → {a, b: pat}
+        // ----------------------------------------------
+        Pattern::Group { fields, .. } => {
             if let Value::Map(map) = val {
                 for f in fields {
                     match f {
-                        // shorthand: map { x }
                         PatternField::Shorthand { field, .. } => {
                             if let Some(v) = map.get(field) {
                                 host.define_var(field, v.clone());
                             }
                         }
 
-                        // assign: map { x: pat }
                         PatternField::Assign { field, pat, .. } => {
                             if let Some(v) = map.get(field) {
                                 bind_pattern(host, pat, v);
                             }
                         }
 
-                        // rest `..` в map-паттерне сейчас игнорируем
+                        PatternField::Rest(_) => { /* ignore */ }
+                    }
+                }
+            } else {
+                panic!("Group pattern applied to non-map value");
+            }
+        }
+
+        // ----------------------------------------------
+        // map { a, b{2}, c: pat }
+        // ----------------------------------------------
+        Pattern::Map { fields, .. } => {
+            if let Value::Map(map) = val {
+                for f in fields {
+                    match f {
+                        PatternField::Shorthand { field, .. } => {
+                            if let Some(v) = map.get(field) {
+                                host.define_var(field, v.clone());
+                            }
+                        }
+
+                        PatternField::Assign { field, pat, .. } => {
+                            if let Some(v) = map.get(field) {
+                                bind_pattern(host, pat, v);
+                            }
+                        }
+
                         PatternField::Rest(_) => {}
                     }
                 }
@@ -63,7 +87,9 @@ pub fn bind_pattern<H: EvalHost>(
             }
         }
 
-
+        // ----------------------------------------------
+        // User { id, name, age }
+        // ----------------------------------------------
         Pattern::Struct { name, fields, .. } => {
             if let Value::StructInstance { name: vname, fields: vfields } = val {
                 if vname != name {
@@ -73,24 +99,24 @@ pub fn bind_pattern<H: EvalHost>(
                 for f in fields {
                     match f {
                         PatternField::Shorthand { field, .. } => {
-                            if let Some(v) =
-                                vfields.iter().find(|(k,_)| k == field).map(|(_,v)| v.clone())
+                            if let Some(v) = vfields.iter()
+                                .find(|(k,_)| k == field)
+                                .map(|(_,v)| v.clone())
                             {
                                 host.define_var(field, v);
                             }
                         }
 
                         PatternField::Assign { field, pat, .. } => {
-                            if let Some(v) =
-                                vfields.iter().find(|(k,_)| k == field).map(|(_,v)| v.clone())
+                            if let Some(v) = vfields.iter()
+                                .find(|(k,_)| k == field)
+                                .map(|(_,v)| v.clone())
                             {
                                 bind_pattern(host, pat, &v);
                             }
                         }
 
-                        PatternField::Rest(_) => {
-                            // ignore rest fields
-                        }
+                        PatternField::Rest(_) => {}
                     }
                 }
             } else {
@@ -98,24 +124,28 @@ pub fn bind_pattern<H: EvalHost>(
             }
         }
 
-       Pattern::Variant { name, args, .. } => {
-        if let Value::EnumInstance { enum_name: _, variant: vname, args: vargs } = val {
-            
-            // variant must match
-            if vname != name {
-                panic!("Variant `{}` expected, got `{}`", name, vname);
-            }
+        // ----------------------------------------------
+        // Some(x), Error(msg, code)
+        // ----------------------------------------------
+        Pattern::Variant { name, args, .. } => {
+            if let Value::EnumInstance { variant, args: v_args, .. } = val {
+                if variant != name {
+                    panic!("Variant mismatch: expected `{}`, got `{}`", name, variant);
+                }
 
-            // bind payload
-            for (subpat, subval) in args.iter().zip(vargs.iter()) {
-                bind_pattern(host, subpat, subval);
-            }
+                for (subpat, subval) in args.iter().zip(v_args.iter()) {
+                    bind_pattern(host, subpat, subval);
+                }
 
-        } else {
-            panic!("Variant pattern on non-enum value");
+            } else {
+                panic!("Variant pattern applied to non-enum value");
+            }
         }
-    }
-    Pattern::Typed { pat, ty, .. } => {
+
+        // ----------------------------------------------
+        // typed pattern: x: i32
+        // ----------------------------------------------
+        Pattern::Typed { pat, ty, .. } => {
             if !val.matches_type(ty) {
                 panic!("Type mismatch in typed pattern");
             }

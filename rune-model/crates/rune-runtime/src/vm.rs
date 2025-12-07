@@ -378,6 +378,39 @@ impl EvalHost for RuneVM {
             _ => false,
         },
 
+                // Group pattern: { a, b: pat }
+        Pattern::Group { fields, .. } => match value {
+            EvalValue::Map(map) => {
+                for f in fields {
+                    match f {
+                        // shorthand: { a }
+                        PatternField::Shorthand { field, .. } => {
+                            if let Some(v) = map.get(field) {
+                                self.define_var(field, v.clone());
+                            } else {
+                                return false;
+                            }
+                        }
+
+                        // assign: { a: pat }
+                        PatternField::Assign { field, pat, .. } => {
+                            if let Some(v) = map.get(field) {
+                                if !self.bind_pattern(pat, v) {
+                                    return false;
+                                }
+                            } else {
+                                return false;
+                            }
+                        }
+
+                        PatternField::Rest(_) => { /* ignore */ }
+                    }
+                }
+                true
+            }
+            _ => false,
+        },
+
         // Tuple pattern: (a, b, c)
         Pattern::Tuple(p_items, _) => match value {
             EvalValue::Tuple(v_items) => {
@@ -578,6 +611,39 @@ impl EvalHost for RuneVM {
             // literal string
             Pattern::String(s, _) => match value {
                 EvalValue::String(v) => v == s,
+                _ => false,
+            },
+
+            // group pattern: { a, b: pat }
+            Pattern::Group { fields, .. } => match value {
+                EvalValue::Map(map) => {
+                    for pf in fields {
+                        match pf {
+                            // shorthand: { a }
+                            PatternField::Shorthand { field, .. } => {
+                                if !map.contains_key(field) {
+                                    return false;
+                                }
+                            }
+
+                            // assign: { a: pat }
+                            PatternField::Assign { field, pat, .. } => {
+                                let Some(v) = map.get(field) else {
+                                    return false;
+                                };
+
+                                if !self.match_pattern(v, pat) {
+                                    return false;
+                                }
+                            }
+
+                            PatternField::Rest(_) => continue,
+                        }
+                    }
+
+                    true
+                }
+
                 _ => false,
             },
 

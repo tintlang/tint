@@ -94,6 +94,10 @@ pub fn expect(&mut self, kind: TokenKind) -> Result<Token, ParserError> {
         })
     }
 
+      pub fn peek_n_kind(&self, n: usize) -> TokenKind {
+        self.peek_n(n).kind.clone()
+    }
+
     /// Return previous token (or first)
     pub fn prev(&self) -> &Token {
         if self.pos == 0 {

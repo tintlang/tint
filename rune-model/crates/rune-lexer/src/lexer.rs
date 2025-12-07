@@ -211,25 +211,55 @@ impl<'a> Lexer<'a> {
     fn lex_number(&mut self, start: Position) -> Token {
         let mut s = String::new();
 
+        // consume integer part
         while let Some(c) = self.peek() {
-            // STOP before ".." range operator
-            if c == '.' {
-                if let Some((_, next2)) = self.peek2() {
-                    if next2 == '.' {
-                        break; // don't consume the '.'
-                    }
-                }
-            }
-
-            if c.is_ascii_digit() || c == '.' {
+            if c.is_ascii_digit() {
                 s.push(self.bump().unwrap());
             } else {
                 break;
             }
         }
 
+        // CASE: dot belongs to tuple/index/field, NOT float
+        //
+        // If next is '.' but next-after is NOT digit → STOP.
+        //
+        // Examples:
+        //  p.1.len   -> stop BEFORE '.', number="1"
+        //  v.0       -> stop BEFORE '.', number="0"
+        //
+        if let Some('.') = self.peek() {
+            if let Some((dot, next)) = self.peek2() {
+                if dot == '.' {
+                    // range operator: don't consume '.'
+                    return Token::new(TokenKind::Number, Span::new(start, self.position()), s);
+                }
+
+               if next.is_ascii_digit() {
+                    // float: 12.34
+                    s.push(self.bump().unwrap()); // consume '.'
+
+                    while let Some(c) = self.peek() {
+                        if c.is_ascii_digit() {
+                            s.push(self.bump().unwrap());
+                        } else {
+                            break;
+                        }
+                    }
+
+                    return Token::new(TokenKind::Number, Span::new(start, self.position()), s);
+                }
+
+                // dot NOT followed by digit → NOT float (tuple/index!)
+                // Example: "1." in "p.1.len" — the "." is NOT part of number
+                return Token::new(TokenKind::Number, Span::new(start, self.position()), s);
+            }
+        }
+
+        // INTEGER ONLY
         Token::new(TokenKind::Number, Span::new(start, self.position()), s)
     }
+
 
     // IDENT / KEYWORD
     fn lex_ident(&mut self, start: Position) -> Token {

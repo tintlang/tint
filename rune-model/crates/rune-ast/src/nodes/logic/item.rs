@@ -52,6 +52,7 @@ pub enum Item {
 pub struct FnDecl {
     pub attributes: AttributeList, 
     pub name: String,
+    pub generics: Vec<String>, 
     pub params: Vec<Param>,
     pub ret_ty: Option<Type>,
     pub async_: bool,
@@ -88,11 +89,33 @@ pub struct Param {
     pub default: Option<DefaultValue>,
 }
 
+#[derive(Debug, Clone)]
+pub struct KitRef {
+    pub path: Vec<String>, // ["kit", "position2d"]
+    pub body: Option<Vec<StructMember>>,
+    pub span: Span,
+}
+
+impl StructMember {
+    pub fn span(&self) -> Span {
+        match self {
+            StructMember::Kit(k) => k.span,
+            StructMember::Field(f) => f.span(),
+        }
+    }
+}
+
 // STRUCTS & ENUMS
+#[derive(Debug, Clone)]
+pub enum StructMember {
+    Field(StructField),
+    Kit(KitRef),
+}
+
 #[derive(Debug, Clone)]
 pub struct StructDecl {
     pub name: String,
-    pub fields: Vec<StructField>,
+    pub members: Vec<StructMember>,
     pub exported: bool, 
     pub span: Span,
 }

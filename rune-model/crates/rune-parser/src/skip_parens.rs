@@ -17,6 +17,9 @@ impl Parser {
             self.stream.next();
         }
 
+        // SKIP <T, U, V>
+        self.skip_generic_params()?;
+
         // skip parameters (...)
         self.skip_parens()?;
 

@@ -15,6 +15,176 @@ let code = r#"
 
 [@(main.att)]
 
+fn MegaNested() {
+    let a = (
+        1,
+        (2, (3, (4, 5))),
+        User {
+            id{10},
+            name{"Rune"},
+            age{
+                (1 + 2) * 3
+            }
+        }
+    );
+
+    let b = map {
+        x{ map {
+            y{ map {
+                z{ 99 }
+            }}
+        }},
+        list{ [ (1,2) (3,4) (5, [6,7,8]) ] },
+        user{
+            User {
+                id{ a.2.id },
+                name{"Deep"},
+                age{ a.2.age + 1 }
+            }
+        }
+    };
+
+    let c = match a.1 {
+        (x, (y, (z, k))) => x + y + z + k,
+        _ => 0,
+    };
+
+    let d = match b {
+        map {
+            x{ map {
+                y{ map { z } }
+            }},
+            user{ User { id, name } },
+            list
+        } => z + id + name.len(),
+        _ => 0
+    };
+
+    let op = Option::Some { value{ map {
+        inner{ [1,2,3] },
+        deep{ User { id{5}, name{"X"}, age{7} } }
+    }}};
+
+    let r = match op {
+        Some { value{ inner, deep } } => {
+            let mul = |a, b| a * b;
+            mul(inner[1], deep.age)
+        },
+        None {} => 0
+    };
+
+    borrow(frame) {
+        borrow@group(kernel) {
+            // nested borrow blocks allowed
+            convolve(frame, kernel)
+        }
+    }
+
+    // combine results for sanity
+    c + d + r
+}
+
+struct Box<T> {
+    value{T}
+}
+
+fn TestStructGeneric() {
+    let b = Box { value{50} }
+    b.value + 1
+}
+
+enum Option<T> {
+    Some { value },
+    None {}
+}
+
+fn TestOptionGeneric() {
+    let a = Option::Some { value{10} }
+    let b = Option::None {}
+
+    match a {
+        Some { value } => value + 1,
+        None {} => 0
+    }
+}
+
+struct Vec3<T> {
+    x{T}, y{T}, z{T}
+}
+
+fn length<T>(v: Vec3<T>) { 0 } // fake test, just checks parsing
+
+fn id<T>(x: T) -> T { x }
+
+fn TestReturnGeneric() {
+    let a = id(99)
+    let b = id("Rune")
+
+    (a + 1) == 100 && b.len() == 4
+}
+
+    enum Result<T, E> {
+    Ok { value },
+    Err { error },
+}
+
+fn TestGenericResult() {
+    let r = Result::Ok { value{50} }
+
+    match r {
+        Ok { value } => value * 2,
+        Err { error } => 0
+    }
+}
+
+
+fn Pair<K, V>(a: K, b: V) {
+    (a, b)
+}
+
+fn TestPair() {
+    let p = Pair(1, "A")
+    p.0 + p.1.len()   // 1 + 1 = 2
+}
+
+fn pick<T>(x: T, y: T {x}) { y }
+
+fn TestGenericDefault() {
+    pick(5, 10) + pick(5)  // 10 + 5
+}
+
+
+fn wrap<T>(x: T) { x }
+
+fn TestWrap() {
+    let a = wrap(10)
+    let b = wrap("Rune")
+    let c = wrap(true)
+
+    (a == 10) && (b == "Rune") && c
+}
+
+
+struct Sprite {
+    @kit.position2d
+    @kit.size
+    @kit.uv
+    @kit.color
+}
+
+struct Sprite{
+    @kit.transform2d {
+        @kit.position {
+            x{f32},
+            y{f32},
+        }
+
+        @kit.rotation {
+            angle{f32},
+        }
+    }
+}
+
 
 fn [@(strict)] gpu() {
     let r = borrow(frame)
@@ -156,8 +326,8 @@ fn TestTupleDefaultMatch2() {
     let tmp = (x, y);
 
     match tmp {
-        (3, 3) => 1,
-        _ => 0,
+        (3, 3) => 1
+        _ => 0
     }
 }
 
@@ -289,10 +459,7 @@ fn __global_tests__() {
     let (_, y2) = pair;
 }
 
-
-
 //     FUNCTION PARAM PATTERNS
-
 // tuple params
 fn foo1((x, y)) {
     x + y

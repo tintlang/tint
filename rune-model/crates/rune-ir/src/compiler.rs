@@ -184,6 +184,30 @@ impl SsaCompiler {
                 }
             }
 
+            // { a, b: pat } — group pattern (struct-like, but without type)
+            Pattern::Group { fields, .. } => {
+                for f in fields {
+                    match f {
+                        // shorthand: { a }
+                        PatternField::Shorthand { field, .. } => {
+                            let elem =
+                                self.builder.emit_map_access(block, value, field.clone());
+                            locals.insert(field.clone(), elem);
+                        }
+
+                        // assign: { a: pat }
+                        PatternField::Assign { field, pat, .. } => {
+                            let elem =
+                                self.builder.emit_map_access(block, value, field.clone());
+                            self.bind_pattern(pat, elem, locals, block);
+                        }
+
+                        PatternField::Rest(_) => {}
+                    }
+                }
+            }
+
+
             // map { x, y: pat, .. }
             Pattern::Map { fields, .. } => {
                 for f in fields {

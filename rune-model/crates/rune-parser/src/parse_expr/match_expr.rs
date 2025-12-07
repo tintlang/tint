@@ -38,8 +38,8 @@ pub(crate) fn parse_match_expression(&mut self) -> PResult<Expr> {
     let start = self.stream.next().span; // 'match'
 
     // scrutinee
-    let scrutinee = self.parse_expr_until(TokenKind::LBrace)?;
-    self.stream.expect(TokenKind::LBrace)?;
+    let scrutinee = self.parse_expr()?;   // полноценное expression
+    self.stream.expect(TokenKind::LBrace)?;  // match-body begins
 
     let mut arms = Vec::new();
 

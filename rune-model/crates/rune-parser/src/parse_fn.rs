@@ -40,10 +40,13 @@ impl Parser {
             }
         }
 
-        // -------- NAME (НЕ ПАТТЕРН!) --------
-        let name = self.parse_ident()?; // имя функции должно быть идентификатором
+        // NAME
+        let name = self.parse_ident()?; 
 
-        // -------- PARAMETERS (ПАТТЕРНЫ) --------
+        // GENERICS: <T, U> 
+        let generics = self.parse_optional_generics()?; 
+
+        // PARAMETERS (ПАТТЕРНЫ) 
         let params = self.parse_fn_params()?;
 
         // -------- RETURN TYPE --------
@@ -61,6 +64,7 @@ impl Parser {
             return Ok(FnDecl {
                 attributes: local_attrs,
                 name,
+                generics, 
                 params,
                 ret_ty,
                 async_: async_span.is_some(),
@@ -77,6 +81,7 @@ impl Parser {
         Ok(FnDecl {
             attributes: local_attrs,
             name,
+            generics, 
             params,
             ret_ty,
             async_: async_span.is_some(),

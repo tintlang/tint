@@ -10,21 +10,7 @@ impl Parser {
         let name = self.parse_ident()?;
 
         // GENERIC PARAMETERS: <T, E>
-        let mut generics = Vec::new();
-
-        if self.stream.consume_if(TokenKind::LAngle) {
-            loop {
-                let g = self.parse_ident()?;
-                generics.push(g);
-
-                if self.stream.consume_if(TokenKind::Comma) {
-                    continue;
-                }
-
-                self.stream.expect(TokenKind::RAngle)?;
-                break;
-            }
-        }
+        let generics = self.parse_optional_generics()?;
 
         self.stream.expect(TokenKind::LBrace)?;
 
@@ -33,22 +19,21 @@ impl Parser {
         while !self.stream.consume_if(TokenKind::RBrace) {
             let variant_name = self.parse_ident()?;
 
-            let variant = match self.stream.peek_kind() {
-    TokenKind::LBrace => {
-        self.stream.next(); // consume '{'
+        let variant = match self.stream.peek_kind() {
+        TokenKind::LBrace => {
+            self.stream.next(); // consume '{'
 
-        let mut fields = Vec::new();
+            let mut fields = Vec::new();
 
-        #[derive(PartialEq)]
-        enum Style { Rune, Typed }
-        let mut style: Option<Style> = None;
+            #[derive(PartialEq)]
+            enum Style { Rune, Typed }
+            let mut style: Option<Style> = None;
 
-        // empty variant {}
-        if self.stream.consume_if(TokenKind::RBrace) {
-            variants.push(EnumVariant::Struct(variant_name, fields));
-            continue; // идём парсить следующий variant
-        }
-
+            // empty variant {}
+            if self.stream.consume_if(TokenKind::RBrace) {
+                variants.push(EnumVariant::Struct(variant_name, fields));
+                continue; // идём парсить следующий variant
+            }
         loop {
             let field_name = self.parse_ident()?;
             let field_span = self.stream.last_span();

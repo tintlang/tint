@@ -1,191 +1,216 @@
+// rune-parser/parse_expr/postfix.rs
+// RUNELANG POSTFIX PARSER 
+
 use crate::{Parser, error::*};
 use rune_ast::{Expr, Span};
 use rune_lexer::TokenKind;
 
 impl Parser {
-    fn parse_fn_call_arg(&mut self) -> PResult<Expr> {
-        // named arg?   name { expr }
-        if self.stream.peek_kind() == TokenKind::Ident
-            && self.stream.peek2_kind() == TokenKind::LBrace
-        {
-            // name
-            let name = self.parse_ident()?;
-            let start = self.stream.last_span();
 
-            // {
-            self.stream.expect(TokenKind::LBrace)?;
-            let value = self.parse_expr()?;
-            self.stream.expect(TokenKind::RBrace)?;
-            let end = self.stream.last_span();
+    /// Top-level postfix entry
+    pub(crate) fn parse_postfix(&mut self) -> PResult<Expr> {
+        let primary = self.parse_primary()?;
+        self.parse_postfix_with(primary)
+    }
 
-            return Ok(Expr::NamedArg {
-                name,
-                value: Box::new(value),
-                span: Span::merge(start, end),
-            });
+    /// Main postfix reducer: repeatedly applies suffix operators
+    pub(crate) fn parse_postfix_with(&mut self, mut expr: Expr) -> PResult<Expr> {
+        if self.in_pattern {
+            return Ok(expr); // postfix запрещён в паттернах
         }
 
-        // otherwise normal expression
-        self.parse_expr()
-    }
-    
-    pub(crate) fn parse_postfix(&mut self) -> PResult<Expr> {
-    if self.in_pattern {
-        eprintln!(
-            "[POSTFIX] ERROR: postfix inside pattern at {:?}, token={:?}",
-            self.stream.peek().span,
-            self.stream.peek_kind()
-        );
-        return Err(ParserError::Message {
-            msg: "postfix not allowed in pattern mode".into(),
-            span: self.stream.peek().span,
-        });
-    }
+        loop {
+            match self.stream.peek_kind() {
 
-    eprintln!(
-        "[POSTFIX] primary start: token={:?} '{}' at {:?}",
-        self.stream.peek_kind(),
-        self.stream.peek().lexeme,
-        self.stream.peek().span
-    );
+                // FUNCTION CALL
+                TokenKind::LParen => {
+                    expr = self.parse_call(expr)?;
+                    continue;
+                }
 
-    let mut expr = self.parse_primary()?;
+                // FIELD ACCESS & TUPLE INDEX
+                TokenKind::Dot => {
+                    expr = self.parse_field_or_tuple(expr)?;
+                    continue;
+                }
 
-    loop {
-        let tok = self.stream.peek().clone();
-        eprintln!(
-            "[POSTFIX] loop: token={:?} '{}' at {:?}",
-            tok.kind,
-            tok.lexeme,
-            tok.span
-        );
+                // NAMESPACE ( :: ) 
+                TokenKind::PathSep => {
+                    expr = self.parse_namespace(expr)?;
+                    continue;
+                }
 
-        match tok.kind {
-            // -------- FUNCTION CALL --------
-            TokenKind::LParen => {
-                let start_span = expr.span();
-                self.stream.next(); // '('
-                eprintln!("[POSTFIX] start call");
+                // INDEXING: expr[ index ] 
+                TokenKind::LBracket => {
+                    expr = self.parse_index(expr)?;
+                    continue;
+                }
 
-                let mut args = Vec::new();
-
-                if !self.stream.consume_if(TokenKind::RParen) {
-                    loop {
-                        let arg = self.parse_fn_call_arg()?;
-                        args.push(arg);
-
-                        if !self.stream.consume_if(TokenKind::Comma) {
-                            break;
+                //  NAMED CALL: func { ... } 
+                TokenKind::LBrace => {
+                    // Only allow if expr is IDENT and registered as function
+                    if let Expr::Ident(ref fname, _) = expr {
+                        if self.symbols.is_function(fname) {
+                            expr = self.parse_named_call(expr)?;
+                            continue;
                         }
                     }
-                    self.stream.expect(TokenKind::RParen)?;
+
+                    // OTHERWISE this is NOT postfix —> this is struct-init scope
+                    break;
                 }
 
-                let end_span = self.stream.last_span();
-                expr = Expr::Call {
-                    target: Box::new(expr),
-                    args,
-                    span: Span::merge(start_span, end_span),
-                };
+                _ => break,
+            }
+        }
 
-                eprintln!("[POSTFIX] parsed call OK");
+        Ok(expr)
+    }
+
+    // FUNCTION CALL:   expr(args...)
+    fn parse_call(&mut self, func: Expr) -> PResult<Expr> {
+        let start = func.span();
+        self.stream.expect(TokenKind::LParen)?;
+
+        let mut args = Vec::new();
+
+        if !self.stream.consume_if(TokenKind::RParen) {
+            loop {
+                let arg = self.parse_expr()?;      // FULL expression
+                args.push(arg);
+
+                if !self.stream.consume_if(TokenKind::Comma) {
+                    break;
+                }
+            }
+            self.stream.expect(TokenKind::RParen)?;
+        }
+
+        let end = self.stream.last_span();
+
+        Ok(Expr::Call {
+            target: Box::new(func),
+            args,
+            span: Span::merge(start, end),
+        })
+    }
+
+    // FIELD & TUPLE INDEX:   obj.field   /   obj.0
+    fn parse_field_or_tuple(&mut self, base: Expr) -> PResult<Expr> {
+        let dot = self.stream.next(); // '.'
+
+        match self.stream.peek_kind() {
+            TokenKind::Number => {
+                let t = self.stream.next_owned();
+                let index: usize = t.lexeme.parse().unwrap();
+                let span = Span::merge(base.span(), t.span);
+                Ok(Expr::TupleIndex {
+                    target: Box::new(base),
+                    index,
+                    span,
+                })
             }
 
-            
-// -------- FIELD ACCESS OR TUPLE INDEX --------
-TokenKind::Dot => {
-    let dot = self.stream.next(); // '.'
-    eprintln!("[POSTFIX] start field or tuple index");
+            TokenKind::Ident => {
+                let field = self.parse_ident()?;
+                let span = Span::merge(base.span(), dot.span);
+                Ok(Expr::Field {
+                    target: Box::new(base),
+                    field,
+                    span,
+                })
+            }
 
-    match self.stream.peek_kind() {
-
-        // tuple index: v.0, v.1, v.2, ...
-        TokenKind::Number => {
-            let num_tok = self.stream.next_owned();
-            let index: usize = num_tok.lexeme.parse().unwrap();
-
-            let span = Span::merge(expr.span(), num_tok.span);
-            expr = Expr::TupleIndex {
-                target: Box::new(expr),
-                index,
-                span,
-            };
-
-            eprintln!("[POSTFIX] parsed tuple index .{}", index);
-        }
-
-        // normal field: v.x
-        TokenKind::Ident => {
-            let field = self.parse_ident()?;
-
-            let span = Span::merge(expr.span(), dot.span);
-            expr = Expr::Field {
-                target: Box::new(expr),
-                field: field.clone(),
-                span,
-            };
-
-            eprintln!("[POSTFIX] parsed field '{}'", field);
-        }
-
-        other => {
-            return Err(ParserError::Message {
-                msg: format!("Expected field or tuple index after '.', found {:?}", other),
+            _ => Err(ParserError::Message {
+                msg: "Expected field or tuple index after '.'".into(),
                 span: self.stream.peek().span,
-            });
+            }),
         }
     }
-    
-}
 
-            // -------- NAMESPACE ACCESS --------
-            TokenKind::PathSep => {
-                let sep = self.stream.next(); // '::'
-                eprintln!("[POSTFIX] start namespace");
+    // NAMESPACE:  expr::Name
+    fn parse_namespace(&mut self, base: Expr) -> PResult<Expr> {
+        let sep = self.stream.next(); // '::'
+        let item = self.parse_ident()?;
+        let span = Span::merge(base.span(), sep.span);
+        Ok(Expr::Namespace {
+            base: Box::new(base),
+            item,
+            span,
+        })
+    }
 
-                let item = self.parse_ident()?;
-                let span = Span::merge(expr.span(), sep.span);
+    // INDEXING:  expr[ index ]
+    fn parse_index(&mut self, base: Expr) -> PResult<Expr> {
+        self.stream.expect(TokenKind::LBracket)?;
+        let index_expr = self.parse_expr()?;
+        self.stream.expect(TokenKind::RBracket)?;
 
-                expr = Expr::Namespace {
-                    base: Box::new(expr),
-                    item: item.clone(),
-                    span,
-                };
+        let span = Span::merge(base.span(), self.stream.last_span());
+        Ok(Expr::Index {
+            target: Box::new(base),
+            index: Box::new(index_expr),
+            span,
+        })
+    }
 
-                eprintln!("[POSTFIX] parsed namespace '{}'", item);
-            }
+    // NAMED CALL:  func { x: 1, y{2} }
+    fn parse_named_call(&mut self, func: Expr) -> PResult<Expr> {
+        let start = func.span();
+        self.stream.expect(TokenKind::LBrace)?;
+        let mut args = Vec::new();
 
-            // -------- INDEXING --------
-            TokenKind::LBrace => {
-                // Named-call allowed ONLY if expr is a function name
-                if let Expr::Ident(ref fname, _) = expr {
-                    if self.symbols.is_function(fname) {
-                        let args = self.parse_named_call_args()?;
-                        let span = Span::merge(expr.span(), self.stream.last_span());
+        if !self.stream.consume_if(TokenKind::RBrace) {
+            loop {
+                let name = self.parse_ident()?;
 
-                        expr = Expr::Call {
-                            target: Box::new(expr),
-                            args,
+                match self.stream.peek_kind() {
+                    // Rune-style: field { expr }
+                    TokenKind::LBrace => {
+                        self.stream.next();
+                        let value = self.parse_expr()?;
+                        self.stream.expect(TokenKind::RBrace)?;
+                        let span = Span::merge(start, self.stream.last_span());
+                        args.push(Expr::NamedArg {
+                            name,
+                            value: Box::new(value),
                             span,
-                        };
-                        continue; // продолжать postfix!
+                        });
+                    }
+
+                    // Rust-style: field: expr
+                    TokenKind::Colon => {
+                        self.stream.next();
+                        let value = self.parse_expr()?;
+                        let span = Span::merge(start, value.span());
+                        args.push(Expr::NamedArg {
+                            name,
+                            value: Box::new(value),
+                            span,
+                        });
+                    }
+
+                    _ => {
+                        return Err(ParserError::Message {
+                            msg: "Invalid named-call field".into(),
+                            span: self.stream.peek().span,
+                        });
                     }
                 }
 
-                break; // иначе — это НЕ named-call
+                if !self.stream.consume_if(TokenKind::Comma) {
+                    break;
+                }
             }
 
-            _ => break,
+            self.stream.expect(TokenKind::RBrace)?;
         }
+
+        let end = self.stream.last_span();
+        Ok(Expr::Call {
+            target: Box::new(func),
+            args,
+            span: Span::merge(start, end),
+        })
     }
-
-    eprintln!(
-        "[POSTFIX] exit: next token={:?} '{}' at {:?}",
-        self.stream.peek_kind(),
-        self.stream.peek().lexeme,
-        self.stream.peek().span
-    );
-
-    Ok(expr)
-}
 }

@@ -225,6 +225,37 @@ fn bind_pattern(&mut self, pat: &Pattern, value: &Value) -> bool {
             self.match_pattern(value, inner)
         }
 
+        
+        // { a, b: pat } — group pattern
+        Pattern::Group { fields, .. } => match value {
+            Value::Map(map) => {
+                for pf in fields {
+                    match pf {
+                        // shorthand: { a }
+                        PatternField::Shorthand { field, .. } => {
+                            let Some(v) = map.get(field).cloned() else {
+                                return false;
+                            };
+                            self.define_var(field, v);
+                        }
+
+                        // assign: { a: pat }
+                        PatternField::Assign { field, pat, .. } => {
+                            let Some(v) = map.get(field) else {
+                                return false;
+                            };
+                            if !self.bind_pattern(pat, v) {
+                                return false;
+                            }
+                        }
+
+                        PatternField::Rest(_) => continue,
+                    }
+                }
+                true
+            }
+            _ => false,
+        },
 
         // (a, b, c)
         Pattern::Tuple(p_items, _) => match value {
@@ -367,6 +398,38 @@ fn match_pattern(&mut self, value: &Value, pat: &Pattern) -> bool {
         Pattern::Mut { inner, .. } => {
             self.bind_pattern(inner, value)
         }
+
+                // ------------------------------
+        // { a, b: pat }  — group pattern
+        // ------------------------------
+        Pattern::Group { fields, .. } => match value {
+            Value::Map(map) => {
+                for pf in fields {
+                    match pf {
+                        PatternField::Shorthand { field, .. } => {
+                            let Some(v) = map.get(field).cloned() else {
+                                return false;
+                            };
+                            self.define_var(field, v);
+                        }
+
+                        PatternField::Assign { field, pat, .. } => {
+                            let Some(v) = map.get(field) else {
+                                return false;
+                            };
+                            if !self.bind_pattern(pat, v) {
+                                return false;
+                            }
+                        }
+
+                        PatternField::Rest(_) => continue,
+                    }
+                }
+                true
+            }
+            _ => false,
+        },
+
 
         // identifier → always matches
         // (binding is done in bind_pattern)

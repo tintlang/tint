@@ -40,6 +40,11 @@ pub enum Pattern {
     Mut {
         inner: Box<Pattern>,
         span: Span,
+    },
+
+    Group {
+        fields: Vec<PatternField>,
+        span: Span
     }
 }
 
@@ -84,6 +89,7 @@ impl Pattern {
             | Pattern::Typed { span: s, .. }
             | Pattern::Map { span: s, .. } => *s,
             Pattern::Mut { span, .. } => *span,
+            Pattern::Group { span, .. } => *span,
         }
     }
 }
