@@ -11,8 +11,8 @@ pub struct UiAttribute {
 
 #[derive(Debug, Clone)]
 pub enum UiAttrValue {
-    Literal(String),    // attr="text"
-    Ident(String),      // attr=foo
-    Expr(Expr),         // attr={a + b}
+    Literal(String),    // attr||"text"
+    Ident(String),      // attr||foo
+    Expr(Expr),         // attr||a + b
     Modifier(UiModifierBlock),
 }

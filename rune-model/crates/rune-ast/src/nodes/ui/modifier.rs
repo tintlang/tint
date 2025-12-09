@@ -12,7 +12,13 @@ pub struct UiModifier {
 pub enum UiModifierValue {
     Number(f64),
     String(String),
-    Expr(Expr),                 // animate{ opacity: 0 -> 1 }
-    Block(Vec<UiModifier>),    // nested modifiers
+    Expr(Expr),
     Range(f64, f64),
+    Block(Vec<UiModifier>), // padding::{ left::..., right::... }
+    Tuple(Vec<UiModifierValue>), // text::{24, bold}
+    Ident(String),
+    MiniMod {
+        key: Vec<String>,
+        value: Box<UiModifierValue>,
+    },
 }

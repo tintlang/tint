@@ -6,22 +6,22 @@ use rune_ast::*;
 use rune_lexer::TokenKind;
 
 impl Parser {
-    /// Parse:  ui fn Name(params...) { <UI> }
-   pub(crate) fn parse_ui_fn(&mut self) -> PResult<UiFnDecl> {
+
+    /// Parse:  ui fn Name(params...) {  <UI> / BlockUI  }
+    pub(crate) fn parse_ui_fn(&mut self) -> PResult<UiFnDecl> {
         // "ui"
         let start = self.stream.expect(TokenKind::Ui)?.span;
 
         // "fn"
         self.stream.expect(TokenKind::Fn)?;
 
-        // LOCAL ATTRIBUTES: ui fn [@(strict, speed)]
+        // optional attributes: ui fn [@(strict, speed)]
         let mut local_attrs = AttributeList::empty();
 
         if self.stream.peek_kind() == TokenKind::LBracket {
-            let a = self.parse_attributes()?; 
+            let a = self.parse_attributes()?;
             local_attrs.extend(a);
 
-            // forbid SECOND block (как в fn)
             if self.stream.peek_kind() == TokenKind::LBracket {
                 return Err(ParserError::Message {
                     msg: "Only one attribute block allowed after `ui fn`".into(),
@@ -38,16 +38,20 @@ impl Parser {
         let params = self.parse_params()?;
         self.stream.expect(TokenKind::RParen)?;
 
-        // UI BODY
+        // BODY ENTRY
         self.stream.expect(TokenKind::LBrace)?;
-        let body = self.parse_ui_node()?;
+
+        // 🧠 NEW: Parse MULTIPLE UI nodes, auto-mode detection, no mixing
+        let body_nodes = self.parse_ui_root()?;  
+
+        // END
         let end = self.stream.expect(TokenKind::RBrace)?.span;
 
         Ok(UiFnDecl {
             attributes: local_attrs,
             name,
             params,
-            body,
+            body: body_nodes,
             span: Span::merge(start, end),
         })
     }

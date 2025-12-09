@@ -1,136 +1,139 @@
 // rune-parser/ui.rs
-// rune-parser/ui.rs
+// UI parser for Rune DSL — STRICT MODE (NO MIXING)
+
 use rune_lexer::TokenKind;
 use rune_ast::*;
 use crate::{Parser, error::*};
 
-// Helper: Convert UiModifier → Vec<UiModifierItem>
-fn modifier_to_items(modifier: UiModifier) -> Vec<UiModifierItem> {
-    match modifier.value {
+impl Parser {
 
-        UiModifierValue::Block(children) => {
-            children.into_iter().flat_map(modifier_to_items).collect()
+    // ─────────────────────────────────────────────
+    //  ENTRY: parse a full UI block inside ui { }
+    // ─────────────────────────────────────────────
+    pub fn parse_ui_root(&mut self) -> PResult<Vec<UiNode>> {
+        let mut nodes = Vec::new();
+
+        // Determine mode (XML or BLOCK) by first token
+        let mode = self.detect_ui_mode()?;
+
+        while !self.stream.check(TokenKind::RBrace) {
+            match mode {
+                UiMode::Xml => nodes.push(self.parse_xml_node()?),
+                UiMode::Block => nodes.push(self.parse_block_node()?),
+            }
         }
 
-        UiModifierValue::Number(n) => vec![UiModifierItem {
-            key: modifier.path.last().unwrap().clone(),
-            value: Some(UiModifierValue::Number(n)),
-            children: vec![],
-            span: modifier.span,
-        }],
+        Ok(nodes)
+    }
 
-        UiModifierValue::String(s) => vec![UiModifierItem {
-            key: modifier.path.last().unwrap().clone(),
-            value: Some(UiModifierValue::String(s)),
-            children: vec![],
-            span: modifier.span,
-        }],
+    // Determine mode of UI syntax
+    fn detect_ui_mode(&mut self) -> PResult<UiMode> {
+        match self.stream.peek().kind {
+            TokenKind::LAngle => Ok(UiMode::Xml),
+            TokenKind::Ident => {
+                // Tag { ... }
+                if self.stream.peek2_kind() == TokenKind::LBrace {
+                    Ok(UiMode::Block)
+                } else {
+                    Err(ParserError::Message {
+                        msg: "UI must start either with <Tag> (XML mode) or Tag { } (Block mode)".into(),
+                        span: self.stream.peek().span,
+                    })
+                }
+            }
+            _ => Err(ParserError::Message {
+                msg: "Invalid beginning of UI. Expected <Tag> or Tag { }".into(),
+                span: self.stream.peek().span,
+            }),
+        }
+    }
 
-        UiModifierValue::Expr(expr) => vec![UiModifierItem {
-            key: modifier.path.last().unwrap().clone(),
-            value: Some(UiModifierValue::Expr(expr)),
-            children: vec![],
-            span: modifier.span,
-        }],
+    fn parse_attribute_rhs(&mut self) -> PResult<UiAttrValue> {
+    match self.stream.peek().kind {
 
-        UiModifierValue::Range(a, b) => vec![UiModifierItem {
-            key: modifier.path.last().unwrap().clone(),
-            value: Some(UiModifierValue::Range(a, b)),
-            children: vec![],
-            span: modifier.span,
-        }],
+        // ident → theme||dark, click||increment
+        TokenKind::Ident => {
+            let tok = self.stream.next();
+            Ok(UiAttrValue::Ident(tok.lexeme.clone()))
+        }
+
+        // string → label||"Hello"
+        TokenKind::String => {
+            let tok = self.stream.next();
+            Ok(UiAttrValue::Literal(tok.lexeme.clone()))
+        }
+
+        // expression → opacity||{ progress * 0.5 }
+        TokenKind::LBrace => {
+            self.stream.next(); // {
+            let expr = self.parse_expr()?;
+            self.stream.expect(TokenKind::RBrace)?;
+            Ok(UiAttrValue::Expr(expr))
+        }
+
+        _ => self.stream.error_here("Invalid value after ||"),
     }
 }
 
-impl Parser {
 
-    // Parse a full UI node: <Tag ...>...</Tag>
-    pub fn parse_ui_node(&mut self) -> PResult<UiNode> {
-        let start = self.stream.expect(TokenKind::LAngle)?.span;
+    // ─────────────────────────────────────────────
+    //  XML MODE
+    // ─────────────────────────────────────────────
+pub fn parse_xml_node(&mut self) -> PResult<UiNode> {
+    let start = self.stream.expect(TokenKind::LAngle)?.span;
+    let name = self.parse_ident()?;
 
-        let name = self.parse_ident()?;
-        let attributes = self.parse_ui_attributes()?;
+    // FIX: здесь мы разбираем tuple
+    let (attributes, modifiers) = self.parse_modifier_list_xml()?;
 
-        // parse modifiers: padding{...}, radius{...}
-        let mut modifiers = Vec::new();
-
-        loop {
-            if self.stream.peek().kind != TokenKind::Ident {
-                break;
-            }
-
-            let mut i = 1;
-
-            // skip dotted path: padding.x.y
-            loop {
-                if self.stream.peek_n(i).kind == TokenKind::Dot
-                    && self.stream.peek_n(i + 1).kind == TokenKind::Ident
-                {
-                    i += 2;
-                } else {
-                    break;
-                }
-            }
-
-            // check "{"
-            if self.stream.peek_n(i).kind != TokenKind::LBrace {
-                break;
-            }
-
-            modifiers.push(self.parse_ui_modifier()?);
-        }
-
-        // <Tag />
-        if let Some(tok) = self.stream.consume_if_ret(TokenKind::SlashAngle) {
-            return Ok(UiNode::SelfClosing {
-                name,
-                attributes,
-                modifiers,
-                span: Span::merge(start, tok.span),
-            });
-        }
-
-        // >
-        self.stream.expect(TokenKind::RAngle)?;
-
-        // children
-        let children = self.parse_ui_children()?;
-
-        // </Tag>
-        let close = self.stream.expect(TokenKind::AngleSlash)?;
-        let close_name = self.parse_ident()?;
-        let end = self.stream.expect(TokenKind::RAngle)?.span;
-
-        if close_name != name {
-            return Err(ParserError::Message {
-                msg: format!("Expected </{}> but got </{}>", name, close_name),
-                span: close.span,
-            });
-        }
-
-        Ok(UiNode::Element {
+    // <Tag />
+    if let Some(tok) = self.stream.consume_if_ret(TokenKind::SlashAngle) {
+        return Ok(UiNode::SelfClosing {
             name,
             attributes,
             modifiers,
-            children,
-            span: Span::merge(start, end),
-        })
+            span: Span::merge(start, tok.span),
+        });
     }
 
-    // Children
-    pub fn parse_ui_children(&mut self) -> PResult<Vec<UiNodeOrExpr>> {
+    // >
+    self.stream.expect(TokenKind::RAngle)?;
+
+    let children = self.parse_xml_children()?;
+
+    // </Tag>
+    let close = self.stream.expect(TokenKind::AngleSlash)?;
+    let close_name = self.parse_ident()?;
+    let end = self.stream.expect(TokenKind::RAngle)?.span;
+
+    if close_name != name {
+        return Err(ParserError::Message {
+            msg: format!("Expected </{}> but got </{}>", name, close_name),
+            span: close.span,
+        });
+    }
+
+    Ok(UiNode::Element {
+        name,
+        attributes,
+        modifiers,
+        children,
+        span: Span::merge(start, end),
+    })
+}
+
+
+    fn parse_xml_children(&mut self) -> PResult<Vec<UiNodeOrExpr>> {
         let mut out = Vec::new();
 
         loop {
-            match self.stream.peek().kind.clone() {
+            match self.stream.peek().kind {
                 TokenKind::AngleSlash => break,
-                TokenKind::LAngle => {
-                    out.push(UiNodeOrExpr::Node(self.parse_ui_node()?));
-                }
+                TokenKind::LAngle => out.push(UiNodeOrExpr::Node(self.parse_xml_node()?)),
                 TokenKind::String => {
-                    let tok = self.stream.next().clone();
-                    let txt = self.parse_interpolated_text(tok.lexeme.clone(), tok.span)?;
-                    out.push(UiNodeOrExpr::Text(txt));
+                    let t = self.stream.next().clone();
+                    let parsed = self.parse_interpolated_text(t.lexeme.clone(), t.span)?;
+                    out.push(UiNodeOrExpr::Text(parsed));
                 }
                 _ => break,
             }
@@ -139,174 +142,294 @@ impl Parser {
         Ok(out)
     }
 
-    // UI attributes
-    pub fn parse_ui_attributes(&mut self) -> PResult<Vec<UiAttribute>> {
-        let mut attrs = Vec::new();
+    // Parse modifiers like padding::20, border.opacity::{0.2 -> 1.0}
+fn parse_modifier_list_xml(
+    &mut self
+) -> PResult<(Vec<UiAttribute>, Vec<UiModifier>)>
+{
+    let mut attrs = Vec::new();
+    let mut mods  = Vec::new();
 
-        while self.stream.peek().kind == TokenKind::Ident
-            && self.stream.peek2_kind() == TokenKind::Eq
-            {
-            let name = self.parse_ident()?;
-            let start_span = self.stream.last_span();
+    while self.stream.peek().kind == TokenKind::Ident {
+        // read identifier
+        let tok = self.stream.next();
+        let name = tok.lexeme.clone();
+        let span = tok.span;
 
-            self.stream.expect(TokenKind::Eq)?;
+        // ATTRIBUTE: name||value
+        if self.stream.peek().kind == TokenKind::OrOr {
+            self.stream.next(); // ||
+            let value = self.parse_attribute_rhs()?;
 
-            let value = match self.stream.peek().kind.clone() {
+            attrs.push(UiAttribute {
+                name,       // <-- no dots allowed
+                value,
+                span,
+            });
 
-                // text="hello"
+            continue;
+        }
+
+        // MODIFIER: name(.segment)*::value
+        let mut path = vec![name];
+
+        // allow dot-nested segments ONLY for modifiers
+        while self.stream.peek().kind == TokenKind::Dot {
+            self.stream.next(); // consume '.'
+            let seg = self.parse_ident()?;
+            path.push(seg);
+        }
+
+        // now expect ::
+        if self.stream.peek().kind == TokenKind::PathSep {
+            self.stream.next(); // ::
+
+            let value = self.parse_modifier_value_rhs()?;
+
+            mods.push(UiModifier {
+                path,
+                value,
+                span,
+            });
+
+            continue;
+        }
+
+        // unknown sequence → stop
+        break;
+    }
+
+    Ok((attrs, mods))
+}
+
+
+    // ─────────────────────────────────────────────
+    //  BLOCK MODE
+    // ─────────────────────────────────────────────
+
+pub fn parse_block_node(&mut self) -> PResult<UiNode> {
+    let start = self.stream.peek().span;
+    let name = self.parse_ident()?;
+
+    self.stream.expect(TokenKind::LBrace)?;
+
+    let (attributes, modifiers) = self.parse_modifier_list_block()?;
+    let children = self.parse_block_children()?;
+
+    let end = self.stream.expect(TokenKind::RBrace)?.span;
+
+    Ok(UiNode::BlockElement {
+        name,
+        attributes,
+        modifiers,
+        children,
+        span: Span::merge(start, end),
+    })
+}
+
+    fn parse_block_children(&mut self) -> PResult<Vec<UiNodeOrExpr>> {
+        let mut out = Vec::new();
+
+        loop {
+            match self.stream.peek().kind {
+                TokenKind::RBrace => break,
+                TokenKind::Ident
+                    if self.stream.peek2_kind() == TokenKind::LBrace =>
+                {
+                    out.push(UiNodeOrExpr::Node(self.parse_block_node()?));
+                }
+
                 TokenKind::String => {
-                    let t = self.stream.next().clone();
-                    UiAttrValue::Literal(t.lexeme.clone())
+                    let tok = self.stream.next().clone();
+                    let parsed = self.parse_interpolated_text(tok.lexeme.clone(), tok.span)?;
+                    out.push(UiNodeOrExpr::Text(parsed));
                 }
 
-                // text={a + b}
-                TokenKind::LBrace => {
-                    self.stream.next();
-                    let expr = self.parse_expr()?;
-                    self.stream.expect(TokenKind::RBrace)?;
-                    UiAttrValue::Expr(expr)
-                }
+                _ => break,
+            }
+        }
 
-                // padding{10}, radius{8}, animate.opacity{...}
-                TokenKind::Ident if self.stream.peek2_kind() == TokenKind::LBrace => {
-                    let modifier = self.parse_ui_modifier()?;
+        Ok(out)
+    }
 
-                    UiAttrValue::Modifier(UiModifierBlock {
-                        path: modifier.path.clone(),
-                        items: modifier_to_items(modifier.clone()),
-                        span: modifier.span,
-                    })
-                }
+fn parse_modifier_list_block(
+    &mut self
+) -> PResult<(Vec<UiAttribute>, Vec<UiModifier>)>
+{
+    let mut attrs = Vec::new();
+    let mut mods  = Vec::new();
 
-                TokenKind::Ident => {
-                    return self.stream.error_here(
-                        "Invalid attribute value. Rune does not allow CSS-style values like attr=blue. \
-                        Use attr=\"blue\" or attr={expr} or modifiers such as color{blue}."
-                    );
-                }
-                _ => return self.stream.error_here("Invalid attribute value"),
-            };
+    while self.stream.peek().kind == TokenKind::Ident {
+
+        // IMPORTANT:
+        // If next tokens form a child node: Ident + '{'
+        // then STOP parsing attributes/modifiers.
+        if self.stream.peek2_kind() == TokenKind::LBrace {
+            break;
+        }
+
+        let tok = self.stream.next();
+        let name = tok.lexeme.clone();
+        let span = tok.span;
+
+        // ATTRIBUTE:  name||rhs
+        if self.stream.peek().kind == TokenKind::OrOr {
+            self.stream.next(); // ||
+            let value = self.parse_attribute_rhs()?;
 
             attrs.push(UiAttribute {
                 name,
                 value,
-                span: Span::merge(start_span, self.stream.last_span()),
+                span,
             });
+
+            continue;
         }
 
-        Ok(attrs)
-    }
+        // MODIFIER: dotted.path::rhs
+        let mut path = vec![name];
 
-
-    // Unified UiModifier parser
-    pub fn parse_ui_modifier(&mut self) -> PResult<UiModifier> {
-        let start = self.stream.peek().span;
-
-        let mut path = vec![self.parse_ident()?];
-        while self.stream.consume_if(TokenKind::Dot) {
-            path.push(self.parse_ident()?);
+        while self.stream.peek().kind == TokenKind::Dot {
+            self.stream.next();  // consume '.'
+            let seg = self.parse_ident()?;
+            path.push(seg);
         }
 
-        self.stream.expect(TokenKind::LBrace)?;
+        // expect ::
+        if self.stream.peek().kind == TokenKind::PathSep {
+            self.stream.next(); // ::
 
-        // simple value
-        if let Some(v) = self.try_parse_mod_value()? {
-            let end = self.stream.expect(TokenKind::RBrace)?.span;
-            return Ok(UiModifier {
+            let value = self.parse_modifier_value_rhs()?;
+
+            mods.push(UiModifier {
                 path,
-                value: v,
-                span: Span::merge(start, end),
+                value,
+                span,
             });
+
+            continue;
         }
 
-        // block
-        let mut nested = Vec::new();
-
-        while !self.stream.check(TokenKind::RBrace) {
-            nested.push(self.parse_modifier_item()?);
-        }
-
-        let end = self.stream.expect(TokenKind::RBrace)?.span;
-
-        Ok(UiModifier {
-            path,
-            value: UiModifierValue::Block(nested),
-            span: Span::merge(start, end),
-        })
+        break;
     }
 
-    // Parse modifier value (number/string/expr)
-    fn try_parse_mod_value(&mut self) -> PResult<Option<UiModifierValue>> {
-        // CASE 1: range a -> b
-        if self.stream.peek().kind == TokenKind::Number
-            && self.stream.peek_n(1).kind == TokenKind::Arrow
-            && self.stream.peek_n(2).kind == TokenKind::Number
-        {
-            let from_tok = self.stream.next();
-            self.stream.expect(TokenKind::Arrow)?;
-            let to_tok = self.stream.next();
+    Ok((attrs, mods))
+}
 
-            let from: f64 = from_tok.lexeme.parse().unwrap();
-            let to: f64 = to_tok.lexeme.parse().unwrap();
+fn parse_modifier_value_rhs(&mut self) -> PResult<UiModifierValue> {
+    match self.stream.peek().kind {
 
-            return Ok(Some(UiModifierValue::Range(from, to)));
-        }
-
-        // CASE 2: number
-        if self.stream.peek().kind == TokenKind::Number {
+        // NUMBER
+        TokenKind::Number => {
             let tok = self.stream.next();
-            return Ok(Some(UiModifierValue::Number(tok.lexeme.parse().unwrap())));
+            let v: f64 = tok.lexeme.parse().unwrap();
+            Ok(UiModifierValue::Number(v))
         }
 
-        // CASE 3: ident string
-        if self.stream.peek().kind == TokenKind::Ident {
+        // STRING
+        TokenKind::String => {
             let tok = self.stream.next();
-            return Ok(Some(UiModifierValue::String(tok.lexeme.clone())));
+            Ok(UiModifierValue::String(tok.lexeme.clone()))
         }
 
-        // CASE 4: expression inside braces
-        if self.stream.peek().kind == TokenKind::LBrace {
+        // IDENT (NEW!)
+        TokenKind::Ident => {
+            let tok = self.stream.next();
+            Ok(UiModifierValue::Ident(tok.lexeme.clone()))
+        }
+
+        // TUPLE LIST: { ... }
+        TokenKind::LBrace => {
+            self.stream.expect(TokenKind::LBrace)?;
+
+            // empty {}
+            if self.stream.check(TokenKind::RBrace) {
+                self.stream.next();
+                return Ok(UiModifierValue::Tuple(vec![]));
+            }
+
+            let mut items = Vec::new();
+
+            loop {
+                let val = self.parse_single_mod_value()?;
+                items.push(val);
+
+                if self.stream.consume_if(TokenKind::Comma) {
+                    continue;
+                }
+
+                self.stream.expect(TokenKind::RBrace)?;
+                break;
+            }
+
+            Ok(UiModifierValue::Tuple(items))
+        }
+
+        _ => Err(ParserError::Message {
+            msg: "Invalid modifier value".into(),
+            span: self.stream.peek().span,
+        }),
+    }
+}
+
+fn parse_single_mod_value(&mut self) -> PResult<UiModifierValue> {
+    match self.stream.peek().kind {
+
+        TokenKind::Number => {
+            let tok = self.stream.next();
+            return Ok(UiModifierValue::Number(tok.lexeme.parse().unwrap()));
+        }
+
+        TokenKind::String => {
+            let tok = self.stream.next();
+            return Ok(UiModifierValue::String(tok.lexeme.clone()));
+        }
+
+        TokenKind::Ident => {
+            let mut key = vec![self.parse_ident()?];
+
+            // allow ONE dotted segment: left.top is allowed
+            if self.stream.consume_if(TokenKind::Dot) {
+                key.push(self.parse_ident()?);
+
+                // forbid deeper nesting
+                if self.stream.peek().kind == TokenKind::Dot {
+                    return self.stream.error_here("Too many nested modifier segments");
+                }
+            }
+
+            // mini-modifier: "left::12"
+            if self.stream.consume_if(TokenKind::PathSep) {
+                let value = self.parse_modifier_value_rhs()?;
+                return Ok(UiModifierValue::MiniMod {
+                    key,
+                    value: Box::new(value),
+                });
+            }
+
+            // simple ident
+            return Ok(UiModifierValue::Ident(key.remove(0)));
+        }
+
+        TokenKind::LBrace => {
             self.stream.next();
             let expr = self.parse_expr()?;
             self.stream.expect(TokenKind::RBrace)?;
-            return Ok(Some(UiModifierValue::Expr(expr)));
+            return Ok(UiModifierValue::Expr(expr));
         }
 
-        Ok(None)
+        _ => self.stream.error_here("Expected value inside modifier tuple"),
     }
+}
 
-    // A single item inside block: left:10, from:0, etc.
-    fn parse_modifier_item(&mut self) -> PResult<UiModifier> {
-        let start = self.stream.peek().span;
+    // ─────────────────────────────────────────────
+    //  Interpolated Text:  "Hello {user.name}"
+    // ─────────────────────────────────────────────
 
-        let mut path = vec![self.parse_ident()?];
-        while self.stream.consume_if(TokenKind::Dot) {
-            path.push(self.parse_ident()?);
-        }
-
-        if self.stream.consume_if(TokenKind::Colon) {
-            let v = match self.try_parse_mod_value()? {
-                Some(v) => v,
-                None => return self.stream.error_here("Expected value after ':'"),
-            };
-            return Ok(UiModifier {
-                path,
-                value: v,
-                span: Span::merge(start, self.stream.last_span()),
-            });
-        }
-
-        if self.stream.check(TokenKind::LBrace) {
-            return self.parse_ui_modifier();
-        }
-
-        self.stream.error_here("Invalid modifier syntax")
-    }
-
-    // Interpolated UI Text
     fn parse_interpolated_text(&mut self, raw: String, span: Span) -> PResult<UiText> {
         let mut parts = Vec::new();
         let mut buf = String::new();
+
         let chars: Vec<char> = raw.chars().collect();
         let mut i = 0;
 
@@ -327,6 +450,7 @@ impl Parser {
 
                 let mut p = Parser::new_expr_only(expr_buf.clone(), span);
                 let expr = p.parse_expr()?;
+
                 parts.push(UiTextPart::Interpolation(expr, span));
             } else {
                 buf.push(chars[i]);
@@ -340,4 +464,15 @@ impl Parser {
 
         Ok(UiText { parts, span })
     }
+}
+
+
+// ─────────────────────────────────────────────
+//  UI MODE ENUM
+// ─────────────────────────────────────────────
+
+#[derive(Debug, Clone, Copy)]
+enum UiMode {
+    Xml,
+    Block,
 }

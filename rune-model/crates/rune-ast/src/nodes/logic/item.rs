@@ -2,6 +2,7 @@ use crate::Span;
 use crate::Stmt;
 use crate::pattern::Pattern;
 use crate::AttributeList;
+use crate::UiNode;
 
 use super::{
     stmt::{Block},
@@ -104,12 +105,13 @@ pub enum FnBody {
 
 #[derive(Debug, Clone)]
 pub struct UiFnDecl {
-    pub attributes: AttributeList,   
+    pub attributes: AttributeList,
     pub name: String,
     pub params: Vec<Param>,
-    pub body: crate::ui::UiNode,
+    pub body: Vec<UiNode>, 
     pub span: Span,
 }
+
 
 #[derive(Debug, Clone)]
 pub enum DefaultValue {

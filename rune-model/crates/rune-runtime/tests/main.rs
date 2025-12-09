@@ -12,23 +12,162 @@ fn test_rune_capabilities() {
     println!("\n===================== RUNE TEST START =====================\n");
 
 let code = r#"
-
 [@(main.att)]
 
-ui fn Main() {
-    Rectangle { width{100}, height{50} }
+ui fn TestXml() {
+    <Column padding::20 radius::12>
+
+        <Text text::{24, bold}>
+            "Hello XML"
+        </Text>
+
+        <Button click||increment radius.top::6 padding::12>
+            "Click me"
+        </Button>
+
+        <Row gap::12>
+            <Icon glyph||home size::16 />
+            <Icon glyph||settings size::16 />
+        </Row>
+
+    </Column>
 }
 
-ui fn Main() {
-    Text {
-        value{"Hello"},
-        size{16},
-        color{white}
+ui fn TestBlock() {
+    Column {
+        padding::20
+        radius::8
+
+        Text {
+            text::{20, medium}
+            "Hello BLOCK"
+        }
+
+        Button {
+            click||do_action
+            padding::{left::12, right::12}
+            radius.top::10
+            "Open"
+        }
+
+        Row {
+            gap::10
+            Text { "A" }
+            Text { "B" }
+        }
+    }
+}
+
+ui fn TestInterpolation(name) {
+    Column {
+        padding::20
+
+        Text {
+            text::20
+            "Hello {name}"
+        }
+
+        Text {
+            text::14
+            "User len = {name.len()}"
+        }
+    }
+}
+
+ui fn TestModifiers() {
+    Column {
+        padding::{left::20, top::10}
+        opacity::0.8
+        radius::12
+        background::black
+
+        Card {
+            padding::12
+            radius.top::20
+
+
+            Text { text::{18, bold, red}  "Animated" }
+        }
+    }
+}
+
+ui fn TestMultiRoot() {
+    <Text text::20> "First" </Text>
+    <Text text::20> "Second" </Text>
+    <Text text::20> "Third" </Text>
+}
+
+ui fn TestIf(visible) {
+    <Block if{visible}>
+        <Text text::20> "Visible!" </Text>
+    </Block>
+
+    <Block if{!visible}>
+        <Text text::20> "Hidden" </Text>
+    </Block>
+}
+
+ui fn TestFor(list) {
+    <Block for{item in list}>
+        <Text text::16> "{item}" </Text>
+    </Block>
+}
+
+ui fn TestMatch(status) {
+    <Block match{status}>
+        <case ready>   <Text>"OK"</Text> </case>
+        <case error>   <Text>"ERR"</Text> </case>
+        <case loading> <Text>"LOAD"</Text> </case>
+    </Block>
+}
+
+space Counter {
+    state count = 0;
+
+    fn inc() {
+        count += 1;
+    }
+}
+
+ui fn TestClick() {
+    Column {
+        padding::20
+
+        Text { text::20 "Count: {count}" }
+
+        Button {
+            click||inc
+            padding::12
+            text::"Add"
+        }
+    }
+}
+
+
+ui fn TestNested() {
+    Column {
+        padding::20
+
+        Card {
+            padding::16
+            background::#222
+            radius::12
+
+            Column {
+                gap::8
+
+                Text { "Inner Text" }
+                Row {
+                    gap::6
+                    Icon { glyph||user size::14 }
+                    Icon { glyph||settings size::14 }
+                }
+            }
+        }
     }
 }
 
 space Logic {
-
     struct Node<T> {
         id{i32},
         value{T},
