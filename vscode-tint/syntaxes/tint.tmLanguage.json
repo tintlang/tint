@@ -1,0 +1,96 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Tint",
+  "scopeName": "source.tint",
+  "fileTypes": ["rn"],
+  "repository": {
+    "comment": {
+      "name": "comment.line.double-slash.tint",
+      "match": "//.*$"
+    },
+    "string": {
+      "name": "string.quoted.double.tint",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.tint",
+          "match": "\\\\."
+        }
+      ]
+    },
+    "number": {
+      "name": "constant.numeric.tint",
+      "match": "\\b\\d+(\\.\\d+)?\\b"
+    },
+    "hex-color": {
+      "name": "constant.numeric.hex.tint",
+      "match": "#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?"
+    },
+    "keyword": {
+      "name": "keyword.control.tint",
+      "match": "\\b(fn|ui|fn|struct|enum|impl|if|else|for|while|let|mut|return|break|continue|match|space)\\b"
+    },
+    "ui-keyword": {
+      "name": "keyword.other.tint",
+      "match": "\\b(ui)\\s+(fn)\\b"
+    },
+    "builtin-type": {
+      "name": "support.type.tint",
+      "match": "\\b(i32|i64|u32|u64|f32|f64|bool|String|Vec|Option|Result)\\b"
+    },
+    "builtin-tag": {
+      "name": "support.class.tint",
+      "match": "\\b(Row|Column|Button|Card|Text|Icon|Menu|MenuPanel|MenuItem|ListItem|Block)\\b"
+    },
+    "modifier": {
+      "name": "variable.other.tint",
+      "match": "\\b[a-z_][a-z0-9_]*\\s*::"
+    },
+    "function-call": {
+      "name": "entity.name.function.tint",
+      "match": "\\b[A-Z][a-zA-Z0-9_]*\\s*\\{"
+    },
+    "bool": {
+      "name": "constant.language.tint",
+      "match": "\\b(true|false)\\b"
+    }
+  },
+  "patterns": [
+    {
+      "include": "#comment"
+    },
+    {
+      "include": "#string"
+    },
+    {
+      "include": "#number"
+    },
+    {
+      "include": "#hex-color"
+    },
+    {
+      "include": "#keyword"
+    },
+    {
+      "include": "#builtin-type"
+    },
+    {
+      "include": "#builtin-tag"
+    },
+    {
+      "include": "#modifier"
+    },
+    {
+      "include": "#bool"
+    },
+    {
+      "match": "[{}\\[\\]()]",
+      "name": "punctuation.bracket.tint"
+    },
+    {
+      "match": "[,;:]",
+      "name": "punctuation.separator.tint"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+[package]
+name = "tint-parser"
+version = "0.1.0"
+edition = "2021"
+description = "TintLang Lexer"
+license = "MIT"
+
+[dependencies]
+tint-ast   = { path = "../tint-ast" }
+tint-lexer   = { path = "../tint-lexer" }

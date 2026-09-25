@@ -1,0 +1,19 @@
+fn square(x) {
+    x * x
+}
+
+fn sum_of_squares(a, b) {
+    square(a) + square(b)
+}
+
+fn factorial(n) {
+    match n {
+        0 => 1,
+        _ => n * factorial(n - 1),
+    }
+}
+
+fn main() {
+    print(sum_of_squares(3, 4));
+    sum_of_squares(3, 4) + factorial(5)
+}
