@@ -1,0 +1,86 @@
+{
+  "name": "rune-lang",
+  "displayName": "Rune Language",
+  "description": "Syntax highlighting and tools for the Rune UI programming language",
+  "version": "0.1.0",
+  "publisher": "runelang",
+  "icon": "icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/marekbender/runelang"
+  },
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Other"
+  ],
+  "activationEvents": [
+    "onLanguage:rune"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "rune",
+        "aliases": [
+          "Rune",
+          "rune"
+        ],
+        "extensions": [
+          ".rn"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "rune",
+        "scopeName": "source.rune",
+        "path": "./syntaxes/rune.tmLanguage.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "rune.build",
+        "title": "Rune: Build to HTML",
+        "when": "editorLangId == rune"
+      },
+      {
+        "command": "rune.check",
+        "title": "Rune: Check syntax",
+        "when": "editorLangId == rune"
+      },
+      {
+        "command": "rune.showPreview",
+        "title": "Rune: Show preview",
+        "when": "editorLangId == rune"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "rune.build",
+        "key": "shift+cmd+b",
+        "mac": "shift+cmd+b",
+        "when": "editorLangId == rune"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.80.0",
+    "@types/node": "16.x",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.0.0",
+    "typescript": "^5.0.0"
+  }
+}
