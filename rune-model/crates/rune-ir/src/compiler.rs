@@ -496,9 +496,9 @@ impl SsaCompiler {
                 self.builder.emit_map_init(block, lowered)
             }
 
-            // NAMED ARG — cannot be lowered outside call
-            Expr::NamedArg { name, .. } => {
-                panic!("Named argument `{}` cannot appear as bare expression", name);
+            // NAMED ARG — just lower the value, name is semantic
+            Expr::NamedArg { value, .. } => {
+                self.lower_expr(value, block, locals)
             }
 
 
