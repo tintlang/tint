@@ -175,7 +175,7 @@ No external DSL files—grammar is in code for easy modification.
 
 ## License
 
-MIT
+Unlicense (public domain) - do whatever you want with it.
 
 ## Author
 
