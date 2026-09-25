@@ -120,15 +120,6 @@ ui fn TestMatch(status) {
         <case loading> <Text>"LOAD"</Text> </case>
     </Block>
 }
-
-space Counter {
-    state count = 0;
-
-    fn inc() {
-        count += 1;
-    }
-}
-
 ui fn TestClick() {
     Column {
         padding::20
@@ -150,7 +141,6 @@ ui fn TestNested() {
 
         Card {
             padding::16
-            background::#222
             radius::12
 
             Column {

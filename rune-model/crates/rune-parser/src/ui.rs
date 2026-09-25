@@ -198,6 +198,66 @@ fn parse_modifier_list_xml(
         // unknown sequence → stop
         break;
     }
+    // Handle control flow keywords: if{...}, for{item in list}, match{...}
+    loop {
+        match self.stream.peek().kind {
+            TokenKind::If => {
+                let tok = self.stream.next();
+                let span = tok.span;
+
+                self.stream.expect(TokenKind::LBrace)?;
+                let expr = self.parse_expr()?;
+                self.stream.expect(TokenKind::RBrace)?;
+
+                mods.push(UiModifier {
+                    path: vec!["if".to_string()],
+                    value: UiModifierValue::Expr(expr),
+                    span,
+                });
+            }
+            TokenKind::For => {
+                let tok = self.stream.next();
+                let span = tok.span;
+
+                self.stream.expect(TokenKind::LBrace)?;
+                
+                // Parse loop variable (just an identifier for now)
+                let _var = self.parse_ident()?;
+                
+                // Expect "in"
+                self.stream.expect(TokenKind::In)?;
+                
+                // Parse iterable expression
+                let expr = self.parse_expr()?;
+                
+                self.stream.expect(TokenKind::RBrace)?;
+
+                // Store the for modifier
+                mods.push(UiModifier {
+                    path: vec!["for".to_string()],
+                    value: UiModifierValue::Expr(expr),
+                    span,
+                });
+            }
+            TokenKind::Match => {
+                let tok = self.stream.next();
+                let span = tok.span;
+
+                self.stream.expect(TokenKind::LBrace)?;
+                let expr = self.parse_expr()?;
+                self.stream.expect(TokenKind::RBrace)?;
+
+                mods.push(UiModifier {
+                    path: vec!["match".to_string()],
+                    value: UiModifierValue::Expr(expr),
+                    span,
+                });
+            }
+            _ => break,
+        }
+    }
+
+
 
     Ok((attrs, mods))
 }
@@ -312,6 +372,66 @@ fn parse_modifier_list_block(
 
         break;
     }
+    // Handle control flow keywords: if{...}, for{item in list}, match{...}
+    loop {
+        match self.stream.peek().kind {
+            TokenKind::If => {
+                let tok = self.stream.next();
+                let span = tok.span;
+
+                self.stream.expect(TokenKind::LBrace)?;
+                let expr = self.parse_expr()?;
+                self.stream.expect(TokenKind::RBrace)?;
+
+                mods.push(UiModifier {
+                    path: vec!["if".to_string()],
+                    value: UiModifierValue::Expr(expr),
+                    span,
+                });
+            }
+            TokenKind::For => {
+                let tok = self.stream.next();
+                let span = tok.span;
+
+                self.stream.expect(TokenKind::LBrace)?;
+                
+                // Parse loop variable (just an identifier for now)
+                let _var = self.parse_ident()?;
+                
+                // Expect "in"
+                self.stream.expect(TokenKind::In)?;
+                
+                // Parse iterable expression
+                let expr = self.parse_expr()?;
+                
+                self.stream.expect(TokenKind::RBrace)?;
+
+                // Store the for modifier
+                mods.push(UiModifier {
+                    path: vec!["for".to_string()],
+                    value: UiModifierValue::Expr(expr),
+                    span,
+                });
+            }
+            TokenKind::Match => {
+                let tok = self.stream.next();
+                let span = tok.span;
+
+                self.stream.expect(TokenKind::LBrace)?;
+                let expr = self.parse_expr()?;
+                self.stream.expect(TokenKind::RBrace)?;
+
+                mods.push(UiModifier {
+                    path: vec!["match".to_string()],
+                    value: UiModifierValue::Expr(expr),
+                    span,
+                });
+            }
+            _ => break,
+        }
+    }
+
+
 
     Ok((attrs, mods))
 }
