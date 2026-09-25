@@ -1,0 +1,15 @@
+[package]
+name = "tint-cli"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "tint"
+path = "src/main.rs"
+
+[dependencies]
+tint-lexer = { path = "../tint-lexer" }
+tint-ast = { path = "../tint-ast" }
+tint-parser = { path = "../tint-parser" }
+tint-runtime = { path = "../tint-runtime" }
+tint-evaluator = { path = "../tint-evaluator" }

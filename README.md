@@ -1,11 +1,11 @@
-# Rune
+# Tint
 
 A UI programming language that compiles to WebAssembly and runs in the browser.
 
-```rune
+```tint
 ui fn App() {
     Column { padding::24 gap::12 background::#12141a
-        Text { text::{24, bold, white} "Hello Rune" }
+        Text { text::{24, bold, white} "Hello Tint" }
         Button { radius::8 color::white "Click me" }
     }
 }
@@ -27,36 +27,36 @@ ui fn App() {
 
 ```bash
 # Install
-cd runelang/rune-model
-cargo build -p rune-cli --release
+cd tintlang/tint-model
+cargo build -p tint-cli --release
 export PATH="$PWD/target/release:$PATH"
 
 # Check syntax
-rune check app.rn
+tint check app.tn
 
 # Build to HTML
-rune build app.rn -o app.html
+tint build app.tn -o app.html
 
 # Run in REPL
-rune repl
+tint repl
 ```
 
 ### VSCode Extension
 
 1. Install from marketplace (coming soon) or manually:
    ```bash
-   cd vscode-rune
+   cd vscode-tint
    npm install && npm run compile
-   code --install-extension ./rune-lang-0.1.0.vsix
+   code --install-extension ./tint-lang-0.1.0.vsix
    ```
 
-2. Open a `.rn` file
+2. Open a `.tn` file
 3. Press `Cmd+Shift+B` to build to HTML
 
 ### Web Sandbox
 
 ```bash
-cd rune-model/sandbox
+cd tint-model/sandbox
 npm install
 npm run dev
 ```
@@ -66,21 +66,21 @@ Open browser to `http://localhost:5173` and edit code live.
 ## Project Structure
 
 ```
-runelang/
-├── rune-model/              # Core language implementation (Rust)
+tintlang/
+├── tint-model/              # Core language implementation (Rust)
 │   ├── crates/
-│   │   ├── rune-lexer/      # Tokenization
-│   │   ├── rune-parser/     # Parsing → AST
-│   │   ├── rune-ast/        # AST nodes
-│   │   ├── rune-semantics/  # Semantic analysis
-│   │   ├── rune-ir/         # SSA IR + optimizer
-│   │   ├── rune-evaluator/  # Value system + built-ins
-│   │   ├── rune-runtime/    # VM + UI renderer
-│   │   ├── rune-wasm/       # WASM bindings
-│   │   └── rune-cli/        # Command-line tool
+│   │   ├── tint-lexer/      # Tokenization
+│   │   ├── tint-parser/     # Parsing → AST
+│   │   ├── tint-ast/        # AST nodes
+│   │   ├── tint-semantics/  # Semantic analysis
+│   │   ├── tint-ir/         # SSA IR + optimizer
+│   │   ├── tint-evaluator/  # Value system + built-ins
+│   │   ├── tint-runtime/    # VM + UI renderer
+│   │   ├── tint-wasm/       # WASM bindings
+│   │   └── tint-cli/        # Command-line tool
 │   ├── sandbox/             # Web IDE (Svelte 5)
 │   └── tests/               # Integration tests
-└── vscode-rune/             # VSCode extension (TypeScript)
+└── vscode-tint/             # VSCode extension (TypeScript)
 ```
 
 ## What Works
@@ -109,9 +109,9 @@ These are deliberate design choices for a proof of concept, not bugs. The archit
 
 ## Example
 
-Create `app.rn`:
+Create `app.tn`:
 
-```rune
+```tint
 ui fn App() {
     Column { padding::24 gap::16 background::#f5f7fa
         Text { text::{32, bold, #000} "Dashboard" }
@@ -134,7 +134,7 @@ ui fn App() {
 Build & view:
 
 ```bash
-rune build app.rn -o app.html
+tint build app.tn -o app.html
 open app.html
 ```
 
@@ -143,14 +143,14 @@ open app.html
 ### Build Everything
 
 ```bash
-cd rune-model
+cd tint-model
 
 # Native (native CLI)
-cargo build -p rune-cli
+cargo build -p tint-cli
 
 # WASM (web sandbox)
-cargo build -p rune-wasm --target wasm32-unknown-unknown --release
-wasm-pack build crates/rune-wasm --release
+cargo build -p tint-wasm --target wasm32-unknown-unknown --release
+wasm-pack build crates/tint-wasm --release
 
 # Tests
 cargo test

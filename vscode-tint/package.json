@@ -1,0 +1,86 @@
+{
+  "name": "tint-lang",
+  "displayName": "Tint Language",
+  "description": "Syntax highlighting and tools for the Tint UI programming language",
+  "version": "0.1.0",
+  "publisher": "tintlang",
+  "icon": "icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/marekbender/tintlang"
+  },
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Other"
+  ],
+  "activationEvents": [
+    "onLanguage:tint"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "tint",
+        "aliases": [
+          "Tint",
+          "tint"
+        ],
+        "extensions": [
+          ".tn"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "tint",
+        "scopeName": "source.tint",
+        "path": "./syntaxes/tint.tmLanguage.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "tint.build",
+        "title": "Tint: Build to HTML",
+        "when": "editorLangId == tint"
+      },
+      {
+        "command": "tint.check",
+        "title": "Tint: Check syntax",
+        "when": "editorLangId == tint"
+      },
+      {
+        "command": "tint.showPreview",
+        "title": "Tint: Show preview",
+        "when": "editorLangId == tint"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "tint.build",
+        "key": "shift+cmd+b",
+        "mac": "shift+cmd+b",
+        "when": "editorLangId == tint"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.80.0",
+    "@types/node": "16.x",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.0.0",
+    "typescript": "^5.0.0"
+  }
+}
