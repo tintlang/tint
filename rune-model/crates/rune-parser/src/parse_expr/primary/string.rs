@@ -1,4 +1,3 @@
-// rune-parser/parse_expr/primary/string.rs
 
 use crate::{Parser, error::*};
 use rune_ast::{Expr, Span};

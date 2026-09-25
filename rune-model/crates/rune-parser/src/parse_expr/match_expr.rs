@@ -38,7 +38,7 @@ pub(crate) fn parse_match_expression(&mut self) -> PResult<Expr> {
     let start = self.stream.next().span; // 'match'
 
     // scrutinee
-    let scrutinee = self.parse_expr()?;   // полноценное expression
+    let scrutinee = self.parse_expr()?;   // Parse the complete scrutinee expression.
     self.stream.expect(TokenKind::LBrace)?;  // match-body begins
 
     let mut arms = Vec::new();
@@ -53,7 +53,7 @@ pub(crate) fn parse_match_expression(&mut self) -> PResult<Expr> {
 
     Ok(Expr::Match {
         scrutinee: Box::new(scrutinee),
-        arms, 
+        arms,
         span: Span::merge(start, end),
     })
 }

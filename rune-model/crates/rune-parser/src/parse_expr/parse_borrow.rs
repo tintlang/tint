@@ -21,7 +21,7 @@ impl Parser {
         // Optional @kind
         if self.stream.consume_if(TokenKind::At) {
             // Check if there was whitespace between @ and tag?
-            // NO — because lexer loses whitespace info.
+            // Whitespace cannot be used here because the lexer discards it.
 
             // So simply reject cases where next is NOT "strict" or "group".
             let ident = self.stream.expect_ident()?;

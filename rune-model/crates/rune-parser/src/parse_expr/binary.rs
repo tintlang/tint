@@ -12,7 +12,7 @@ impl Parser {
             // --- STOP TOKENS ---
             match tok.kind {
                 TokenKind::RParen |
-                TokenKind::RBracket |  
+                TokenKind::RBracket |
                 TokenKind::RBrace |
                 TokenKind::Comma => {
                     break;

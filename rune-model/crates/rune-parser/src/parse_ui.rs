@@ -1,4 +1,3 @@
-// rune-parser/parse_ui.rs
 
 use crate::Parser;
 use crate::error::*;
@@ -41,8 +40,29 @@ impl Parser {
         // BODY ENTRY
         self.stream.expect(TokenKind::LBrace)?;
 
-        // 🧠 NEW: Parse MULTIPLE UI nodes, auto-mode detection, no mixing
-        let body_nodes = self.parse_ui_root()?;  
+        // `state <ident> = <expr>` lines, if any, come first -- before
+        // any UI node. This is the only place `state` is currently
+        // parsed at all (it's a reserved keyword with no other grammar
+        // yet); see UiStateDecl's doc comment in rune-ast for what these
+        // become at runtime.
+        let mut state = Vec::new();
+        while self.stream.peek().kind == TokenKind::State {
+            let tok = self.stream.next();
+            let decl_start = tok.span;
+
+            let name = self.parse_ident()?;
+            self.stream.expect(TokenKind::Eq)?;
+            let init = self.parse_expr()?;
+
+            state.push(UiStateDecl {
+                name,
+                init,
+                span: Span::merge(decl_start, self.stream.last_span()),
+            });
+        }
+
+        // Parse all UI roots using one syntax mode per block.
+        let body_nodes = self.parse_ui_root()?;
 
         // END
         let end = self.stream.expect(TokenKind::RBrace)?.span;
@@ -51,6 +71,7 @@ impl Parser {
             attributes: local_attrs,
             name,
             params,
+            state,
             body: body_nodes,
             span: Span::merge(start, end),
         })

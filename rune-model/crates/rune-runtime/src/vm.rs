@@ -13,7 +13,7 @@ use crate::{
 };
 
 use rune_evaluator::eval_pattern::bind_pattern;
-use rune_ir::{SsaCompiler, optimize, IrVM, ProgramIR};
+use rune_ir::{SsaCompiler, optimize, IrVM, ProgramIR, ir::Value as IrValue};
 
 use rune_ast::{
     Program, Item, FnDecl, UiFnDecl, Expr, Stmt, Block, Span, FnBody
@@ -89,9 +89,11 @@ impl RuneVM {
 
     // FUNCTION REGISTRATION
     fn register_functions(&mut self, program: &Program) {
+        eprintln!("DEBUG register_functions: registering {} items", program.items.len());
         for item in &program.items {
             match item {
                 Item::Fn(f) => {
+                    eprintln!("DEBUG register_functions: registering logic function: {}", f.name);
                     self.logic_functions.insert(f.name.clone(), f.clone());
                 }
                 Item::UiFn(ui) => {
@@ -106,7 +108,12 @@ impl RuneVM {
         for item in &program.items {
             if let Item::UiFn(ui) = item {
                 if ui.name == "App" || ui.name == "Main" {
-                    self.ui.mount(ui);
+                    // `mount` needs `&mut self` (to eval if{}/for{}/text),
+                    // but `self.ui` is a field of `self` -- can't borrow
+                    // both at once. Swap the UiRuntime out for the call.
+                    let mut ui_runtime = std::mem::take(&mut self.ui);
+                    ui_runtime.mount(ui, self);
+                    self.ui = ui_runtime;
                 }
             }
         }
@@ -118,7 +125,9 @@ impl RuneVM {
     }
 
     fn is_ir_function(&self, name: &str) -> bool {
-        self.logic_functions.contains_key(name)
+        let result = self.logic_functions.contains_key(name);
+        eprintln!("DEBUG is_ir_function: {} = {}", name, result);
+        result
     }
 
     // Eval helpers
@@ -128,6 +137,24 @@ impl RuneVM {
             EvalValue::String(s) => RuntimeValue::String(s),
             EvalValue::Bool(b) => RuntimeValue::Bool(b),
             EvalValue::Unit => RuntimeValue::Unit,
+            EvalValue::Tuple(items) => RuntimeValue::Tuple(items.into_iter().map(Self::eval_to_rt).collect()),
+            EvalValue::List(items) => RuntimeValue::List(items.into_iter().map(Self::eval_to_rt).collect()),
+            EvalValue::StructInstance { name, fields } => {
+                RuntimeValue::StructInstance {
+                    name,
+                    fields: fields.into_iter().map(|(k, v)| (k, Self::eval_to_rt(v))).collect(),
+                }
+            }
+            EvalValue::EnumInstance { enum_name, variant, args } => {
+                RuntimeValue::EnumInstance {
+                    enum_name,
+                    variant,
+                    args: args.into_iter().map(Self::eval_to_rt).collect(),
+                }
+            }
+            EvalValue::Map(map) => {
+                RuntimeValue::Map(map.into_iter().map(|(k, v)| (k, Self::eval_to_rt(v))).collect())
+            }
             other => panic!("Unsupported EvalValue: {:?}", other),
         }
     }
@@ -137,6 +164,24 @@ impl RuneVM {
             RuntimeValue::Number(n) => EvalValue::Number(*n),
             RuntimeValue::String(s) => EvalValue::String(s.clone()),
             RuntimeValue::Bool(b) => EvalValue::Bool(*b),
+            RuntimeValue::Tuple(items) => EvalValue::Tuple(items.iter().map(Self::rt_to_eval).collect()),
+            RuntimeValue::List(items) => EvalValue::List(items.iter().map(Self::rt_to_eval).collect()),
+            RuntimeValue::StructInstance { name, fields } => {
+                EvalValue::StructInstance {
+                    name: name.clone(),
+                    fields: fields.iter().map(|(k, v)| (k.clone(), Self::rt_to_eval(v))).collect(),
+                }
+            }
+            RuntimeValue::EnumInstance { enum_name, variant, args } => {
+                EvalValue::EnumInstance {
+                    enum_name: enum_name.clone(),
+                    variant: variant.clone(),
+                    args: args.iter().map(Self::rt_to_eval).collect(),
+                }
+            }
+            RuntimeValue::Map(map) => {
+                EvalValue::Map(map.iter().map(|(k, v)| (k.clone(), Self::rt_to_eval(v))).collect())
+            }
             _ => EvalValue::Unit,
         }
     }
@@ -193,6 +238,111 @@ impl RuneVM {
         Ok(EvalValue::Unit)
     }
 
+
+fn eval_value_to_ir_value(v: EvalValue) -> IrValue {
+        match v {
+            EvalValue::Number(n) => IrValue::Number(n),
+            EvalValue::String(s) => IrValue::String(s),
+            EvalValue::Bool(b) => IrValue::Bool(b),
+            EvalValue::Unit => IrValue::Unit,
+            EvalValue::Tuple(items) => IrValue::Tuple(items.into_iter().map(Self::eval_value_to_ir_value).collect()),
+            EvalValue::List(items) => IrValue::List(items.into_iter().map(Self::eval_value_to_ir_value).collect()),
+            EvalValue::EnumInstance { enum_name, variant, args } => {
+                IrValue::EnumInstance {
+                    enum_name,
+                    variant,
+                    args: args.into_iter().map(Self::eval_value_to_ir_value).collect(),
+                }
+            }
+            EvalValue::Map(map) => {
+                IrValue::Map(map.into_iter().map(|(k, v)| (k, Self::eval_value_to_ir_value(v))).collect())
+            }
+            EvalValue::StructInstance { name, fields } => {
+                IrValue::StructInstance {
+                    name,
+                    fields: fields.into_iter().map(|(k, v)| (k, Self::eval_value_to_ir_value(v))).collect(),
+                }
+            }
+            // Lambdas/functions/host-functions/namespaces have no IR-value
+            // representation; the IR VM doesn't support calling through them.
+            EvalValue::Lambda { .. }
+            | EvalValue::Function { .. }
+            | EvalValue::HostFunction(_)
+            | EvalValue::Namespace { .. } => IrValue::Unit,
+        }
+    }
+
+fn ir_value_to_eval_value(v: IrValue) -> EvalValue {
+        match v {
+            IrValue::Number(n) => EvalValue::Number(n),
+            IrValue::String(s) => EvalValue::String(s),
+            IrValue::Bool(b) => EvalValue::Bool(b),
+            IrValue::Unit => EvalValue::Unit,
+            IrValue::Tuple(items) => EvalValue::Tuple(items.into_iter().map(Self::ir_value_to_eval_value).collect()),
+            IrValue::List(items) => EvalValue::List(items.into_iter().map(Self::ir_value_to_eval_value).collect()),
+            IrValue::EnumInstance { enum_name, variant, args } => {
+                EvalValue::EnumInstance {
+                    enum_name,
+                    variant,
+                    args: args.into_iter().map(Self::ir_value_to_eval_value).collect(),
+                }
+            }
+            IrValue::Map(map) => {
+                EvalValue::Map(map.into_iter().map(|(k, v)| (k, Self::ir_value_to_eval_value(v))).collect())
+            }
+            IrValue::StructInstance { name, fields } => {
+                EvalValue::StructInstance {
+                    name,
+                    fields: fields.into_iter().map(|(k, v)| (k, Self::ir_value_to_eval_value(v))).collect(),
+                }
+            }
+        }
+    }
+
+    /// Mounts `name` (a `ui fn`) fresh and returns its rendered tree --
+    /// the top-level nodes in its body, each converted (recursively)
+    /// into a `UiRenderNode` carrying resolved `style`/`hover_style` and
+    /// best-effort `text` (see ui/render.rs, ui/style.rs, ui/builder.rs).
+    ///
+    /// Unlike `call_fn`'s UI branch (`call_ui_fn`, still a stub -- see
+    /// its comment), this is the one path that actually builds a UI
+    /// tree from a named `ui fn`, independent of `run_program`'s
+    /// App/Main auto-mount. It always mounts fresh (a new `UiBuilder`
+    /// over `ui.body`), so repeated calls don't accumulate state.
+    pub fn render_ui_fn(
+        &mut self,
+        name: &str,
+        args: &[EvalValue],
+    ) -> EvalResult<Vec<crate::ui::render::UiRenderNode>> {
+        let ui = match self.ui_functions.get(name).cloned() {
+            Some(ui) => ui,
+            None => {
+                return Err(rune_evaluator::errors::EvalError::InvalidOp {
+                    msg: format!("Unknown ui fn '{}'", name),
+                    span: Span::dummy(),
+                })
+            }
+        };
+
+        self.scopes.push();
+        for (param, arg) in ui.params.iter().zip(args.iter()) {
+            bind_pattern(self, &param.pattern, arg);
+        }
+
+        // Same self-borrow swap as `mount_ui` above.
+        let mut ui_runtime = std::mem::take(&mut self.ui);
+        ui_runtime.mount(&ui, self);
+        self.ui = ui_runtime;
+
+        self.scopes.pop();
+
+        let nodes = match self.ui.root {
+            Some(root) => crate::ui::render::to_render_tree(&self.ui.tree, root).children,
+            None => Vec::new(),
+        };
+
+        Ok(nodes)
+    }
 }
 
 // EvalHost IMPLEMENTATION — used for UI & fallback logic
@@ -292,9 +442,19 @@ impl EvalHost for RuneVM {
 
         // 3) Logic functions -> IR VM
         if self.is_ir_function(name) {
+            let params: Vec<rune_ast::Pattern> = self
+                .logic_functions
+                .get(name)
+                .map(|f| f.params.iter().map(|p| p.pattern.clone()).collect())
+                .unwrap_or_default();
+            let ir_args: Vec<IrValue> = args
+                .iter()
+                .map(|a| Self::eval_value_to_ir_value(a.clone()))
+                .collect();
+
             let mut irvm = IrVM::new(self.ir_program.clone());
-            let out = irvm.run(name);
-            return Ok(EvalValue::Number(out.unwrap_number()));
+            let out = irvm.run_with_args(name, &params, &ir_args);
+            return Ok(Self::ir_value_to_eval_value(out));
         }
 
         // 4) fallback
@@ -575,11 +735,45 @@ impl EvalHost for RuneVM {
     }
 
     fn field_lookup(&mut self, obj: EvalValue, field: &str) -> EvalValue {
-        panic!("Field lookup not supported: obj={:?}, field={}", obj, field);
+        match obj {
+            EvalValue::StructInstance { fields, .. } => {
+                for (name, value) in fields {
+                    if name == field {
+                        return value;
+                    }
+                }
+                panic!("Field '{}' not found in struct", field);
+            }
+            EvalValue::Map(map) => {
+                map.get(field).cloned().unwrap_or(EvalValue::Unit)
+            }
+            other => panic!("Field lookup not supported: obj={:?}, field={}", other, field),
+        }
     }
 
     fn index_lookup(&mut self, obj: EvalValue, idx: EvalValue) -> EvalValue {
-        panic!("Index lookup not supported: obj={:?}, idx={:?}", obj, idx);
+        match (obj, idx) {
+            (EvalValue::List(items), EvalValue::Number(n)) => {
+                let index = n as usize;
+                if index < items.len() {
+                    items[index].clone()
+                } else {
+                    panic!("List index {} out of bounds (len={})", index, items.len());
+                }
+            }
+            (EvalValue::Tuple(items), EvalValue::Number(n)) => {
+                let index = n as usize;
+                if index < items.len() {
+                    items[index].clone()
+                } else {
+                    panic!("Tuple index {} out of bounds (len={})", index, items.len());
+                }
+            }
+            (EvalValue::Map(map), EvalValue::String(key)) => {
+                map.get(&key).cloned().unwrap_or(EvalValue::Unit)
+            }
+            (obj, idx) => panic!("Index lookup not supported: obj={:?}, idx={:?}", obj, idx),
+        }
     }
 
     fn capture_env(&mut self) -> std::rc::Rc<rune_evaluator::env::Env> {

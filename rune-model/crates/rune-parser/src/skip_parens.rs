@@ -1,50 +1,40 @@
-// rune-parser/skip.rs
 
 use rune_lexer::TokenKind;
 use crate::error::PResult;
 use crate::Parser;
 
-impl Parser {    
-    //  SKIP FN DECLARATION (used ONLY IN FIRST PASS)
+impl Parser {
+    /// Skips a function declaration during the symbol-collection pass.
     pub(crate) fn skip_fn_decl(&mut self) -> PResult<()> {
-        // skip optional attributes after "fn"
         while self.stream.peek_kind() == TokenKind::LBracket {
             self.skip_attributes()?;
         }
 
-        // skip name
         if self.stream.peek_kind() == TokenKind::Ident {
             self.stream.next();
         }
 
-        // SKIP <T, U, V>
         self.skip_generic_params()?;
 
-        // skip parameters (...)
         self.skip_parens()?;
 
-        // skip "-> Type"
         if self.stream.consume_if(TokenKind::Arrow) {
             self.skip_type()?;
         }
 
-        // skip "= expr"
         if self.stream.consume_if(TokenKind::Eq) {
             self.skip_expr()?;
             return Ok(());
         }
 
-        // skip { block }
         self.skip_block()
     }
 
-    //  SKIP ATTRIBUTES  [@(a,b,c)]
     pub(crate) fn skip_attributes(&mut self) -> PResult<()> {
         self.stream.expect(TokenKind::LBracket)?; // '['
         self.stream.expect(TokenKind::At)?;       // '@'
         self.stream.expect(TokenKind::LParen)?;   // '('
 
-        // read ident, ident, ident...
         loop {
             self.stream.expect(TokenKind::Ident)?;
             if !self.stream.consume_if(TokenKind::Comma) {
@@ -57,15 +47,12 @@ impl Parser {
         Ok(())
     }
 
-    //  SKIP TYPE (simple, union, generics)
     pub(crate) fn skip_type(&mut self) -> PResult<()> {
         match self.stream.peek_kind() {
             TokenKind::Ident => {
                 let name = self.stream.next().lexeme.clone();
 
-                // union(...)
                 if name == "union" && self.stream.consume_if(TokenKind::LParen) {
-                    // skip union types
                     loop {
                         self.skip_type()?;
                         if self.stream.consume_if(TokenKind::RParen) {
@@ -78,7 +65,6 @@ impl Parser {
             }
 
             TokenKind::LParen => {
-                // unit type "()"
                 self.stream.next();
                 self.stream.expect(TokenKind::RParen)?;
                 return Ok(());

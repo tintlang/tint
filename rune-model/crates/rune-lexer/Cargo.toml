@@ -2,8 +2,8 @@
 name = "rune-lexer"
 version = "0.1.0"
 edition = "2021"
-description = "RuneLang Lexer"
+description = "RuneLang lexer"
 license = "MIT"
 
 [dependencies]
-rune-ast   = { path = "../rune-ast" }
+rune-ast = { path = "../rune-ast" }

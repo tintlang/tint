@@ -119,7 +119,7 @@ pub enum Expr {
         span: Span,
     },
 
-        /// { stmt… }
+    /// A block used as an expression: `{ stmt... }`.
     Block(Block, Span),
 
     Tuple {
@@ -148,7 +148,8 @@ pub enum Expr {
        Borrow {
         kind: BorrowKind,
         target: Box<Expr>,
-        block: Option<Block>,   // borrow(x) { ... }
+        // Some borrow forms may own a scoped block: `borrow(x) { ... }`.
+        block: Option<Block>,
         span: Span,
     },
 

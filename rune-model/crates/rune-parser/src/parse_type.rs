@@ -1,4 +1,3 @@
-// rune-parser/parse_type.rs
 
 use crate::{Parser, error::*};
 use rune_ast::Type;
@@ -9,24 +8,24 @@ impl Parser {
     ///   - Simple: MyType
     ///   - Generic: Vec<T>, Map<K,V>, Option<Result<T,E>>
     pub(crate) fn parse_type(&mut self) -> PResult<Type> {
-        
+
         // parse ()
         if self.stream.consume_if(TokenKind::LParen) {
             self.stream.expect(TokenKind::RParen)?;
             return Ok(Type::Unit);
         }
 
-        let name = self.parse_ident()?; 
+        let name = self.parse_ident()?;
 
-        // Если имя == "union", то начинаем парсить union(...)
+        // `union(...)` is parsed as a dedicated composite type.
         if name == "union" && self.stream.consume_if(TokenKind::LParen) {
 
             let mut types = Vec::new();
 
-            // минимум один тип
+            // A union requires at least one member type.
             types.push(self.parse_type()?);
 
-            // остальные через |
+            // Additional members are separated by `|`.
             while self.stream.consume_if(TokenKind::Pipe) {
                 types.push(self.parse_type()?);
             }

@@ -1,4 +1,3 @@
-// rune-parser/parse_block.rs
 
 use crate::{Parser, error::*};
 use rune_ast::{Block, Span};
@@ -12,7 +11,7 @@ impl Parser {
         let mut stmts = Vec::new();
         let mut last_span = start;
 
-        // Special case — empty block {}
+        // Empty blocks do not contain a trailing expression.
         if self.stream.consume_if(TokenKind::RBrace) {
             return Ok(Block {
                 stmts,

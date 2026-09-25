@@ -1,5 +1,3 @@
-// rune-ast/file.rs
-
 use crate::attr::AttributeList;
 use crate::item::Item;
 use crate::Span;
@@ -8,5 +6,6 @@ use crate::Span;
 pub struct File {
     pub globals: AttributeList,
     pub items: Vec<Item>,
-    pub span: Span,   // можно вычислять по первому/последнему item/attr
+    // Covers the complete file range, including global attributes and items.
+    pub span: Span,
 }

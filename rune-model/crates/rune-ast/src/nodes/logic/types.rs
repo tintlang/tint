@@ -9,6 +9,7 @@ pub enum Type {
 use crate::Span;
 
 impl Type {
+    /// Types do not currently retain source locations, so callers receive a dummy span.
     pub fn span(&self) -> Span {
         Span::dummy()
     }

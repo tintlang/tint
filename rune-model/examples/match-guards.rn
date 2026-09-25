@@ -1,0 +1,15 @@
+fn describe(n) {
+    match n {
+        n if n < 0 => "negative",
+        0 => "zero",
+        n if n < 10 => "small",
+        _ => "big",
+    }
+}
+
+fn main() {
+    print(describe(-5));
+    print(describe(0));
+    print(describe(3));
+    describe(100)
+}

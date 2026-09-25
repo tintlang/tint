@@ -9,5 +9,7 @@ pub mod borrow;
 pub mod resources;
 
 pub mod errors;
+pub mod repl;
+pub mod ui_session;
 
 pub use errors::RuntimeError;

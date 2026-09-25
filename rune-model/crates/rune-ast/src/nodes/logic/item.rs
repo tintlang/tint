@@ -108,7 +108,22 @@ pub struct UiFnDecl {
     pub attributes: AttributeList,
     pub name: String,
     pub params: Vec<Param>,
+    /// `state <ident> = <expr>` declarations at the top of the fn body,
+    /// before any UI node. Evaluated once when a UI session is created
+    /// (see rune-runtime/src/ui_session.rs) and bound into that session's
+    /// persistent variable scope -- reading `<ident>` from `if{}`/`for{}`/
+    /// text later, and a `click||`/`hover_in||`/`hover_out||` handler
+    /// assigning to it, both go through the same scope, which is what
+    /// makes a value set by a click visible in the next render.
+    pub state: Vec<UiStateDecl>,
     pub body: Vec<UiNode>, 
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct UiStateDecl {
+    pub name: String,
+    pub init: Expr,
     pub span: Span,
 }
 

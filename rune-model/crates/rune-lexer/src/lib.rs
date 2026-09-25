@@ -4,17 +4,16 @@ pub mod token;
 pub use lexer::Lexer;
 pub use token::{Token, TokenKind};
 
-pub fn collect_tokens(lexer: &mut Lexer) -> Vec<Token> {
+pub fn collect_tokens(lexer: &mut Lexer<'_>) -> Vec<Token> {
     let mut tokens = Vec::new();
 
     loop {
-        let tok = lexer.next_token();
-        tokens.push(tok.clone());
+        let token = lexer.next_token();
+        let is_eof = token.kind == TokenKind::Eof;
+        tokens.push(token);
 
-        if tok.kind == TokenKind::Eof {
-            break;
+        if is_eof {
+            return tokens;
         }
     }
-
-    tokens
 }

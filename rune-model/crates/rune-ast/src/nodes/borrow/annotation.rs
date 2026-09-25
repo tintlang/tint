@@ -4,6 +4,6 @@ use super::{BorrowKind, LifetimeId};
 pub struct BorrowAnnotation {
     pub kind: BorrowKind,
 
-    // For strict borrow only
+    /// Present only for strict borrows, which are tied to an explicit lifetime region.
     pub lifetime: Option<LifetimeId>,
 }

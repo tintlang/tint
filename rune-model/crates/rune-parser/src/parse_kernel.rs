@@ -22,7 +22,7 @@ pub fn parse_kernel(&mut self) -> PResult<KernelDecl> {
         None
     };
 
-    let body = self.parse_block()?;    
+    let body = self.parse_block()?;
 
     let span = Span::merge(start, body.span);
 

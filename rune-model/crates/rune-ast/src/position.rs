@@ -1,41 +1,57 @@
+/// A source position tracked by byte offset, line, and column.
+///
+/// `offset` is zero-based and measured in UTF-8 bytes. `line` and `column`
+/// are one-based for real source locations; `(0, 0)` is reserved for dummy
+/// positions when no source location is available.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd)]
 pub struct Position {
-    // UTF-8 offset от начала файла (в байтах)
+    /// Zero-based UTF-8 byte offset from the start of the source file.
     pub offset: usize,
-    // (1-based)
+    /// One-based source line.
     pub line: usize,
-    // (1-based, UTF-8 aware)
+    /// One-based character column.
     pub column: usize,
 }
 
 impl Position {
     pub fn new(offset: usize, line: usize, column: usize) -> Self {
-        Self { offset, line, column }
+        Self {
+            offset,
+            line,
+            column,
+        }
     }
 
-    // Позиция-заглушка (например, для ошибок без локации)
+    /// Returns a sentinel position for AST nodes or diagnostics without a location.
     pub fn dummy() -> Self {
-        Position { offset: 0, line: 0, column: 0 }
+        Position {
+            offset: 0,
+            line: 0,
+            column: 0,
+        }
     }
 
-    // Смещение по байтам (используется lexer'ом)
+    /// Advances the byte offset by `byte_len` and the column by one character.
+    ///
+    /// The caller provides the UTF-8 width of the consumed character. Newlines
+    /// must be handled separately with [`Position::new_line`].
     pub fn advance_byte(&mut self, byte_len: usize) {
         self.offset += byte_len;
-        self.column += 1; // колонка увеличивается на символ
+        self.column += 1;
     }
 
-    // Переход на новую строку
+    /// Moves the position to the first column of the next source line.
     pub fn new_line(&mut self) {
         self.line += 1;
         self.column = 1;
     }
 
-    // Проверка dummy-позиции
+    /// Returns `true` when this position is the no-location sentinel.
     pub fn is_dummy(&self) -> bool {
         self.line == 0 && self.column == 0
     }
 
-    // Возвращает позицию после текущей, с учётом символа
+    /// Returns the position immediately after one consumed character.
     pub fn advanced(&self, byte_len: usize) -> Position {
         Position {
             offset: self.offset + byte_len,
@@ -44,7 +60,7 @@ impl Position {
         }
     }
 
-    // Расстояние между позициями в байтах (если в одной строке)
+    /// Returns the byte distance to `other` when both positions are on the same line.
     pub fn distance_to(&self, other: Position) -> Option<usize> {
         if self.line == other.line {
             Some(other.offset.saturating_sub(self.offset))

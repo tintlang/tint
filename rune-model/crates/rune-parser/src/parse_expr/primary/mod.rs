@@ -5,8 +5,8 @@ mod lambda;
 mod array_lit;
 mod paren_or_tuple;
 mod unary;
-mod string; 
-mod map_literal; 
+mod string;
+mod map_literal;
 
 use rune_ast::Span;
 use crate::{Parser, error::*};
@@ -80,7 +80,7 @@ impl Parser {
         if self.stream.peek_kind() == TokenKind::Borrow {
             return self.parse_borrow_expr();
         }
-        
+
         match tok.kind {
             TokenKind::Number     => self.parse_number(),
             TokenKind::String     => self.parse_string_or_interpolated(),
@@ -113,7 +113,7 @@ impl Parser {
                         });
                     }
 
-                    // fallback — allow postfix, treat as namespace Expr
+                    // Fall back to a namespace expression and allow postfix parsing.
                     let expr = Expr::Namespace {
                         base: Box::new(Expr::Ident(enum_name.clone(), tok.span)),
                         item: variant.clone(),
@@ -160,7 +160,7 @@ impl Parser {
 
                 Ok(Expr::Ident(name, span))
             }
-            
+
             _ => Err(ParserError::Message {
                 msg: format!("Unexpected token in expression: {:?}", tok.kind),
                 span: tok.span,

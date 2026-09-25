@@ -110,7 +110,7 @@ impl Parser {
             | Item::ExportEnum(_)
             => SpaceKind::Logic,
 
-            // fallback (никогда сюда не попадём)
+            // Defensive fallback for an otherwise unreachable branch.
             _ => SpaceKind::Logic,
         }
     }

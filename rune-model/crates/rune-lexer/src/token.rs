@@ -1,68 +1,60 @@
-// crates/lexer/src/token.rs
-use rune_ast::{Span, Position};
+use rune_ast::Span;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
-    // Identifiers & Literals
-    Ident,      // abc, foo, x1
-    Number,     // 123, 3.14
-    String,     // "text"
+    // Literals and identifiers.
+    Ident,
+    Number,
+    String,
 
-    // Brackets & Delimiters
-    LBrace,     // {
-    RBrace,     // }
-    LParen,     // (
-    RParen,     // )
-    LAngle,     // <
-    RAngle,     // >
-    LBracket,   // [
-    RBracket,   // ]
+    // Delimiters.
+    LBrace,
+    RBrace,
+    LParen,
+    RParen,
+    LAngle,
+    RAngle,
+    LBracket,
+    RBracket,
+    Comma,
+    Colon,
+    Semicolon,
+    Dot,
+    DotDot,
+    DotDotDot,
 
-    Comma,      // ,
-    Colon,      // :
-    Semicolon,  // ;
-    Dot,        // .
-    DotDot,     // ..
-    DotDotDot,  // ...
+    // Arithmetic and assignment operators.
+    Plus,
+    Minus,
+    Star,
+    Slash,
+    Percent,
+    Eq,
+    PlusEq,
+    MinusEq,
+    StarEq,
+    SlashEq,
 
-    // Arithmetic & Assignment Operators
-    Plus,       // +
-    Minus,      // -
-    Star,       // *
-    Slash,      // /
-    Percent,    // %
+    // Comparison and logical operators.
+    EqEq,
+    NotEq,
+    Less,
+    Greater,
+    LessEq,
+    GreaterEq,
+    AndAnd,
+    OrOr,
+    Pipe,
+    Bang,
 
-    Eq,         // =
+    // Paths and DSL syntax.
+    PathSep,
+    SlashAngle,
+    AngleSlash,
+    FatArrow,
+    Arrow,
 
-    PlusEq,     // +=
-    MinusEq,    // -=
-    StarEq,     // *=
-    SlashEq,    // /=
-
-    // Comparison Operators
-    EqEq,       // ==
-    NotEq,      // !=
-    Less,       // <
-    Greater,    // >
-    LessEq,     // <=
-    GreaterEq,  // >=
-
-    // Logical Operators
-    AndAnd,     // &&
-    OrOr,       // ||
-    Pipe,       // |
-    Bang,       // !
-
-    // Path / Module Operators
-    PathSep,    // ::     (module::item)
-
-    // UI Operators
-    SlashAngle, // />
-    AngleSlash, // </
-    FatArrow,   // =>
-    Arrow,      // ->
-
-    // Keywords — Logic
+    // Control flow and declarations.
     Fn,
     Return,
     Let,
@@ -77,92 +69,63 @@ pub enum TokenKind {
     In,
     Where,
 
-    // Keywords — literals
+    // Literals and patterns.
     True,
     False,
+    Underscore,
 
-    // Wildcard
-    Underscore,  
-
-    // async model
+    // Async execution.
     Async,
     Await,
     Try,
 
-    // struct & enum & impl
+    // User-defined types.
     Struct,
     Enum,
     Impl,
-    SelfKw, // "self"
+    SelfKw,
+    Type,
 
-    Space,
-
-    // GPU
-    Kernel,
-
-    // Ownership model
+    // Ownership.
     Borrow,
     Immut,
     Move,
     Clone,
 
-    // UI DSL
+    // Rune UI and GPU DSLs.
     Ui,
     State,
     Signal,
     Computed,
+    MapLit,
+    Space,
+    Kernel,
+    Rune2d,
 
-    MapLit,  // map
-
-    // type system
-    Type,
-
-    // Keywords — GPU2D DSL
-    Rune2d,  
-
-    // Module system
+    // Modules.
     Module,
     Export,
-    Use,   
+    Use,
 
-    // Misc
-    At,             // @
+    At,
     Eof,
 }
 
 impl TokenKind {
     pub fn binary_precedence(&self) -> u8 {
         match self {
-            // LOGICAL OR
-            TokenKind::OrOr => 1,
-
-            // LOGICAL AND
-            TokenKind::AndAnd => 2,
-
-            // COMPARISON
-            TokenKind::EqEq
-            | TokenKind::NotEq
-            | TokenKind::Less
-            | TokenKind::LessEq
-            | TokenKind::Greater
-            | TokenKind::GreaterEq
-            | TokenKind::LAngle
-            | TokenKind::RAngle => 5,
-
-            // ADD / SUB
-            TokenKind::Plus | TokenKind::Minus => 10,
-
-            // MUL / DIV / MOD
-            TokenKind::Star | TokenKind::Slash | TokenKind::Percent => 20,
-
-            // Assignment / Non-binary tokens — precedence 0
-            TokenKind::Eq
-            | TokenKind::PlusEq
-            | TokenKind::MinusEq
-            | TokenKind::StarEq
-            | TokenKind::SlashEq
-            | TokenKind::Colon => 0,
-
+            Self::OrOr => 1,
+            Self::AndAnd => 2,
+            Self::EqEq
+            | Self::NotEq
+            | Self::Less
+            | Self::LessEq
+            | Self::Greater
+            | Self::GreaterEq
+            | Self::LAngle
+            | Self::RAngle => 5,
+            Self::Plus | Self::Minus => 10,
+            Self::Star | Self::Slash | Self::Percent => 20,
             _ => 0,
         }
     }

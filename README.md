@@ -179,6 +179,6 @@ MIT
 
 ## Author
 
-Mark Bender ([@marekbenderovskyi](https://twitter.com/marekbenderovskyi))
+Mark Bender ([@BenderMare1316](https://x.com/BenderMare1316))
 
 Feedback welcome—especially on syntax design, compiler architecture, or whether you'd use this for something real.

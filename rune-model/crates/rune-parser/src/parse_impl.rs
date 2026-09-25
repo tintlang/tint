@@ -12,7 +12,7 @@ impl Parser {
         if self.stream.consume_if(TokenKind::LAngle) {
             loop {
                 let ident = self.stream.expect_ident()?;
-                generics.push(ident.lexeme.clone());  
+                generics.push(ident.lexeme.clone());
 
                 if self.stream.consume_if(TokenKind::Comma) {
                     continue;
@@ -30,7 +30,7 @@ impl Parser {
 
         let mut methods = Vec::new();
         while !self.stream.consume_if(TokenKind::RBrace) {
-            methods.push(self.parse_fn_decl()?); 
+            methods.push(self.parse_fn_decl()?);
         }
 
         Ok(Item::Impl(ImplBlock {
@@ -39,5 +39,5 @@ impl Parser {
             target,
             methods,
         }))
-    } 
+    }
 }

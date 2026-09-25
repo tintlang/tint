@@ -1,4 +1,3 @@
-// rune-parser/parse_fn.rs
 
 use crate::{Parser};
 use crate::error::*;
@@ -41,12 +40,12 @@ impl Parser {
         }
 
         // NAME
-        let name = self.parse_ident()?; 
+        let name = self.parse_ident()?;
 
-        // GENERICS: <T, U> 
-        let generics = self.parse_optional_generics()?; 
+        // GENERICS: <T, U>
+        let generics = self.parse_optional_generics()?;
 
-        // PARAMETERS (ПАТТЕРНЫ) 
+        // Parameters are patterns, not only identifiers.
         let params = self.parse_fn_params()?;
 
         // -------- RETURN TYPE --------
@@ -64,7 +63,7 @@ impl Parser {
             return Ok(FnDecl {
                 attributes: local_attrs,
                 name,
-                generics, 
+                generics,
                 params,
                 ret_ty,
                 async_: async_span.is_some(),
@@ -81,7 +80,7 @@ impl Parser {
         Ok(FnDecl {
             attributes: local_attrs,
             name,
-            generics, 
+            generics,
             params,
             ret_ty,
             async_: async_span.is_some(),

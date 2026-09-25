@@ -14,7 +14,12 @@ pub enum Value {
     Unit,
 
     Tuple(Vec<Value>),
-    List(Vec<Value>),  
+    List(Vec<Value>),
+
+    StructInstance {
+        name: String,
+        fields: Vec<(String, Value)>,
+    },  
 
     EnumInstance {
         enum_name: String,

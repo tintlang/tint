@@ -1,4 +1,3 @@
-// rune-parser/parse_expr/primary/number.rs
 
 use crate::{Parser, error::*};
 use rune_ast::Expr;

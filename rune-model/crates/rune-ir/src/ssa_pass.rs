@@ -154,6 +154,40 @@ fn used_values(instr: &Instr) -> Vec<u32> {
         Instr::Unary { src, .. } => vec![*src],
         Instr::StoreLocal { src, .. } => vec![*src],
         Instr::Return(id) => vec![*id],
-        _ => vec![],
+        Instr::Tuple { items, .. } => items.clone(),
+        Instr::Array { items, .. } => items.clone(),
+        Instr::StructInit { fields, .. } => fields.iter().map(|(_, v)| *v).collect(),
+        Instr::StructUpdate { base, updates, .. } => {
+            let mut result = vec![*base];
+            result.extend(updates.iter().map(|(_, v)| *v));
+            result
+        }
+        Instr::VariantInit { fields, .. } => fields.iter().map(|(_, v)| *v).collect(),
+        Instr::Index { arr, index, .. } => vec![*arr, *index],
+        Instr::FieldAccess { base, .. } => vec![*base],
+        Instr::NamespaceAccess { base, .. } => vec![*base],
+        Instr::Call { func, args, .. } => {
+            let mut result = vec![*func];
+            result.extend(args.clone());
+            result
+        }
+        Instr::Match { scrutinee, arms, .. } => {
+            let mut used = vec![*scrutinee];
+            for (_, guard, result_id) in arms {
+                if let Some(g) = guard {
+                    used.push(*g);
+                }
+                used.push(*result_id);
+            }
+            used
+        }
+        Instr::MapInit { entries, .. } => entries.iter().map(|(_, v)| *v).collect(),
+        Instr::MapAccess { map, .. } => vec![*map],
+        Instr::FieldStore { base, src, .. } => vec![*base, *src],
+        Instr::IndexStore { arr, index, src, .. } => vec![*arr, *index, *src],
+        Instr::TupleExtract { tuple, .. } => vec![*tuple],
+        Instr::LoadLocal { .. } => vec![],
+        Instr::Const { .. } => vec![],
     }
 }
+

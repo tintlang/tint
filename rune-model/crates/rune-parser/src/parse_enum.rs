@@ -1,4 +1,3 @@
-// rune-parser/parse_enum.rs
 use crate::{Parser};
 use crate::error::*;
 use rune_ast::*;
@@ -32,7 +31,7 @@ impl Parser {
             // empty variant {}
             if self.stream.consume_if(TokenKind::RBrace) {
                 variants.push(EnumVariant::Struct(variant_name, fields));
-                continue; // идём парсить следующий variant
+                continue;
             }
         loop {
             let field_name = self.parse_ident()?;
@@ -86,7 +85,7 @@ impl Parser {
         EnumVariant::Struct(variant_name, fields)
     }
 
-                // Tuple variants -> запрещены
+                // Tuple-style enum variants are intentionally unsupported here.
                 TokenKind::LParen => {
                     return self.stream.error_here(
                         "Tuple variants like Foo(T) are not allowed in Rune"

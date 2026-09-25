@@ -246,3 +246,81 @@ impl Default for RuneRepl {
         Self::new()
     }
 }
+
+#[derive(Serialize, Default)]
+pub struct UiSessionResult {
+    pub ok: bool,
+    pub tree: Vec<rune_runtime::ui::render::UiRenderNode>,
+    pub error: Option<String>,
+}
+
+/// A stateful UI session for the sandbox's preview pane, backing real
+/// `click||`/`hover_in||`/`hover_out||` interactivity -- unlike
+/// `render_ui()` above, which builds a fresh, throwaway `RuneVM` on every
+/// call (fine for "re-render on every keystroke", useless for "remember
+/// that the popover is open"), this wraps a single
+/// `rune_runtime::ui_session::UiSession` that stays alive for the
+/// session's lifetime. See that module's doc comment for exactly how
+/// `state` persistence and handler dispatch work under here.
+///
+/// Construction can fail (bad source, unknown `ui_fn_name`) without a JS
+/// exception -- the failure is stored and reported from `tree()`/
+/// `dispatch()` instead, so `new UiSession(...)` itself never throws.
+#[wasm_bindgen]
+pub struct UiSession {
+    inner: Option<rune_runtime::ui_session::UiSession>,
+    init_error: Option<String>,
+}
+
+#[wasm_bindgen]
+impl UiSession {
+    #[wasm_bindgen(constructor)]
+    pub fn new(source: &str, ui_fn_name: &str) -> UiSession {
+        match rune_runtime::ui_session::UiSession::new(source, ui_fn_name) {
+            Ok(session) => UiSession {
+                inner: Some(session),
+                init_error: None,
+            },
+            Err(e) => UiSession {
+                inner: None,
+                init_error: Some(e),
+            },
+        }
+    }
+
+    /// The session's current tree (a fresh build, not cached).
+    pub fn tree(&mut self) -> JsValue {
+        let mut result = UiSessionResult::default();
+        match &mut self.inner {
+            None => result.error = self.init_error.clone(),
+            Some(session) => match session.render() {
+                Ok(tree) => {
+                    result.ok = true;
+                    result.tree = tree;
+                }
+                Err(e) => result.error = Some(e),
+            },
+        }
+        serde_wasm_bindgen::to_value(&result).unwrap_or(JsValue::NULL)
+    }
+
+    /// Runs `handler` (a plain `fn`, no args) against this session's
+    /// persistent state, then returns the rebuilt tree -- see
+    /// `rune_runtime::ui_session`'s doc comment for why this needs a
+    /// real, persistent session rather than a fresh `render_ui()` call.
+    pub fn dispatch(&mut self, handler: &str) -> JsValue {
+        let mut result = UiSessionResult::default();
+        match &mut self.inner {
+            None => result.error = self.init_error.clone(),
+            Some(session) => match session.dispatch(handler) {
+                Ok(tree) => {
+                    result.ok = true;
+                    result.tree = tree;
+                }
+                Err(e) => result.error = Some(e),
+            },
+        }
+        serde_wasm_bindgen::to_value(&result).unwrap_or(JsValue::NULL)
+    }
+}
+

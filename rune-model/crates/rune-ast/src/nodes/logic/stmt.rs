@@ -32,7 +32,7 @@ pub enum Stmt {
     Let {
         pattern: Pattern,
         ty: Option<Type>,   // let a: i32 = 10
-        init: LetInit,      // (=expr) или {expr}
+        init: LetInit,      // Either `= expr` or Rune-style `{expr}` initialization.
         span: Span,
     },
 

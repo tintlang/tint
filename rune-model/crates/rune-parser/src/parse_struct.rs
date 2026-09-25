@@ -1,4 +1,3 @@
-// rune-parser/parse_struct.rs
 
 use crate::{Parser, error::*};
 use rune_ast::{StructDecl, StructField, StructMember, KitRef, Span};
@@ -10,7 +9,7 @@ impl Parser {
     fn parse_struct_member(&mut self) -> PResult<StructMember> {
         let tok = self.stream.peek();
 
-        // CASE 1 — KIT reference with optional { body }
+        // Kit references may optionally include a body.
         if tok.kind == TokenKind::At {
             let start = self.stream.next().span; // eaten '@'
 
@@ -22,7 +21,7 @@ impl Parser {
                 path.push(self.parse_ident()?);
             }
 
-            // parse optional body { ... } 
+            // parse optional body { ... }
             let body = if self.stream.consume_if(TokenKind::LBrace) {
                 let mut members = Vec::new();
 
@@ -48,12 +47,12 @@ impl Parser {
             }));
         }
 
-        // CASE 2 — Normal struct field
+        // Otherwise parse a regular struct field.
         let field = self.parse_struct_field()?;
         Ok(StructMember::Field(field))
     }
 
-    // Parse struct { … }
+    // Parse the struct body.
     pub(crate) fn parse_struct(&mut self) -> PResult<StructDecl> {
         let start = self.stream.expect(TokenKind::Struct)?.span;
 

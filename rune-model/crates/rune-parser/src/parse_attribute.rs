@@ -30,7 +30,7 @@ impl Parser {
 
             list.items.push(Attribute { name: full_name });
 
-            // comma? if no — break
+            // Stop when the attribute list is not followed by a comma.
             if !self.stream.consume_if(TokenKind::Comma) {
                 break;
             }
@@ -42,4 +42,4 @@ impl Parser {
         Ok(list)
     }
 }
-     
+

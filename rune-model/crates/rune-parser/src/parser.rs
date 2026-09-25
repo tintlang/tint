@@ -1,9 +1,6 @@
-// rune-parser/parser.rs
-
 use rune_lexer::{Token, TokenKind};
-use crate::{ token_stream::TokenStream, error::* };
+use crate::{error::*, symbols::Symbols, token_stream::TokenStream};
 use rune_ast::*;
-use crate::symbols::Symbols;
 
 pub struct Parser {
     pub(crate) stream: TokenStream,
@@ -19,7 +16,7 @@ impl Parser {
             in_pattern: false,
         }
     }
-    
+
     fn clone_for_first_pass(&self) -> Self {
         Self {
             stream: self.stream.clone_with_reset(),
@@ -30,7 +27,7 @@ impl Parser {
 
     // PROGRAM
     pub fn parse_program(&mut self) -> PResult<Program> {
-        // FIRST PASS — Collect function/type names
+        // Collect declaration names first so later parsing can disambiguate named calls and types.
         {
             let mut shadow = self.clone_for_first_pass();
 
@@ -39,7 +36,7 @@ impl Parser {
                     TokenKind::Fn => {
                         shadow.stream.next();
                         while shadow.stream.peek_kind() == TokenKind::LBracket {
-                            shadow.skip_attributes()?;  
+                            shadow.skip_attributes()?;
                         }
                         let name = shadow.parse_ident()?;
                         self.symbols.functions.insert(name);
@@ -61,22 +58,19 @@ impl Parser {
                     }
 
                     _ => {
-                        shadow.stream.next(); // пропускаем токены
+                        shadow.stream.next();
                     }
                 }
             }
         }
 
-        // SECOND PASS — реальный парсинг
         let mut items = Vec::new();
 
-        // GLOBAL ATTRIBUTES
         let mut globals = AttributeList::empty();
         while let Some(a) = self.try_parse_attributes()? {
             globals.extend(a);
         }
 
-        // ITEMS
         while self.stream.peek_kind() != TokenKind::Eof {
             items.push(self.parse_item()?);
         }
@@ -100,13 +94,11 @@ impl Parser {
 
             TokenKind::Export => self.parse_export_item(),
 
-            // FUNCTION or ASYNC FUNCTION
             TokenKind::Fn | TokenKind::Async => {
                 let decl = self.parse_fn_decl()?;
                 Ok(Item::Fn(decl))
             }
 
-            // UI "fn" (different keyword)
             TokenKind::Ui => {
                 let u = self.parse_ui_fn()?;
                 Ok(Item::UiFn(u))
@@ -114,19 +106,16 @@ impl Parser {
 
             TokenKind::Kernel => Ok(Item::Kernel(self.parse_kernel()?)),
 
-            // STRUCT DECL
             TokenKind::Struct => {
                 let decl = self.parse_struct()?;
                 Ok(Item::Struct(decl))
             }
 
-            // ENUM DECL
             TokenKind::Enum => {
                 let decl = self.parse_enum()?;
                 Ok(Item::Enum(decl))
             }
 
-            // LATER SUPPORT:
             TokenKind::Module => {
                 let m = self.parse_mod()?;
                 return Ok(Item::Mod(m));
@@ -137,20 +126,12 @@ impl Parser {
                 return Ok(Item::Use(u));
             }
 
-            TokenKind::Impl => {
-                Err(ParserError::Message {
-                    msg: "`impl` blocks not implemented yet".into(),
-                    span: self.stream.peek().span,
-                })
-            }
-
             TokenKind::Let => {
                 let start = self.stream.next().span;
                 let stmt = self.parse_let_stmt(start)?;
                 Ok(Item::GlobalLet(stmt))
             }
 
-            // FALLBACK ERROR
             other => Err(ParserError::Message {
                 msg: format!("Unexpected token {:?}, expected fn/ui/struct/enum", other),
                 span: self.stream.peek().span,
@@ -202,10 +183,9 @@ pub(crate) fn parse_mod(&mut self) -> PResult<ModDecl> {
         Parser::new(tokens)
     }
 
-    /// Parse function parameters:  (name: Type, name: Type, ...)
+    /// Parses function parameters, including destructuring patterns and brace defaults.
    pub(crate) fn parse_params(&mut self) -> PResult<Vec<Param>> {
         let mut params = Vec::new();
-        let mut seen_default = false;
 
         // empty params: ()
         if self.stream.check(TokenKind::RParen) {
@@ -213,25 +193,19 @@ pub(crate) fn parse_mod(&mut self) -> PResult<ModDecl> {
         }
 
         loop {
-            // PATTERN (а не имя)
             self.in_pattern = true;
-            let pattern = self.parse_pattern()?;    // <-- ВАЖНО
+            let pattern = self.parse_pattern()?;
             self.in_pattern = false;
 
-            // optional ": type"
             let ty = if self.stream.consume_if(TokenKind::Colon) {
                 Some(self.parse_type()?)
             } else {
                 None
             };
 
-            // default: {expr}
             let default = if self.stream.consume_if(TokenKind::LBrace) {
                 let expr = self.parse_expr()?;
                 self.stream.expect(TokenKind::RBrace)?;
-                seen_default = true;
-
-                // NOW CORRECT:
                 match &pattern {
                     Pattern::Ident(_, _) => Some(DefaultValue::Single(expr)),
                     _ => Some(DefaultValue::Broadcast(expr)),
@@ -242,7 +216,6 @@ pub(crate) fn parse_mod(&mut self) -> PResult<ModDecl> {
 
             params.push(Param { pattern, ty, default });
 
-            // comma?
             if !self.stream.consume_if(TokenKind::Comma) {
                 break;
             }
@@ -250,7 +223,7 @@ pub(crate) fn parse_mod(&mut self) -> PResult<ModDecl> {
 
         Ok(params)
     }
-    
+
     pub fn error<T>(&self, msg: impl Into<String>) -> PResult<T> {
         let span = self.stream.peek().span;
         Err(crate::error::ParserError::Message {

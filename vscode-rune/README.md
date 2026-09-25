@@ -1,6 +1,6 @@
 # Rune Language for VSCode
 
-Syntax highlighting and development tools for the [Rune](https://github.com/marekbender/runelang) UI programming language.
+Syntax highlighting and development tools for the [Rune](https://github.com/hawerz/runelang) UI programming language.
 
 ## Features
 

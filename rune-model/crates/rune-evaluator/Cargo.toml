@@ -2,7 +2,7 @@
 name = "rune-evaluator"
 version = "0.1.0"
 edition = "2021"
-description = "RuneLang AST"
+description = "RuneLang evaluator runtime"
 license = "MIT"
 
 [dependencies]

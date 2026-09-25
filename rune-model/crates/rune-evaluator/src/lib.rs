@@ -1,20 +1,12 @@
-// rune-evaluator/lib.rs
+pub mod evaluator;
+pub mod runtime;
+pub mod utils;
+pub mod output;
 
-pub mod value;
-pub mod env;
-pub mod call;
-pub mod eval_expr;
-pub mod eval_stmt;
-pub mod eval_fn;
-pub mod eval_block;
-pub mod errors;
-pub mod eval_host;
-pub mod host_vm;
-pub mod pattern_match;
-pub mod eval_pattern;
+pub use evaluator::{block as eval_block, expr as eval_expr, function as eval_fn, host as eval_host, pattern as eval_pattern, stmt as eval_stmt};
+pub use runtime::{env, host_vm, value};
+pub use utils::{call, errors, pattern_match};
 
-
-pub use eval_host::EvalHost;
-pub use value::Value;
-pub use env::Env;
-pub use pattern_match::match_pattern;
+pub use evaluator::host::EvalHost;
+pub use runtime::{env::Env, value::Value};
+pub use utils::pattern_match::match_pattern;

@@ -14,5 +14,6 @@ fn factorial(n) {
 }
 
 fn main() {
+    print(sum_of_squares(3, 4));
     sum_of_squares(3, 4) + factorial(5)
 }

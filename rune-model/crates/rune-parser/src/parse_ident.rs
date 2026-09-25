@@ -1,4 +1,3 @@
-// rune-parser/parse_ident.rs
 
 use rune_lexer::{TokenKind, Token};
 use crate::{Parser, error::*};
@@ -10,7 +9,7 @@ impl Parser {
         let tok: Token = self.stream.next_owned();
 
         match tok.kind {
-            TokenKind::Ident 
+            TokenKind::Ident
             | TokenKind::SelfKw => {
                 return Ok(tok.lexeme.clone());
             }

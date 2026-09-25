@@ -1,4 +1,3 @@
-// rune-parser/parse_struct.rs
 
 use crate::{Parser, error::*};
 use rune_lexer::TokenKind;

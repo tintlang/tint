@@ -1,4 +1,3 @@
-// rune-parser/error.rs
 
 use rune_ast::Span;
 use rune_lexer::{TokenKind};

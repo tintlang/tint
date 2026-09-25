@@ -1,4 +1,3 @@
-// rune-parser/parse_expr/struct_init.rs
 
 use crate::{Parser, error::*};
 use rune_ast::{Expr, StructInitField, Span};
@@ -66,9 +65,9 @@ impl Parser {
                         }
 
 
-                        self.stream.expect(TokenKind::LBrace)?;   // открыть { 
-                        let expr = self.parse_expr()?;           // parse_expr съедает содержимое, НО НЕ ЗАКРЫВАЮЩУЮ }
-                        self.stream.expect(TokenKind::RBrace)?;  // закрыть }
+                        self.stream.expect(TokenKind::LBrace)?;
+                        let expr = self.parse_expr()?;           // `parse_expr` stops before the closing brace.
+                        self.stream.expect(TokenKind::RBrace)?;
                         fields.push(StructInitField::Rune {
                             name: field_name,
                             expr,

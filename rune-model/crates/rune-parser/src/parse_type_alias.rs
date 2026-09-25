@@ -1,4 +1,3 @@
-// rune-parser/parse_type_alias.rs
 
 use crate::{Parser};
 use crate::error::*;
@@ -20,7 +19,7 @@ impl Parser {
         let ty = self.parse_type()?;
         let end = ty.span();
 
-        // optional semicolon (можно разрешить, можно запретить)
+        // A trailing semicolon is optional.
         self.stream.consume_if(TokenKind::Semicolon);
 
         Ok(Item::TypeAlias(TypeAliasDecl {
