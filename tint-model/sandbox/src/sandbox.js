@@ -23,6 +23,7 @@ let shellSession;
 let previewSession;
 let editorView;
 let lastCodePanel;
+let lastPreviewMount;
 let updateTimer;
 let shellTheme = "dark";
 
@@ -82,7 +83,7 @@ function bindResizer(resizer, workspace, panel) {
 const editorTheme = EditorView.theme({
   "&": { height: "100%", backgroundColor: "transparent", color: "inherit" },
   ".cm-content": { fontFamily: "inherit", fontSize: "inherit", lineHeight: "1.7", padding: "0" },
-  ".cm-gutters": { backgroundColor: "transparent", color: "inherit", border: "none" },
+  ".cm-gutters": { backgroundColor: "#141414", color: "inherit", border: "none" },
   ".cm-activeLine": { backgroundColor: "rgba(255,255,255,0.04)" },
   ".cm-activeLineGutter": { backgroundColor: "transparent" },
   "&.cm-focused": { outline: "none" },
@@ -93,7 +94,7 @@ const editorTheme = EditorView.theme({
 const editorLightTheme = EditorView.theme({
   "&": { height: "100%", backgroundColor: "transparent", color: "inherit" },
   ".cm-content": { fontFamily: "inherit", fontSize: "inherit", lineHeight: "1.7", padding: "0" },
-  ".cm-gutters": { backgroundColor: "transparent", color: "inherit", border: "none" },
+  ".cm-gutters": { backgroundColor: "#f5f5f5", color: "inherit", border: "none" },
   ".cm-activeLine": { backgroundColor: "rgba(0,0,0,0.04)" },
   ".cm-activeLineGutter": { backgroundColor: "transparent" },
   "&.cm-focused": { outline: "none" },
@@ -289,6 +290,20 @@ function remount() {
   if (workspace && resizer && previewPanel && !resizer.dataset.resizeBound) {
     resizer.dataset.resizeBound = "true";
     bindResizer(resizer, workspace, previewPanel);
+  }
+  // CheckBtn/RunBtn also carry a click||check_code / click||run_code
+  // binding in the .tn shell source (see sandbox.tn) so DomSession treats
+  // them as a real dispatch and rebuilds the clicked subtree -- even
+  // though check_code/run_code are no-op Tint fns and the actual
+  // check/run work happens in checkCode()/runCode() above. That rebuild
+  // can recreate PreviewPanel/PreviewMount as fresh, empty DOM nodes,
+  // orphaning whatever renderPreview() had appended into the old ones
+  // (renderShellTheme() already re-renders the preview after ITS OWN
+  // intentional rebuild; this covers the same case for an implicit one).
+  const previewMount = root.querySelector('[data-tag="PreviewMount"]');
+  if (previewMount && previewMount !== lastPreviewMount) {
+    lastPreviewMount = previewMount;
+    if (previewSession) renderPreview(previewSession.tree()?.tree || []);
   }
   setEditorTheme();
 }

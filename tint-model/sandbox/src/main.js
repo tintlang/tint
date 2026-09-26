@@ -42,14 +42,14 @@ const INITIAL_SNIPPET = `Card {
 const editorTheme = EditorView.theme({
   "&": { height: "100%", backgroundColor: "transparent", color: "inherit" },
   ".cm-content": { fontFamily: "inherit", fontSize: "inherit", lineHeight: "1.7", padding: "0" },
-  ".cm-gutters": { backgroundColor: "transparent", color: "inherit", border: "none" }, ".cm-activeLine": { backgroundColor: "rgba(255,255,255,0.04)" },
+  ".cm-gutters": { backgroundColor: "#141414", color: "inherit", border: "none" }, ".cm-activeLine": { backgroundColor: "rgba(255,255,255,0.04)" },
   ".cm-activeLineGutter": { backgroundColor: "transparent" }, "&.cm-focused": { outline: "none" }, ".cm-scroller": { overflow: "auto" },
   ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": { backgroundColor: "rgba(108,92,231,0.35)" },
 }, { dark: true });
 const editorLightTheme = EditorView.theme({
   "&": { height: "100%", backgroundColor: "transparent", color: "inherit" },
   ".cm-content": { fontFamily: "inherit", fontSize: "inherit", lineHeight: "1.7", padding: "0" },
-  ".cm-gutters": { backgroundColor: "transparent", color: "inherit", border: "none" }, ".cm-activeLine": { backgroundColor: "rgba(0,0,0,0.04)" },
+  ".cm-gutters": { backgroundColor: "#f5f5f5", color: "inherit", border: "none" }, ".cm-activeLine": { backgroundColor: "rgba(0,0,0,0.04)" },
   ".cm-activeLineGutter": { backgroundColor: "transparent" }, "&.cm-focused": { outline: "none" }, ".cm-scroller": { overflow: "auto" },
   ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": { backgroundColor: "rgba(108,92,231,0.18)" },
 }, { dark: false });
