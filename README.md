@@ -24,7 +24,7 @@ ui fn App() {
 - **Layout primitives**: flex direction and a typed `grid::{ columns, rows, gap }` modifier with `minmax(0, 1fr)`-friendly tracks
 - **Internal routing**: `route||"/path"` renders as a normal browser link, including `/` and `/sandbox`
 - **Direct DOM rendering**: `DomSession` renders Tint through Rust/`web-sys`, without a UI framework
-- **Interactive sandbox**: Edit, compile, and preview in the browser with Tint, CodeMirror 6, and WASM
+- **Interactive sandbox**: Edit, compile, and preview in the browser with Tint, CodeMirror 6, and WASM (the sandbox UI itself is currently mid-rework and will land as a deliberately simple workbench, not a full IDE -- see `sandbox/README.md` for status)
 - **CLI tools**: Check syntax, run, build to HTML
 - **Native Rust interop**: `TintVM::register_native("name", |args| ...)` registers a real Rust closure that `.tn` source calls directly by name -- no Rust syntax inside the language, no reimplementing rustc's borrow checker, just an ordinary Rust function called across the boundary (see `tint run <file> now_ms`, a demo native in `tint-cli`)
 - **VSCode extension**: Syntax highlighting + build commands
@@ -70,6 +70,13 @@ npm run dev:all
 ```
 
 Open browser to `http://localhost:5173` and edit code live.
+
+> **Status:** the sandbox UI is currently being reworked -- migrating from a
+> single `sandbox.tn` file to a `src/sandbox/` directory of Tint files
+> (`workbench.tn`, `actions.tn`, `filesystem.tn`, `editor-pane.tn`,
+> `index.tn`). The sandbox will keep existing, just deliberately simple --
+> not a full IDE. It is not confirmed working end-to-end yet; see
+> `sandbox/README.md` for the current state before relying on it.
 
 ## Project Structure
 

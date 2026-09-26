@@ -1,5 +1,16 @@
 # Tint Sandbox
 
+> **Status: mid-rework, not confirmed working end-to-end.** The workbench is
+> being migrated from a single `src/sandbox.tn` file to the `src/sandbox/`
+> directory of Tint files listed below (`index.tn`, `workbench.tn`,
+> `actions.tn`, `filesystem.tn`, `editor-pane.tn`). `npm run dev` starts the
+> Vite dev server fine, but the new workbench pieces haven't been verified to
+> actually render/work together yet -- treat anything below as the intended
+> shape once the rework is finished, not a guarantee of the current state.
+> The sandbox itself isn't going away -- the end result is meant to be
+> deliberately simple (edit/run/preview), not a full IDE, so don't expect
+> file trees, multi-tab editing, or similar beyond what's already listed here.
+
 The sandbox workbench is itself rendered by Tint through `DomSession`. It has
 one Tint topbar, a CodeMirror editor, a live Tint UI preview, and a small output
 area. There is no Svelte application or sidebar.

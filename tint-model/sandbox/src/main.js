@@ -4,10 +4,11 @@ import landingSource from "./main.tn";
 import { Compartment, EditorState } from "@codemirror/state";
 import { EditorView, keymap, lineNumbers, highlightActiveLine } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
-import { bracketMatching, indentOnInput, syntaxHighlighting, HighlightStyle } from "@codemirror/language";
+import { bracketMatching, indentOnInput, syntaxHighlighting } from "@codemirror/language";
 import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
-import { tags } from "@lezer/highlight";
 import { tintLanguage } from "./lib/tintLanguage.js";
+import { darkHighlightColors, lightHighlightColors } from "./lib/tintHighlight.js";
+import { loadStoredTheme, storeTheme } from "./lib/themeStorage.js";
 
 if (window.location.pathname === "/sandbox") window.location.replace("/app.html?route=/sandbox");
 
@@ -37,19 +38,6 @@ const INITIAL_SNIPPET = `Card {
         }
     }
 }`;
-
-const darkHighlightColors = HighlightStyle.define([
-  { tag: [tags.keyword, tags.operatorKeyword], color: "#a29bfe" }, { tag: tags.string, color: "#8fd19e" },
-  { tag: [tags.number, tags.atom, tags.bool], color: "#f5a623" }, { tag: tags.typeName, color: "#7db8ff" },
-  { tag: tags.function(tags.variableName), color: "#7db8ff" }, { tag: tags.comment, color: "#7a7a7a", fontStyle: "italic" },
-  { tag: [tags.operator, tags.punctuation], color: "#9a9a9a" },
-]);
-const lightHighlightColors = HighlightStyle.define([
-  { tag: [tags.keyword, tags.operatorKeyword], color: "#6c5ce7" }, { tag: tags.string, color: "#218739" },
-  { tag: [tags.number, tags.atom, tags.bool], color: "#b45309" }, { tag: tags.typeName, color: "#1769aa" },
-  { tag: tags.function(tags.variableName), color: "#1769aa" }, { tag: tags.comment, color: "#777777", fontStyle: "italic" },
-  { tag: [tags.operator, tags.punctuation], color: "#777777" },
-]);
 
 const editorTheme = EditorView.theme({
   "&": { height: "100%", backgroundColor: "transparent", color: "inherit" },
@@ -87,10 +75,13 @@ function startPreviewSession(panel, body) {
   showPreviewError(previewSession.rerender());
 }
 
+const initialTheme = loadStoredTheme();
+let editorIsDark = initialTheme !== "light";
+
 const editorView = new EditorView({ state: EditorState.create({ doc: INITIAL_SNIPPET, extensions: [
   lineNumbers(), history(), highlightActiveLine(), bracketMatching(), closeBrackets(), indentOnInput(), tintLanguage(),
-  editorThemeCompartment.of(editorTheme), editorSyntaxCompartment.of(syntaxHighlighting(darkHighlightColors)),
-  keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, indentWithTab]), editorTheme,
+  editorThemeCompartment.of(editorIsDark ? editorTheme : editorLightTheme), editorSyntaxCompartment.of(syntaxHighlighting(editorIsDark ? darkHighlightColors : lightHighlightColors)),
+  keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, indentWithTab]),
   EditorView.updateListener.of((update) => {
     if (!update.docChanged) return;
     clearTimeout(debounceHandle);
@@ -101,13 +92,13 @@ editorView.dom.style.flex = "1 1 auto";
 editorView.dom.style.minHeight = "0";
 editorView.dom.style.overflow = "hidden";
 
-let editorIsDark = true;
 function syncEditorAppearance() {
   const page = root.querySelector('[data-tag="Page"]');
   if (!page) return;
   const nextIsDark = page.style.backgroundColor === "rgb(10, 10, 10)" || page.style.backgroundColor === "#0a0a0a";
   if (nextIsDark === editorIsDark) return;
   editorIsDark = nextIsDark;
+  storeTheme(editorIsDark ? "dark" : "light");
   editorView.dispatch({ effects: [editorThemeCompartment.reconfigure(editorIsDark ? editorTheme : editorLightTheme), editorSyntaxCompartment.reconfigure(syntaxHighlighting(editorIsDark ? darkHighlightColors : lightHighlightColors))] });
 }
 let lastCodePanel = null;
@@ -122,7 +113,10 @@ function remountDemoIfNeeded() {
 new MutationObserver(() => { remountDemoIfNeeded(); syncEditorAppearance(); }).observe(root, { childList: true, subtree: true });
 
 initWasm().then(() => {
-  const session = new DomSession(landingSource, "Landing", "root");
+  const initialLandingSource = initialTheme === "dark"
+    ? landingSource
+    : landingSource.replace('state theme = "dark"', `state theme = "${initialTheme}"`);
+  const session = new DomSession(initialLandingSource, "Landing", "root");
   const err = session.rerender();
   if (err) console.error("Tint landing render error:", err);
 }).catch((e) => console.error("Failed to render the landing page:", e));

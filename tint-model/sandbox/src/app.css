@@ -29,28 +29,43 @@ body { background: var(--bg); color: var(--text); font-family: Inter, -apple-sys
 [data-tag="Workspace"] { min-height: 0; height: 100%; overflow: hidden; }
 [data-tag="CodeColumn"], [data-tag="PreviewPanel"] { min-width: 0; min-height: 0; height: 100%; }
 [data-tag="CodeColumn"] { flex: 1 1 0; }
+[data-tag="Resizer"] { cursor: col-resize; touch-action: none; background: var(--border); }
+[data-tag="Resizer"]:hover, body.tint-resizing [data-tag="Resizer"] { background: var(--dim); }
+body.tint-resizing { cursor: col-resize; user-select: none; }
+body.tint-resizing * { user-select: none; }
 [data-tag="CodeHeader"] { flex: none; }
 [data-tag="FileName"] { flex: 1; }
 [data-tag="CheckBtn"], [data-tag="RunBtn"] { cursor: pointer; border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; background: var(--panel); }
+[data-tag="CheckBtn"]:hover { background: #2b2b2b; }
+[data-theme="light"] [data-tag="CheckBtn"]:hover { background: #e2e2e2; }
 [data-tag="RunBtn"] { background: var(--accent); color: #ffffff; border-color: transparent; }
+[data-tag="RunBtn"]:hover { background: #ffffff; }
+[data-theme="light"] [data-tag="RunBtn"] { background: #e2e2e2; color: #353849; }
+[data-theme="light"] [data-tag="RunBtn"]:hover { background: #cfcfd6; }
 [data-tag="OutputPanel"] { flex: 0 0 58px; }
+[data-tag="OutputText"] { flex: 1 1 auto; min-width: 0; }
 [data-tag="CodePanel"] { min-height: 0; height: 0; flex: 1 1 0; overflow: hidden; }
 [data-tag="PreviewMount"] { min-height: 0; overflow: auto; }
+[data-tag="PreviewMount"] .visual-preview { display: block; width: 100%; min-height: 100%; }
 .tint-editor { min-height: 0; overflow: hidden; }
 .tint-editor, .tint-editor .cm-editor { height: 100%; }
 .tint-editor .cm-scroller { overflow: auto; }
-.tint-editor .cm-gutters { background: var(--editor-bg) !important; }
-.tint-editor .cm-activeLineGutter,
-.tint-editor .cm-gutterElement { background: transparent !important; }
-.tint-editor .cm-content, .tint-editor .cm-line { color: var(--text) !important; }
-.tint-ui-node { box-sizing: border-box; }
-button.tint-ui-node { appearance: none; -webkit-appearance: none; font: inherit; color: inherit; text-align: inherit; }
 #root a { color: inherit; text-decoration: none; }
-.visual-preview { min-height: 100%; padding: 0; background: transparent; color: var(--text); border: 0; border-radius: 0; overflow: auto; }
+.tint-ui-node { box-sizing: border-box; }
+button.tint-ui-node {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-align: inherit;
+}
 .preview-empty { display: grid; place-items: center; min-height: 180px; color: var(--dim); font: 12px ui-monospace, monospace; }
 @media (max-width: 800px) {
   [data-tag="Workspace"] { flex-direction: column; overflow: auto; }
   [data-tag="CodeColumn"], [data-tag="PreviewPanel"] { flex: none; width: 100%; }
   [data-tag="CodePanel"] { min-height: 420px; }
   [data-tag="PreviewPanel"] { min-height: 420px; }
+  [data-tag="Resizer"] { display: none; }
 }
