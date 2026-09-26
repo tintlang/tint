@@ -50,7 +50,7 @@ impl SsaCompiler {
                 self.builder.emit_index_store(block, arr, idx, value);
             }
 
-            // Недопустимое LHS
+            // Invalid assignment LHS
             _ => {
                 panic!("Invalid assignment LHS: {:?}", lhs);
             }
@@ -227,14 +227,14 @@ impl SsaCompiler {
                 }
             }
 
-            // Some(x), Ok(v) — пока заглушка
+            // Some(x), Ok(v) -- still a stub
             Pattern::Variant { .. } => {
                 println!("TODO: variant pattern in SSA");
             }
 
             // typed pattern:  pat: Type
             Pattern::Typed { pat, .. } => {
-                // просто рекурсивно обрабатываем внутренний паттерн
+                // just recurse into the inner pattern
                 self.bind_pattern(pat, value, locals, block);
             }
         }
@@ -259,7 +259,7 @@ impl SsaCompiler {
             Expr::Unit(_) => self.builder.emit_const(block, Value::Unit),
 
             Expr::Borrow { target, .. } => {
-                // lowering: borrow(x) просто становится значением x
+                // lowering: borrow(x) simply becomes the value of x
                 self.lower_expr(target, block, locals)
             }
 

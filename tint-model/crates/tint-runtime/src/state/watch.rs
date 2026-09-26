@@ -12,7 +12,7 @@ impl fmt::Debug for WatchEntry {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("WatchEntry")
             .field("target", &self.target)
-            .field("callback", &"<fn>") // скрываем callback
+            .field("callback", &"<fn>") // no Debug impl for the closure, print a placeholder
             .finish()
     }
 }

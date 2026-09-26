@@ -61,7 +61,7 @@ impl IrVM {
             .position(|f| f.name == entry)
             .expect("function not found");
 
-        // теперь нет активного заимствования
+        // no active borrow now (we cloned func above)
         let func = self.program.functions[index].clone();
 
         for (param, arg) in params.iter().zip(args.iter()) {
@@ -762,7 +762,6 @@ impl IrVM {
             }
 
             Instr::Tuple { dst, items } => {
-                // Сгенерировать runtime-значение tuple: Vec<Value>
                 let mut out = Vec::new();
                 for id in items {
                     out.push(self.get_value(*id));

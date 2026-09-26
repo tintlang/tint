@@ -981,12 +981,12 @@ fn TestMapPattern() {
 //     GENERIC ENUM TESTS — TINT STYLE vs RUST STYLE
 
 // ------------ Tint-style generic enums ------------
-// Tint-style позволяет:
+// Tint-style allows:
 //    Some { value }
 //    Err { error }
 //    Ok { value }
 //
-// Инициализация: 
+// Initialization:
 //    Option::Some { value{10} }
 //    Result::Err { error{"msg"} }
 
@@ -1022,11 +1022,11 @@ fn TestTintResult() {
 
 
 // ------------ Rust-style generic enums ------------
-// Rust-style позволяет:
+// Rust-style allows:
 //    Some { value: expr }
 //    Ok { value: expr }
 //
-// Инициализация:
+// Initialization:
 //
 //    Option2::Some { value: 123 }
 //    Result2::Err { error: "fail" }

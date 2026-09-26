@@ -8,8 +8,8 @@ pub enum IRValue {
     String(String),
     Unit,
 
-    // Для будущего:
-    FunctionRef(String), // имя функции
+    // For future use:
+    FunctionRef(String), // function name
     Struct(Vec<(String, IRValue)>),
     Array(Vec<IRValue>),
 }

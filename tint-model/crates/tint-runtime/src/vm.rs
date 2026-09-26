@@ -259,13 +259,13 @@ impl TintVM {
 
         println!("UI FN CALL: {}", ui.name);
 
-        // 1) Параметры
+        // 1) Parameters
         for (param, arg) in ui.params.iter().zip(args.iter()) {
             bind_pattern(self, &param.pattern, arg);
         }
 
-        // 2) Здесь ПОКА НИЧЕГО НЕ ДЕЛАЕМ.
-        // Позже:
+        // 2) Nothing happens here yet.
+        // Later:
         // - interpolation
         // - UiBuilder
         // - UiTree
@@ -642,12 +642,12 @@ impl EvalHost for TintVM {
     // unsupported features for now
     fn call_value(&mut self, v: EvalValue, args: &[EvalValue], span: Span) -> EvalValue {
         match v {
-            // если IR передал имя функции как строку
+            // if the IR passed the function name as a string
             EvalValue::String(name) => {
                 return self.call_fn(&name, args, span).unwrap_or(EvalValue::Unit);
             }
 
-            // если IR передал Unit: считаем это no-op
+            // if the IR passed Unit: treat it as a no-op
             EvalValue::Unit => EvalValue::Unit,
 
             other => panic!("call_value not supported: {:?}", other),
@@ -1064,7 +1064,7 @@ impl EvalHost for TintVM {
                 _ => false,
             },
 
-            // enums unsupported (как ты и хотел)
+            // enums unsupported (as decided)
             Pattern::Variant { .. } => {
                 panic!("Pattern matching on variants not supported");
             }

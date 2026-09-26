@@ -14,6 +14,5 @@ pub fn validate_attributes(attrs: &AttributeList) -> Result<(), String> {
 pub fn validate_fn_decl(f: &FnDecl) -> Result<(), String> {
     validate_attributes(&f.attributes)?;
 
-    // другие проверки…
     Ok(())
 }
