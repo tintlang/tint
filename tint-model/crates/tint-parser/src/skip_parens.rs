@@ -1,4 +1,4 @@
-use crate::error::PResult;
+use crate::error::{PResult, ParserError};
 use crate::Parser;
 use tint_lexer::TokenKind;
 
@@ -85,6 +85,12 @@ impl Parser {
                 match tok.kind {
                     TokenKind::LAngle => depth += 1,
                     TokenKind::RAngle => depth -= 1,
+                    TokenKind::Eof => {
+                        return Err(ParserError::Message {
+                            msg: "unexpected end of file: unclosed `<`".into(),
+                            span: tok.span,
+                        });
+                    }
                     _ => {}
                 }
             }
@@ -140,6 +146,12 @@ impl Parser {
             match tok.kind {
                 TokenKind::LBracket => depth += 1,
                 TokenKind::RBracket => depth -= 1,
+                TokenKind::Eof => {
+                    return Err(ParserError::Message {
+                        msg: "unexpected end of file: unclosed `[`".into(),
+                        span: tok.span,
+                    });
+                }
                 _ => {}
             }
         }
@@ -165,6 +177,12 @@ impl Parser {
             match tok.kind {
                 TokenKind::LParen => depth += 1,
                 TokenKind::RParen => depth -= 1,
+                TokenKind::Eof => {
+                    return Err(ParserError::Message {
+                        msg: "unexpected end of file: unclosed `(`".into(),
+                        span: tok.span,
+                    });
+                }
                 _ => {}
             }
         }
@@ -180,6 +198,12 @@ impl Parser {
             match tok.kind {
                 TokenKind::LBrace => depth += 1,
                 TokenKind::RBrace => depth -= 1,
+                TokenKind::Eof => {
+                    return Err(ParserError::Message {
+                        msg: "unexpected end of file: unclosed `{`".into(),
+                        span: tok.span,
+                    });
+                }
                 _ => {}
             }
         }
@@ -203,6 +227,12 @@ impl Parser {
             match tok.kind {
                 TokenKind::LAngle => depth += 1,
                 TokenKind::RAngle => depth -= 1,
+                TokenKind::Eof => {
+                    return Err(ParserError::Message {
+                        msg: "unexpected end of file: unclosed `<`".into(),
+                        span: tok.span,
+                    });
+                }
                 _ => {}
             }
         }
