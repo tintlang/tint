@@ -168,6 +168,26 @@ fn style_to_css_text(props: &[(String, String)]) -> String {
         .join(" ")
 }
 
+/// Neutralizes the browser's own UA stylesheet for `<button>` (border,
+/// background, padding, font -- the "grey embossed" default look), the
+/// same reset `UiPreviewNode.svelte` applies for the same reason: without
+/// it, a Button with nothing style-related set by the language still
+/// shows the browser's chrome, which looks like *our* renderer invented a
+/// button style when it didn't. Deliberately NOT adding `cursor: pointer`
+/// here either -- that was explicitly removed on the Svelte side as an
+/// invented default the language itself never asked for; see this
+/// crate's sibling ui/style.rs and the Svelte component's own history.
+const BUTTON_RESET: &[(&str, &str)] = &[
+    ("appearance", "none"),
+    ("background", "none"),
+    ("border", "none"),
+    ("padding", "0"),
+    ("margin", "0"),
+    ("font", "inherit"),
+    ("color", "inherit"),
+    ("text-align", "inherit"),
+];
+
 fn build_node(document: &Document, node: &UiRenderNode, shared: &Rc<Shared>) -> Result<Element, JsValue> {
     // Mirrors UiPreviewNode.svelte's own tag choice: a real <button> for
     // Button/MenuItem or anything with a click handler (so it gets free
@@ -183,10 +203,21 @@ fn build_node(document: &Document, node: &UiRenderNode, shared: &Rc<Shared>) -> 
         el.set_text_content(Some(text));
     }
 
-    apply_style_props(&el, &node.style)?;
+    // Base = UA reset (buttons only) + whatever the language actually
+    // resolved. Kept as one combined list (not two separate applies)
+    // because mouseleave below needs to restore exactly this, including
+    // the reset -- resetting the whole `style` attribute to just
+    // `node.style` would bring the browser's button chrome right back.
+    let mut base_props: Vec<(String, String)> = Vec::new();
+    if is_button {
+        base_props.extend(BUTTON_RESET.iter().map(|(k, v)| (k.to_string(), v.to_string())));
+    }
+    base_props.extend(node.style.iter().cloned());
+
+    apply_style_props(&el, &base_props)?;
 
     if !node.hover_style.is_empty() {
-        let base_css = style_to_css_text(&node.style);
+        let base_css = style_to_css_text(&base_props);
         let hover_style = node.hover_style.clone();
 
         let el_enter = el.clone();
