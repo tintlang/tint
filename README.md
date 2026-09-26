@@ -15,8 +15,11 @@ ui fn App() {
 
 - **Compiler pipeline**: Lexer → Parser → AST → Semantic Checker → SSA IR → Optimizer → WASM
 - **UI as first-class citizen**: No HTML/CSS/JS split—UI is the language
-- **Modifiers system**: `padding::`, `margin::`, `color::`, `background::`, `radius::`, `border::`, `gap::`, `size::`, `opacity::`, `text::`
-- **Control flow**: `if/else`, `for` loops, functions with persistence
+- **Modifiers system**: `padding::`, `margin::`, `color::`, `background::`, `radius::`, `border::`, `gap::`, `grow::`, `align::`, `justify::`, `position::`/`z::`/`top::`/`left::`, `size::`, `opacity::`, `text::`
+- **Control flow**: `if/else`, `for` loops, functions with persistence, full comparison operators (`< > <= >= == !=`) alongside `&& ||`
+- **Real state + events**: `state`, `click||`, `hover_in||`/`hover_out||` drive a persistent, re-rendering session
+- **Responsive design**: `mobile::{}`/`tablet::{}`/`laptop::{}`/`desktop::{}` style breakpoints, plus a host-exposed `viewport_width` variable for structural `if{}` layout swaps (see `examples/landing.tn`)
+- **Two rendering backends**: the Svelte-driven sandbox preview, and `DomSession` — a direct-DOM renderer (Rust/`web-sys`, no JS framework) for embedding Tint UIs in a plain page
 - **Interactive sandbox**: Edit, compile, and preview in the browser (Svelte 5 + CodeMirror 6 + xterm.js)
 - **CLI tools**: Check syntax, run, build to HTML
 - **VSCode extension**: Syntax highlighting + build commands
@@ -87,19 +90,21 @@ tintlang/
 
 ✅ Proper compiler architecture (not hacked)
 ✅ UI grammar with modifiers
-✅ Control flow (if/else, for loops)
+✅ Control flow (if/else, for loops, comparison operators)
 ✅ Function definitions & calls
 ✅ Persistent REPL sessions
 ✅ WASM compilation & rendering
+✅ Real state + click/hover handlers (`state`, `click||`, `hover_in||`/`hover_out||`) via a persistent `UiSession`
+✅ Responsive layouts (`mobile::{}`/`tablet::{}`/`laptop::{}`/`desktop::{}` breakpoints + structural `if{ viewport_width ... }`)
+✅ A second, direct-DOM rendering backend (`DomSession`, no JS framework)
 ✅ CLI tooling
 ✅ VSCode integration
-✅ Hover effects & animations (demo)
-✅ Dropdown menus via CSS (demo)
+✅ Hover effects & animations
 
 ## Known Gaps
 
-❌ Reactive state system (framework layer, post-launch)
-❌ Click handlers that execute (parsed but not lowered)
+❌ Multiple independent component instances (state is one flat scope per `UiSession`)
+❌ `match{}` in UI trees (parsed, not evaluated)
 ❌ Cross-file imports
 ❌ Type annotations (inference-only)
 ❌ Generics
@@ -136,6 +141,29 @@ Build & view:
 ```bash
 tint build app.tn -o app.html
 open app.html
+```
+
+### Responsive example
+
+Style breakpoints (`mobile::{}`/`tablet::{}`/`laptop::{}`/`desktop::{}`) restyle a node per
+viewport width, and a host-exposed `viewport_width` variable lets `if{}` swap in structurally
+different content — not just a different style. See `examples/landing.tn` for a full page built
+this way (a nav that becomes a hamburger menu below 768px, a hero that stacks on mobile), rendered
+through `DomSession` with no JS framework:
+
+```tint
+Nav {
+    direction::row
+    NavLinks { direction::row gap::24 if{viewport_width >= 768} Text { "Docs" } }
+    MenuButton { click||toggle_menu radius::10 padding::10 if{viewport_width < 768} "Menu" }
+}
+
+Hero {
+    direction::row
+    gap::40
+    mobile::{ direction::column, gap::24 }
+    HeroCopy { grow::1 Text { text::{44, bold, white} "..." } }
+}
 ```
 
 ## Development

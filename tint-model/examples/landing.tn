@@ -1,0 +1,203 @@
+fn toggle_menu() {
+    menu_open = !menu_open
+}
+
+fn view_docs() {}
+fn view_source() {}
+
+ui fn Landing() {
+    state menu_open = false
+
+    Page {
+        direction::column
+        background::#0b0c10
+
+        Nav {
+            direction::row
+            align::center
+            justify::space-between
+            padding::20
+            background::#12141a
+            border::{1, #1f2430}
+
+            Brand {
+                direction::row
+                align::center
+                gap::10
+
+                Mark {
+                    svg||"<svg viewBox='0 0 24 24' width='22' height='22' fill='none'><path d='M12 2 L14 9 L21 12 L14 15 L12 22 L10 15 L3 12 L10 9 Z' fill='#6c5ce7'/></svg>"
+                }
+                Text { text::{18, bold, white} "tint" }
+            }
+
+            NavLinks {
+                direction::row
+                gap::24
+                align::center
+                if{viewport_width >= 768}
+
+                Text { text::{14, #9aa0ac} "Features" }
+                Text { text::{14, #9aa0ac} "Docs" }
+                Text { text::{14, #9aa0ac} "GitHub" }
+            }
+
+            MenuButton {
+                click||toggle_menu
+                radius::10
+                padding::10
+                background::#1b1e26
+                border::{1, #2a2f3a}
+                color::white
+                if{viewport_width < 768}
+                "Menu"
+            }
+        }
+
+        MobileMenu {
+            direction::column
+            gap::4
+            padding::16
+            background::#12141a
+            border::{1, #1f2430}
+            if{viewport_width < 768 && menu_open}
+
+            Text { text::{14, #9aa0ac} "Features" }
+            Text { text::{14, #9aa0ac} "Docs" }
+            Text { text::{14, #9aa0ac} "GitHub" }
+        }
+
+        Hero {
+            direction::row
+            align::center
+            gap::40
+            padding::64
+            mobile::{ direction::column, padding::28, gap::24 }
+            tablet::{ padding::40 }
+
+            HeroCopy {
+                direction::column
+                gap::16
+                grow::1
+
+                Text { text::{44, bold, white} "A UI-first language that compiles to WebAssembly" }
+                Text { text::{17, #9aa0ac} "Tint describes interfaces directly, state, layout and events in one file, and runs them in the browser with no JS framework underneath." }
+
+                CtaRow {
+                    direction::row
+                    gap::12
+                    mobile::{ direction::column }
+
+                    Button {
+                        click||view_docs
+                        radius::12
+                        padding::16
+                        background::#6c5ce7
+                        color::white
+                        hover::{ filter::"brightness(1.12)", transform::"translateY(-1px)" }
+                        "Read the docs"
+                    }
+                    Button {
+                        click||view_source
+                        radius::12
+                        padding::16
+                        background::#12141a
+                        color::#6c5ce7
+                        border::{1, #6c5ce7}
+                        hover::{ filter::"brightness(1.12)" }
+                        "View on GitHub"
+                    }
+                }
+            }
+
+            HeroCard {
+                grow::1
+                padding::28
+                radius::20
+                background::#6c5ce7
+                border::{1, #8b7cf0}
+                hover::{ transform::"translateY(-4px)", shadow::"0 20px 48px rgba(0,0,0,.35)" }
+                transition::"transform .25s ease"
+
+                Column {
+                    direction::column
+                    gap::8
+
+                    Text { text::{13, #d8d2f7} "EXAMPLE" }
+                    Text { text::{16, bold, white} "ui fn Landing()" }
+                    Text { text::{13, #d8d2f7} "One file. Real WebAssembly. No JS framework." }
+                }
+            }
+        }
+
+        Features {
+            direction::row
+            gap::20
+            padding::64
+            mobile::{ direction::column, padding::28, gap::16 }
+
+            FeatureCard {
+                grow::1
+                padding::24
+                radius::16
+                background::#1b1e26
+                border::{1, #262b36}
+                hover::{ transform::"translateY(-3px)", background::#20242e }
+                transition::"transform .2s ease, background-color .2s ease"
+
+                Column {
+                    direction::column
+                    gap::8
+                    Text { text::{16, bold, white} "Compiles to Wasm" }
+                    Text { text::{14, #9aa0ac} "Every Tint program runs as real WebAssembly, not an interpreted script tag." }
+                }
+            }
+
+            FeatureCard {
+                grow::1
+                padding::24
+                radius::16
+                background::#1b1e26
+                border::{1, #262b36}
+                hover::{ transform::"translateY(-3px)", background::#20242e }
+                transition::"transform .2s ease, background-color .2s ease"
+
+                Column {
+                    direction::column
+                    gap::8
+                    Text { text::{16, bold, white} "State is built in" }
+                    Text { text::{14, #9aa0ac} "state, click||, hover_in||/hover_out|| and if/for are language primitives, not a library." }
+                }
+            }
+
+            FeatureCard {
+                grow::1
+                padding::24
+                radius::16
+                background::#1b1e26
+                border::{1, #262b36}
+                hover::{ transform::"translateY(-3px)", background::#20242e }
+                transition::"transform .2s ease, background-color .2s ease"
+
+                Column {
+                    direction::column
+                    gap::8
+                    Text { text::{16, bold, white} "Genuinely responsive" }
+                    Text { text::{14, #9aa0ac} "mobile/tablet/laptop/desktop styles and viewport-driven structure, this page is the proof." }
+                }
+            }
+        }
+
+        Footer {
+            direction::row
+            align::center
+            justify::space-between
+            padding::24
+            border::{1, #1f2430}
+            mobile::{ direction::column, gap::8 }
+
+            Text { text::{13, #6b7280} "tint, a UI-first language" }
+            Text { text::{13, #6b7280} "Unlicense (public domain)" }
+        }
+    }
+}
