@@ -17,6 +17,7 @@ export const tintrepl_new: () => number;
 export const tintrepl_reset: (a: number) => void;
 export const uisession_dispatch: (a: number, b: number, c: number) => any;
 export const uisession_new: (a: number, b: number, c: number, d: number) => number;
+export const uisession_reload: (a: number, b: number, c: number, d: number, e: number) => any;
 export const uisession_tree: (a: number) => any;
 export const wasm_bindgen__convert__closures_____invoke__h456c09ea4e080302: (a: number, b: number, c: any) => void;
 export const wasm_bindgen__convert__closures_____invoke__h406344741b5d5b6a: (a: number, b: number) => void;

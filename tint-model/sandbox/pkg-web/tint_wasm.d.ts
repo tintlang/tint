@@ -102,6 +102,18 @@ export class UiSession {
     dispatch(handler: string): any;
     constructor(source: string, ui_fn_name: string);
     /**
+     * Points this SAME `UiSession` at different source -- re-parsing
+     * `source` as `ui_fn_name` into a brand-new inner session (this
+     * resets `state`, exactly like constructing a new session would)
+     * and returning the freshly-rendered tree in the same shape as
+     * `tree()`/`dispatch()`. Mirrors `DomSession::reload` for this
+     * JS-tree-consuming path: the sandbox's live editor calls this on
+     * every debounced edit instead of throwing away and reconstructing
+     * the whole `UiSession` (and losing the ability to report a
+     * bad-source error the same way `tree()` does) per keystroke.
+     */
+    reload(source: string, ui_fn_name: string): any;
+    /**
      * The session's current tree (a fresh build, not cached).
      */
     tree(): any;
@@ -154,6 +166,7 @@ export interface InitOutput {
     readonly tintrepl_reset: (a: number) => void;
     readonly uisession_dispatch: (a: number, b: number, c: number) => any;
     readonly uisession_new: (a: number, b: number, c: number, d: number) => number;
+    readonly uisession_reload: (a: number, b: number, c: number, d: number, e: number) => any;
     readonly uisession_tree: (a: number) => any;
     readonly wasm_bindgen__convert__closures_____invoke__h456c09ea4e080302: (a: number, b: number, c: any) => void;
     readonly wasm_bindgen__convert__closures_____invoke__h406344741b5d5b6a: (a: number, b: number) => void;

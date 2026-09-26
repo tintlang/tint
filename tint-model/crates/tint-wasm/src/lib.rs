@@ -307,6 +307,29 @@ impl UiSession {
         serde_wasm_bindgen::to_value(&result).unwrap_or(JsValue::NULL)
     }
 
+    /// Points this SAME `UiSession` at different source -- re-parsing
+    /// `source` as `ui_fn_name` into a brand-new inner session (this
+    /// resets `state`, exactly like constructing a new session would)
+    /// and returning the freshly-rendered tree in the same shape as
+    /// `tree()`/`dispatch()`. Mirrors `DomSession::reload` for this
+    /// JS-tree-consuming path: the sandbox's live editor calls this on
+    /// every debounced edit instead of throwing away and reconstructing
+    /// the whole `UiSession` (and losing the ability to report a
+    /// bad-source error the same way `tree()` does) per keystroke.
+    pub fn reload(&mut self, source: &str, ui_fn_name: &str) -> JsValue {
+        match tint_runtime::ui_session::UiSession::new(source, ui_fn_name) {
+            Ok(session) => {
+                self.inner = Some(session);
+                self.init_error = None;
+            }
+            Err(e) => {
+                self.inner = None;
+                self.init_error = Some(e);
+            }
+        }
+        self.tree()
+    }
+
     /// Runs `handler` (a plain `fn`, no args) against this session's
     /// persistent state, then returns the rebuilt tree -- see
     /// `tint_runtime::ui_session`'s doc comment for why this needs a

@@ -213,6 +213,28 @@ export class UiSession {
         return this;
     }
     /**
+     * Points this SAME `UiSession` at different source -- re-parsing
+     * `source` as `ui_fn_name` into a brand-new inner session (this
+     * resets `state`, exactly like constructing a new session would)
+     * and returning the freshly-rendered tree in the same shape as
+     * `tree()`/`dispatch()`. Mirrors `DomSession::reload` for this
+     * JS-tree-consuming path: the sandbox's live editor calls this on
+     * every debounced edit instead of throwing away and reconstructing
+     * the whole `UiSession` (and losing the ability to report a
+     * bad-source error the same way `tree()` does) per keystroke.
+     * @param {string} source
+     * @param {string} ui_fn_name
+     * @returns {any}
+     */
+    reload(source, ui_fn_name) {
+        const ptr0 = passStringToWasm0(source, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(ui_fn_name, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.uisession_reload(this.__wbg_ptr, ptr0, len0, ptr1, len1);
+        return ret;
+    }
+    /**
      * The session's current tree (a fresh build, not cached).
      * @returns {any}
      */
