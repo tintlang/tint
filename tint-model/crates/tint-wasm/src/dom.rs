@@ -100,6 +100,7 @@ impl DomSession {
             Some(s) => s.clone(),
             None => return self.init_error.clone(),
         };
+        sync_viewport_width(&shared);
         let tree = match shared.session.borrow_mut().render() {
             Ok(tree) => tree,
             Err(e) => return Some(e),
@@ -115,6 +116,7 @@ impl DomSession {
             Some(s) => s.clone(),
             None => return self.init_error.clone(),
         };
+        sync_viewport_width(&shared);
         let tree = match shared.session.borrow_mut().dispatch(handler) {
             Ok(tree) => tree,
             Err(e) => return Some(e),
@@ -150,16 +152,34 @@ fn breakpoint_for_width(width: f64) -> &'static str {
     }
 }
 
-/// Reads the live viewport width from `window.innerWidth` and maps it
-/// to a breakpoint name via `breakpoint_for_width`. Falls back to
-/// "desktop" if there's no window or it can't be read, keeping this
-/// infallible like the rest of the module.
-fn current_breakpoint() -> String {
-    let width = web_sys::window()
+/// Reads the live viewport width from `window.innerWidth`. Falls back
+/// to a desktop-ish 1440px if there's no window or it can't be read,
+/// keeping this infallible like the rest of the module -- same
+/// fallback `UiSession::new` seeds `viewport_width` with, so a session
+/// that never gets a real width still renders consistently.
+fn current_viewport_width() -> f64 {
+    web_sys::window()
         .and_then(|w| w.inner_width().ok())
         .and_then(|v| v.as_f64())
-        .unwrap_or(1440.0);
-    breakpoint_for_width(width).to_string()
+        .unwrap_or(1440.0)
+}
+
+/// Maps the live viewport width to a breakpoint name via
+/// `breakpoint_for_width`.
+fn current_breakpoint() -> String {
+    breakpoint_for_width(current_viewport_width()).to_string()
+}
+
+/// Pushes the current viewport width into the session's
+/// `viewport_width` variable (see `UiSession::set_viewport_width`) so
+/// an `if{}` directive in the .tint source itself can branch on
+/// viewport size structurally -- not just the style-only breakpoints
+/// `build_node` layers in separately. Called right before every
+/// `render()`/`dispatch()` so the structural condition and the style
+/// breakpoint applied to the very same tree always agree on one width.
+fn sync_viewport_width(shared: &Rc<Shared>) {
+    let width = current_viewport_width();
+    shared.session.borrow_mut().set_viewport_width(width);
 }
 
 /// Binds a debounced `resize` listener (once per `DomSession`, from
@@ -191,6 +211,7 @@ fn bind_resize_listener(shared: &Rc<Shared>) {
 
         let shared_for_timeout = shared.clone();
         let fire_cb = Closure::wrap(Box::new(move || {
+            sync_viewport_width(&shared_for_timeout);
             let tree = match shared_for_timeout.session.borrow_mut().render() {
                 Ok(tree) => tree,
                 Err(e) => {

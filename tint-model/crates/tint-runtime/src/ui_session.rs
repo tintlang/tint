@@ -40,12 +40,23 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 
 use tint_ast::{Item, Span};
 use tint_evaluator::errors::EvalResult;
-use tint_evaluator::EvalHost;
+use tint_evaluator::{EvalHost, Value as EvalValue};
 use tint_lexer::{collect_tokens, Lexer};
 use tint_parser::Parser;
 
 use crate::ui::render::UiRenderNode;
 use crate::vm::TintVM;
+
+/// Name of the read-only variable `UiSession` keeps in scope for a
+/// `ui fn` body to branch on structurally (an `if{}` directive, not
+/// just a style modifier -- see ui/style.rs's mobile::{}/tablet::{}/
+/// laptop::{}/desktop::{} for the style-only equivalent). Set once at
+/// construction with a placeholder value and kept current by whatever
+/// host embeds this session (see tint-wasm/src/dom.rs's
+/// `sync_viewport_width`, which calls `set_viewport_width` right
+/// before every render so a resize alone -- no click/hover needed --
+/// can flip an `if{ viewport_width < 640 } { ... }` branch.
+pub const VIEWPORT_WIDTH_VAR: &str = "viewport_width";
 
 pub struct UiSession {
     vm: TintVM,
@@ -90,6 +101,8 @@ impl UiSession {
                 vm.define_var(&decl.name, v);
             }
 
+            vm.define_var(VIEWPORT_WIDTH_VAR, EvalValue::Number(1440.0));
+
             vm
         }));
 
@@ -100,6 +113,16 @@ impl UiSession {
             }),
             Err(panic) => Err(panic_message(panic)),
         }
+    }
+
+    /// Updates the `viewport_width` variable an `if{}` directive in
+    /// the .tint source can read (see `VIEWPORT_WIDTH_VAR`'s doc
+    /// comment). Takes effect on the next `render()`/`dispatch()` --
+    /// call this first if the host wants that render to reflect a new
+    /// width, same convention as setting a `state` var before reading
+    /// it back out of the rebuilt tree.
+    pub fn set_viewport_width(&mut self, width: f64) {
+        self.vm.define_var(VIEWPORT_WIDTH_VAR, EvalValue::Number(width));
     }
 
     /// Builds and returns the session's current tree.
