@@ -62,6 +62,27 @@ pub fn eval_expr<H: EvalHost>(host: &mut H, expr: &Expr) -> Value {
                 (Value::Bool(x), "&&", Value::Bool(y)) => Value::Bool(x && y),
                 (Value::Bool(x), "||", Value::Bool(y)) => Value::Bool(x || y),
 
+                // Comparisons -- previously entirely unhandled (fell through
+                // to the `_ => Unit` catch-all below, so e.g. `if{width <
+                // 768}` silently evaluated to Unit/falsy no matter what
+                // `width` was). `<`/`>`/`<=`/`>=` are numeric-only, matching
+                // the four arithmetic ops right above; `==`/`!=` also cover
+                // Bool and String since equality checks on those are common
+                // and cheap to support (`status == "ready"`, `menu_open ==
+                // false`), unlike a full structural-equality impl for every
+                // Value variant, which nothing here has asked for.
+                (Value::Number(x), "<", Value::Number(y)) => Value::Bool(x < y),
+                (Value::Number(x), ">", Value::Number(y)) => Value::Bool(x > y),
+                (Value::Number(x), "<=", Value::Number(y)) => Value::Bool(x <= y),
+                (Value::Number(x), ">=", Value::Number(y)) => Value::Bool(x >= y),
+
+                (Value::Number(x), "==", Value::Number(y)) => Value::Bool(x == y),
+                (Value::Number(x), "!=", Value::Number(y)) => Value::Bool(x != y),
+                (Value::Bool(x), "==", Value::Bool(y)) => Value::Bool(x == y),
+                (Value::Bool(x), "!=", Value::Bool(y)) => Value::Bool(x != y),
+                (Value::String(x), "==", Value::String(y)) => Value::Bool(x == y),
+                (Value::String(x), "!=", Value::String(y)) => Value::Bool(x != y),
+
                 _ => Value::Unit,
             }
         }

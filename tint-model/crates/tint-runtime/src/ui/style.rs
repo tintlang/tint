@@ -23,11 +23,26 @@ use tint_ast::{UiModifier, UiModifierValue};
 /// source modifiers were written.
 pub type StyleList = Vec<(String, String)>;
 
-/// Splits a node's modifiers into its base style and (if a `hover::{...}`
-/// modifier is present) the style to apply on hover.
-pub fn resolve_style(modifiers: &[UiModifier]) -> (StyleList, StyleList) {
+/// Screen-size names a `mobile::{...}`/`tablet::{...}`/`laptop::{...}`/
+/// `desktop::{...}` modifier can use -- same nested-modifier shape as
+/// `hover::{...}` (a `key::{ sub_key::value, ... }` block), just keyed by
+/// viewport width instead of pointer state. The actual pixel ranges each
+/// name maps to live with the renderer that has a real viewport to
+/// measure (tint-wasm's `DomSession`), not here -- this module only
+/// resolves modifiers into style lists, it has no notion of "the current
+/// window size".
+const BREAKPOINT_NAMES: [&str; 4] = ["mobile", "tablet", "laptop", "desktop"];
+
+/// Splits a node's modifiers into: its base style, its `hover::{...}`
+/// style (if any), and one resolved `StyleList` per breakpoint name that
+/// was actually used (`mobile::{...}` etc. -- see `BREAKPOINT_NAMES`).
+/// The breakpoint list only contains entries for names the source
+/// actually wrote; a node with no `mobile::{...}` etc. gets an empty
+/// `Vec`, same "don't invent what wasn't asked for" rule as `hover_style`.
+pub fn resolve_style(modifiers: &[UiModifier]) -> (StyleList, StyleList, Vec<(String, StyleList)>) {
     let mut style = Vec::new();
     let mut hover_style = Vec::new();
+    let mut breakpoints: Vec<(String, StyleList)> = Vec::new();
 
     for m in modifiers {
         if m.path.len() == 1 && m.path[0] == "hover" {
@@ -41,10 +56,23 @@ pub fn resolve_style(modifiers: &[UiModifier]) -> (StyleList, StyleList) {
             continue;
         }
 
+        if m.path.len() == 1 && BREAKPOINT_NAMES.contains(&m.path[0].as_str()) {
+            let mut bp_style = Vec::new();
+            if let UiModifierValue::Tuple(items) = &m.value {
+                for item in items {
+                    if let UiModifierValue::MiniMod { key, value } = item {
+                        apply_property(key, value, &mut bp_style);
+                    }
+                }
+            }
+            breakpoints.push((m.path[0].clone(), bp_style));
+            continue;
+        }
+
         apply_property(&m.path, &m.value, &mut style);
     }
 
-    (style, hover_style)
+    (style, hover_style, breakpoints)
 }
 
 // Named/hex colors are passed straight through as CSS already understands

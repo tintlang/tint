@@ -28,7 +28,7 @@
 // untouched. DomSession is a separate, new wasm-bindgen export the
 // sandbox can opt into independently.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use wasm_bindgen::closure::Closure;
@@ -45,6 +45,11 @@ use tint_runtime::ui_session::UiSession as InnerSession;
 struct Shared {
     session: RefCell<InnerSession>,
     container_id: String,
+    /// Handle from `window.setTimeout`, used to debounce the `resize`
+    /// listener bound in `bind_resize_listener` -- a resize storm
+    /// (dragging a window edge) should trigger one rebuild after it
+    /// settles, not one per event.
+    resize_timeout: Cell<Option<i32>>,
 }
 
 /// Direct-DOM counterpart to `UiSession` in lib.rs. Wraps the exact same
@@ -68,13 +73,18 @@ impl DomSession {
     #[wasm_bindgen(constructor)]
     pub fn new(source: &str, ui_fn_name: &str, container_id: &str) -> DomSession {
         match InnerSession::new(source, ui_fn_name) {
-            Ok(session) => DomSession {
-                shared: Some(Rc::new(Shared {
+            Ok(session) => {
+                let shared = Rc::new(Shared {
                     session: RefCell::new(session),
                     container_id: container_id.to_string(),
-                })),
-                init_error: None,
-            },
+                    resize_timeout: Cell::new(None),
+                });
+                bind_resize_listener(&shared);
+                DomSession {
+                    shared: Some(shared),
+                    init_error: None,
+                }
+            }
             Err(e) => DomSession {
                 shared: None,
                 init_error: Some(e),
@@ -124,6 +134,91 @@ fn document() -> Result<Document, JsValue> {
         .ok_or_else(|| JsValue::from_str("no document"))
 }
 
+/// Breakpoint thresholds, in CSS pixels, mirroring the four names
+/// ui/style.rs recognizes for `mobile::{}`/`tablet::{}`/`laptop::{}`/
+/// `desktop::{}` modifiers: below 640px is "mobile", below 1024px is
+/// "tablet", below 1440px is "laptop", anything wider is "desktop".
+fn breakpoint_for_width(width: f64) -> &'static str {
+    if width < 640.0 {
+        "mobile"
+    } else if width < 1024.0 {
+        "tablet"
+    } else if width < 1440.0 {
+        "laptop"
+    } else {
+        "desktop"
+    }
+}
+
+/// Reads the live viewport width from `window.innerWidth` and maps it
+/// to a breakpoint name via `breakpoint_for_width`. Falls back to
+/// "desktop" if there's no window or it can't be read, keeping this
+/// infallible like the rest of the module.
+fn current_breakpoint() -> String {
+    let width = web_sys::window()
+        .and_then(|w| w.inner_width().ok())
+        .and_then(|v| v.as_f64())
+        .unwrap_or(1440.0);
+    breakpoint_for_width(width).to_string()
+}
+
+/// Binds a debounced `resize` listener (once per `DomSession`, from
+/// the constructor) that re-renders and rebuilds the whole tree so
+/// `mobile::{}`/`tablet::{}`/`laptop::{}`/`desktop::{}` styles pick up
+/// a viewport change without any click/hover in between. Debounced via
+/// `shared.resize_timeout` (150ms) so a window being dragged across a
+/// breakpoint doesn't rebuild on every intermediate `resize` event.
+///
+/// Leaks its closure the same way every other listener in this module
+/// does (see the module doc comment) -- fine for a session that lives
+/// as long as the page, one listener total per `DomSession`.
+fn bind_resize_listener(shared: &Rc<Shared>) {
+    let window = match web_sys::window() {
+        Some(w) => w,
+        None => return,
+    };
+
+    let shared = shared.clone();
+    let resize_cb = Closure::wrap(Box::new(move |_e: web_sys::Event| {
+        let window = match web_sys::window() {
+            Some(w) => w,
+            None => return,
+        };
+
+        if let Some(existing) = shared.resize_timeout.take() {
+            window.clear_timeout_with_handle(existing);
+        }
+
+        let shared_for_timeout = shared.clone();
+        let fire_cb = Closure::wrap(Box::new(move || {
+            let tree = match shared_for_timeout.session.borrow_mut().render() {
+                Ok(tree) => tree,
+                Err(e) => {
+                    web_sys::console::error_1(&JsValue::from_str(&format!(
+                        "tint: resize re-render failed: {}",
+                        e
+                    )));
+                    return;
+                }
+            };
+            if let Err(e) = mount_tree(&tree, &shared_for_timeout) {
+                web_sys::console::error_1(&e);
+            }
+        }) as Box<dyn FnMut()>);
+
+        if let Ok(handle) = window.set_timeout_with_callback_and_timeout_and_arguments_0(
+            fire_cb.as_ref().unchecked_ref(),
+            150,
+        ) {
+            shared.resize_timeout.set(Some(handle));
+        }
+        fire_cb.forget();
+    }) as Box<dyn FnMut(_)>);
+
+    let _ = window.add_event_listener_with_callback("resize", resize_cb.as_ref().unchecked_ref());
+    resize_cb.forget();
+}
+
 /// Clears `shared.container_id`'s children and rebuilds them from
 /// `tree`. Whole-subtree teardown/rebuild, not a diff -- see this
 /// module's doc comment.
@@ -137,8 +232,13 @@ fn mount_tree(tree: &[UiRenderNode], shared: &Rc<Shared>) -> Result<(), JsValue>
         container.remove_child(&child)?;
     }
 
+    // Read the viewport once per rebuild (not once per node) so a whole
+    // tree is consistent even if the resolution race between reading
+    // innerWidth and finishing the rebuild -- not realistic, but cheap
+    // to make free.
+    let breakpoint = current_breakpoint();
     for node in tree {
-        let el = build_node(&document, node, shared)?;
+        let el = build_node(&document, node, shared, &breakpoint)?;
         container.append_child(&el)?;
     }
     Ok(())
@@ -188,7 +288,12 @@ const BUTTON_RESET: &[(&str, &str)] = &[
     ("text-align", "inherit"),
 ];
 
-fn build_node(document: &Document, node: &UiRenderNode, shared: &Rc<Shared>) -> Result<Element, JsValue> {
+fn build_node(
+    document: &Document,
+    node: &UiRenderNode,
+    shared: &Rc<Shared>,
+    breakpoint: &str,
+) -> Result<Element, JsValue> {
     // Mirrors UiPreviewNode.svelte's own tag choice: a real <button> for
     // Button/MenuItem or anything with a click handler (so it gets free
     // keyboard/focus/AT behavior), a plain <div> otherwise.
@@ -213,6 +318,13 @@ fn build_node(document: &Document, node: &UiRenderNode, shared: &Rc<Shared>) -> 
         base_props.extend(BUTTON_RESET.iter().map(|(k, v)| (k.to_string(), v.to_string())));
     }
     base_props.extend(node.style.iter().cloned());
+
+    // Layer the current viewport's breakpoint style (if the node has
+    // one) on top of the base style -- last-write-wins per property,
+    // same as a CSS media query overriding a base rule.
+    if let Some((_, bp_style)) = node.breakpoints.iter().find(|(name, _)| name == breakpoint) {
+        base_props.extend(bp_style.iter().cloned());
+    }
 
     apply_style_props(&el, &base_props)?;
 
@@ -247,7 +359,7 @@ fn build_node(document: &Document, node: &UiRenderNode, shared: &Rc<Shared>) -> 
 
     if node.text.is_none() && node.svg.is_none() {
         for child in &node.children {
-            let child_el = build_node(document, child, shared)?;
+            let child_el = build_node(document, child, shared, breakpoint)?;
             el.append_child(&child_el)?;
         }
     }

@@ -17,6 +17,12 @@ pub struct UiElement {
     /// rule when this is non-empty, rather than assuming every node (or
     /// every node of a given tag) animates on hover.
     pub hover_style: StyleList,
+    /// Resolved from this node's `mobile::{ ... }`/`tablet::{ ... }`/
+    /// `laptop::{ ... }`/`desktop::{ ... }` modifiers, if any -- each
+    /// entry is (breakpoint name, its resolved style list). A renderer
+    /// picks the entry matching the current viewport and layers it over
+    /// `style` -- see ui/style.rs.
+    pub breakpoints: Vec<(String, StyleList)>,
     /// Text for a `Text`-shaped child: literal parts verbatim, and any
     /// interpolation genuinely evaluated (see builder.rs's
     /// `render_ui_text`, which threads a real `EvalHost` through now).
@@ -48,6 +54,7 @@ impl UiElement {
             children: Vec::new(),
             style: Vec::new(),
             hover_style: Vec::new(),
+            breakpoints: Vec::new(),
             text: None,
             on_click: None,
             on_hover_enter: None,
@@ -77,10 +84,11 @@ impl UiTree {
     /// ui/style.rs) into the new node's `style`/`hover_style`.
     pub fn create_styled_node(&mut self, tag: String, modifiers: &[tint_ast::UiModifier]) -> UiNodeId {
         let id = self.create_node(tag);
-        let (style, hover_style) = super::style::resolve_style(modifiers);
+        let (style, hover_style, breakpoints) = super::style::resolve_style(modifiers);
         let node = &mut self.nodes[id];
         node.style = style;
         node.hover_style = hover_style;
+        node.breakpoints = breakpoints;
         id
     }
 

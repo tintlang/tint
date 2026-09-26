@@ -174,77 +174,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tint-ast"
-version = "0.1.0"
-
-[[package]]
-name = "tint-evaluator"
-version = "0.1.0"
-dependencies = [
- "tint-ast",
- "thiserror",
-]
-
-[[package]]
-name = "tint-ir"
-version = "0.1.0"
-dependencies = [
- "tint-ast",
-]
-
-[[package]]
-name = "tint-lexer"
-version = "0.1.0"
-dependencies = [
- "tint-ast",
-]
-
-[[package]]
-name = "tint-parser"
-version = "0.1.0"
-dependencies = [
- "tint-ast",
- "tint-lexer",
-]
-
-[[package]]
-name = "tint-runtime"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "futures",
- "tint-ast",
- "tint-evaluator",
- "tint-ir",
- "tint-lexer",
- "tint-parser",
- "serde",
- "taffy",
- "thiserror",
-]
-
-[[package]]
-name = "tint-semantics"
-version = "0.1.0"
-dependencies = [
- "tint-ast",
-]
-
-[[package]]
-name = "tint-wasm"
-version = "0.1.0"
-dependencies = [
- "tint-ast",
- "tint-evaluator",
- "tint-lexer",
- "tint-parser",
- "tint-runtime",
- "serde",
- "serde-wasm-bindgen",
- "wasm-bindgen",
-]
-
-[[package]]
 name = "rustversion"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -367,6 +296,78 @@ dependencies = [
 ]
 
 [[package]]
+name = "tint-ast"
+version = "0.1.0"
+
+[[package]]
+name = "tint-evaluator"
+version = "0.1.0"
+dependencies = [
+ "thiserror",
+ "tint-ast",
+]
+
+[[package]]
+name = "tint-ir"
+version = "0.1.0"
+dependencies = [
+ "tint-ast",
+]
+
+[[package]]
+name = "tint-lexer"
+version = "0.1.0"
+dependencies = [
+ "tint-ast",
+]
+
+[[package]]
+name = "tint-parser"
+version = "0.1.0"
+dependencies = [
+ "tint-ast",
+ "tint-lexer",
+]
+
+[[package]]
+name = "tint-runtime"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "futures",
+ "serde",
+ "taffy",
+ "thiserror",
+ "tint-ast",
+ "tint-evaluator",
+ "tint-ir",
+ "tint-lexer",
+ "tint-parser",
+]
+
+[[package]]
+name = "tint-semantics"
+version = "0.1.0"
+dependencies = [
+ "tint-ast",
+]
+
+[[package]]
+name = "tint-wasm"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde-wasm-bindgen",
+ "tint-ast",
+ "tint-evaluator",
+ "tint-lexer",
+ "tint-parser",
+ "tint-runtime",
+ "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
 name = "unicode-ident"
 version = "1.0.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -421,4 +422,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "23f0c9c52aa7cd7d77769a4cfe2a9adb1b331f489a41d912ce14513d5ab995c6"
 dependencies = [
  "unicode-ident",
+]
+
+[[package]]
+name = "web-sys"
+version = "0.3.106"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "88261b9deccee56594c11a3460c462c41f58d148598fe70ad77070126a68aba4"
+dependencies = [
+ "js-sys",
+ "wasm-bindgen",
 ]
