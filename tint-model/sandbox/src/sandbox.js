@@ -104,6 +104,7 @@ const editorLightTheme = EditorView.theme({
 
 const themeCompartment = new Compartment();
 const syntaxCompartment = new Compartment();
+let appliedEditorTheme;
 
 function isDark() {
   return document.documentElement.dataset.theme !== "light";
@@ -112,6 +113,8 @@ function isDark() {
 function setEditorTheme() {
   if (!editorView) return;
   const dark = isDark();
+  if (appliedEditorTheme === dark) return;
+  appliedEditorTheme = dark;
   editorView.dispatch({ effects: [
     themeCompartment.reconfigure(dark ? editorTheme : editorLightTheme),
     syntaxCompartment.reconfigure(syntaxHighlighting(dark ? darkHighlightColors : lightHighlightColors)),
@@ -193,11 +196,39 @@ function logEvent(message) {
   if (output) output.textContent = message;
 }
 
+function currentEditorSource() {
+  return editorView?.state.doc.toString() ?? loadStoredCode() ?? demoSource;
+}
+
+function showPreviewError(error) {
+  const mount = root.querySelector('[data-tag="PreviewMount"]');
+  if (!mount || !error) return;
+  mount.replaceChildren();
+  const message = document.createElement("div");
+  message.style.cssText = "display: grid; place-items: center; width: 100%; min-height: 100%; box-sizing: border-box; padding: 24px; text-align: center; font: 12px ui-monospace, Menlo, Consolas, monospace; color: #ff8a80; white-space: pre-wrap;";
+  message.textContent = error;
+  mount.append(message);
+}
+
+function renderPreviewResult(result) {
+  if (result?.error) {
+    showPreviewError(result.error);
+    return;
+  }
+  // Render the result even when it is empty. Clearing the mount here is
+  // important: a failed/new source must never leave the previous stock tree
+  // visible and make it look as if the editor was ignored.
+  renderPreview(result?.tree || []);
+}
+
 function dispatchPreview(handler) {
   if (!previewSession) return;
   const result = previewSession.dispatch(handler);
-  if (result?.error) logEvent(`${handler}: ${result.error}`);
-  else renderPreview(result?.tree || []);
+  if (result?.error) {
+    showPreviewError(result.error);
+    return;
+  }
+  renderPreview(result?.tree || []);
 }
 
 function updatePreview(source) {
@@ -212,9 +243,7 @@ function updatePreview(source) {
   // `UiSession` had no `reload` method at all until now -- so every edit
   // silently threw before ever reaching this line, leaving the preview
   // stuck on whatever last rendered.
-  const result = previewSession.reload(source, "App");
-  if (result?.error) logEvent(result.error);
-  else renderPreview(result?.tree || []);
+  renderPreviewResult(previewSession.reload(source, "App"));
 }
 
 function mountEditor(panel) {
@@ -279,7 +308,7 @@ function renderShellTheme(theme) {
   shellSession = new DomSession(source, "Sandbox", "root");
   const error = shellSession.rerender();
   if (error) logEvent(error);
-  if (previewSession) renderPreview(previewSession.tree()?.tree || []);
+  if (previewSession) renderPreviewResult(previewSession.tree());
 }
 
 function remount() {
@@ -313,7 +342,7 @@ function remount() {
   const previewMount = root.querySelector('[data-tag="PreviewMount"]');
   if (previewMount && previewMount !== lastPreviewMount) {
     lastPreviewMount = previewMount;
-    if (previewSession) renderPreview(previewSession.tree()?.tree || []);
+    if (previewSession) renderPreviewResult(previewSession.tree());
   }
   setEditorTheme();
 }
@@ -349,6 +378,9 @@ const initialShellSource = initialTheme === "dark"
 shellSession = new DomSession(initialShellSource, "Sandbox", "root");
 const shellError = shellSession.rerender();
 if (shellError) logEvent(shellError);
-previewSession = new UiSession(demoSource, "App");
-renderPreview(previewSession.tree()?.tree || []);
+// The editor may restore a previously edited program from localStorage.
+// Build the first preview from that exact source too; otherwise the pane
+// starts with the bundled demo and only catches up after the next edit.
+previewSession = new UiSession(currentEditorSource(), "App");
+renderPreviewResult(previewSession.tree());
 remount();

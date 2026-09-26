@@ -58,6 +58,7 @@ const editorThemeCompartment = new Compartment();
 const editorSyntaxCompartment = new Compartment();
 let previewSession = null;
 let debounceHandle;
+let latestPreviewSource = INITIAL_SNIPPET;
 const wrapPreviewSource = (body) => `ui fn Preview() {\n${body}\n}`;
 function showPreviewError(err) {
   const panel = root.querySelector('[data-tag="PreviewPanel"]');
@@ -84,8 +85,13 @@ const editorView = new EditorView({ state: EditorState.create({ doc: INITIAL_SNI
   keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, indentWithTab]),
   EditorView.updateListener.of((update) => {
     if (!update.docChanged) return;
+    latestPreviewSource = update.state.doc.toString();
     clearTimeout(debounceHandle);
-    debounceHandle = setTimeout(() => { if (previewSession) showPreviewError(previewSession.reload(wrapPreviewSource(update.state.doc.toString()), "Preview")); }, 350);
+    debounceHandle = setTimeout(() => {
+      if (previewSession) {
+        showPreviewError(previewSession.reload(wrapPreviewSource(latestPreviewSource), "Preview"));
+      }
+    }, 350);
   }),
 ] }) });
 editorView.dom.style.flex = "1 1 auto";
@@ -108,7 +114,8 @@ function remountDemoIfNeeded() {
   lastCodePanel = codePanel;
   codePanel.appendChild(editorView.dom);
   const previewPanel = root.querySelector('[data-tag="PreviewPanel"]');
-  if (previewPanel) startPreviewSession(previewPanel, editorView.state.doc.toString());
+  latestPreviewSource = editorView.state.doc.toString();
+  if (previewPanel) startPreviewSession(previewPanel, latestPreviewSource);
 }
 new MutationObserver(() => { remountDemoIfNeeded(); syncEditorAppearance(); }).observe(root, { childList: true, subtree: true });
 
