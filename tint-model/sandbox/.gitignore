@@ -2,8 +2,6 @@
 **/pkg-
 /pkg-node
 **/pkg-node
-/pkg-web
-**/pkg-web
 node_modules
 dist
 .zip

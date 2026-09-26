@@ -1,0 +1,15 @@
+{
+  "name": "tint-wasm",
+  "type": "module",
+  "version": "0.1.0",
+  "files": [
+    "tint_wasm_bg.wasm",
+    "tint_wasm.js",
+    "tint_wasm.d.ts"
+  ],
+  "main": "tint_wasm.js",
+  "types": "tint_wasm.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

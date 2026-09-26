@@ -1,0 +1,30 @@
+/* tslint:disable */
+/* eslint-disable */
+export const memory: WebAssembly.Memory;
+export const __wbg_domsession_free: (a: number, b: number) => void;
+export const __wbg_tintrepl_free: (a: number, b: number) => void;
+export const __wbg_uisession_free: (a: number, b: number) => void;
+export const check: (a: number, b: number) => any;
+export const domsession_dispatch: (a: number, b: number, c: number) => [number, number];
+export const domsession_new: (a: number, b: number, c: number, d: number, e: number, f: number) => number;
+export const domsession_reload: (a: number, b: number, c: number, d: number, e: number) => [number, number];
+export const domsession_rerender: (a: number) => [number, number];
+export const render_ui: (a: number, b: number, c: number, d: number) => any;
+export const run: (a: number, b: number, c: number, d: number) => any;
+export const tint_version: () => [number, number];
+export const tintrepl_eval: (a: number, b: number, c: number) => any;
+export const tintrepl_new: () => number;
+export const tintrepl_reset: (a: number) => void;
+export const uisession_dispatch: (a: number, b: number, c: number) => any;
+export const uisession_new: (a: number, b: number, c: number, d: number) => number;
+export const uisession_tree: (a: number) => any;
+export const wasm_bindgen__convert__closures_____invoke__h456c09ea4e080302: (a: number, b: number, c: any) => void;
+export const wasm_bindgen__convert__closures_____invoke__h406344741b5d5b6a: (a: number, b: number) => void;
+export const __wbindgen_malloc: (a: number, b: number) => number;
+export const __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
+export const __wbindgen_exn_store: (a: number) => void;
+export const __externref_table_alloc: () => number;
+export const __wbindgen_externrefs: WebAssembly.Table;
+export const __wbindgen_destroy_closure: (a: number, b: number) => void;
+export const __wbindgen_free: (a: number, b: number, c: number) => void;
+export const __wbindgen_start: () => void;
