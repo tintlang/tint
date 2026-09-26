@@ -1,6 +1,5 @@
 use super::item::Item;
 use crate::AttributeList;
-use crate::Span;
 
 #[derive(Debug, Clone)]
 pub struct Program {

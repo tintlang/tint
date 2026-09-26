@@ -4,7 +4,7 @@ use crate::Span;
 use crate::Stmt;
 use crate::UiNode;
 
-use super::{expr::Expr, pattern::MatchArm, stmt::Block, types::Type};
+use super::{expr::Expr, stmt::Block, types::Type};
 
 #[derive(Debug, Clone)]
 pub struct UseDecl {

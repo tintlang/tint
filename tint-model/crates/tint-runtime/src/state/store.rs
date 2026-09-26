@@ -122,7 +122,6 @@ impl StateStore {
 
         // recompute all computed
         for (_id, any) in &self.computed {
-            let cell = any.as_any().downcast_ref::<ComputedCell<usize>>(); // ignore type
             if let Some(c) = any.as_any().downcast_ref::<ComputedCell<i32>>() {
                 c.force_update(self);
             }

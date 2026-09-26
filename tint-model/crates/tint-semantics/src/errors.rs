@@ -1,4 +1,3 @@
-use std::fmt;
 use tint_ast::span::Span;
 
 #[derive(Debug, Clone)]

@@ -1,6 +1,5 @@
 use super::expr::Expr;
 use crate::Span;
-use crate::StructInitField;
 use crate::Type;
 
 #[derive(Debug, Clone)]

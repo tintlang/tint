@@ -2,7 +2,6 @@
 
 use super::future::FutureHandle;
 use std::collections::VecDeque;
-use std::pin::Pin;
 use std::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
 
 pub struct Scheduler {

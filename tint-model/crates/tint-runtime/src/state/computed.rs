@@ -1,6 +1,5 @@
 use crate::state::StateStore;
 use std::cell::RefCell;
-use std::fmt;
 use std::rc::Rc;
 
 use super::store::StateId;

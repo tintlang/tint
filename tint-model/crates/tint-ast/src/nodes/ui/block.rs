@@ -1,4 +1,3 @@
-use super::modifier::UiModifier;
 use super::modifier::UiModifierValue;
 use crate::Span;
 

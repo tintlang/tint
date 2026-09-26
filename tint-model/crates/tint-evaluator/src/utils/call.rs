@@ -3,7 +3,7 @@ use crate::{value::Value, EvalHost};
 use tint_ast::Span;
 
 pub fn call_builtin<H: EvalHost>(
-    host: &mut H,
+    _host: &mut H,
     name: &str,
     args: &[Value],
     span: Span,

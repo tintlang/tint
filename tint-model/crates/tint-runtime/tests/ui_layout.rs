@@ -55,11 +55,7 @@ ui fn App() {
     let layout = compute_layout(&tree, root, 600.0, 200.0);
 
     let row = tree.nodes.iter().find(|n| n.tag == "Row").unwrap();
-    let cards: Vec<_> = tree
-        .nodes
-        .iter()
-        .filter(|n| n.tag == "MiniCard")
-        .collect();
+    let cards: Vec<_> = tree.nodes.iter().filter(|n| n.tag == "MiniCard").collect();
     assert_eq!(cards.len(), 3);
 
     let row_rect = layout[&row.id];
@@ -77,7 +73,10 @@ ui fn App() {
     let gap1 = rects[1].x - (rects[0].x + rects[0].width);
     let gap2 = rects[2].x - (rects[1].x + rects[1].width);
     assert!(gap1 > 1.0, "expected a real gap after card 1, got {gap1}");
-    assert!((gap1 - gap2).abs() < 0.5, "gaps should be even: {gap1} vs {gap2}");
+    assert!(
+        (gap1 - gap2).abs() < 0.5,
+        "gaps should be even: {gap1} vs {gap2}"
+    );
 }
 
 // Mirrors the balance card's clustered spacing (Round 3): a column
@@ -108,11 +107,7 @@ ui fn App() {
     let layout = compute_layout(&tree, root, 400.0, 400.0);
 
     let column = tree.nodes.iter().find(|n| n.tag == "Column").unwrap();
-    let rows: Vec<_> = column
-        .children
-        .iter()
-        .map(|&id| layout[&id])
-        .collect();
+    let rows: Vec<_> = column.children.iter().map(|&id| layout[&id]).collect();
     assert_eq!(rows.len(), 4);
 
     let gap_ab = rows[1].y - (rows[0].y + rows[0].height);
@@ -120,8 +115,14 @@ ui fn App() {
     let gap_cd = rows[3].y - (rows[2].y + rows[2].height);
 
     // a-b close, b-c far (the big separator), c-d close again.
-    assert!(gap_ab < gap_bc, "a-b ({gap_ab}) should be tighter than b-c ({gap_bc})");
-    assert!(gap_cd < gap_bc, "c-d ({gap_cd}) should be tighter than b-c ({gap_bc})");
+    assert!(
+        gap_ab < gap_bc,
+        "a-b ({gap_ab}) should be tighter than b-c ({gap_bc})"
+    );
+    assert!(
+        gap_cd < gap_bc,
+        "c-d ({gap_cd}) should be tighter than b-c ({gap_bc})"
+    );
     assert!((gap_ab - 4.0).abs() < 0.01);
     assert!((gap_cd - 4.0).abs() < 0.01);
 }
@@ -176,7 +177,12 @@ ui fn App() {
     assert!((cards[0].width - cards[1].width).abs() < 0.01);
     assert!((cards[1].width - cards[2].width).abs() < 0.01);
     let expected_width = (600.0 - 2.0 * 12.0) / 3.0;
-    assert!((cards[0].width - expected_width).abs() < 0.01, "{} vs {}", cards[0].width, expected_width);
+    assert!(
+        (cards[0].width - expected_width).abs() < 0.01,
+        "{} vs {}",
+        cards[0].width,
+        expected_width
+    );
 
     // Real 12px gaps between them, not zero.
     let gap1 = cards[1].x - (cards[0].x + cards[0].width);

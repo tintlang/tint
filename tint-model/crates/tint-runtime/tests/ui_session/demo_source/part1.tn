@@ -1,0 +1,113 @@
+fn toggle_menu() {
+    menu_open = !menu_open
+}
+
+fn top_up() {}
+fn send_money() {}
+fn request_money() {}
+
+fn show_tip() {
+    tip_open = true
+}
+
+fn hide_tip() {
+    tip_open = false
+}
+
+ui fn App() {
+    state menu_open = false
+    state tip_open = false
+
+    Column {
+        direction::column
+        padding::24
+        gap::20
+        background::#12141a
+
+        Row {
+            direction::row
+            align::center
+            gap::8
+
+            Logo {
+                svg||"<svg viewBox='0 0 24 24' width='22' height='22' fill='none'><path d='M12 2 L14 9 L21 12 L14 15 L12 22 L10 15 L3 12 L10 9 Z' fill='#6c5ce7'/></svg>"
+                transition::"transform .25s ease"
+                hover::{ transform::"scaleX(1.15) scaleY(0.85)" }
+            }
+
+            Text { text::{16, bold, white} "Tint Wallet" }
+        }
+
+        Card {
+            padding::24
+            radius::20
+            background::#6c5ce7
+            border::{1, #8b7cf0}
+            hover::{ transform::"translateY(-3px)", shadow::"0 16px 40px rgba(0,0,0,.35)" }
+
+            Column {
+                direction::column
+
+                Row {
+                    direction::row
+                    gap::12
+                    margin::{bottom::4}
+                    Text { text::{12, #d8d2f7} "TOTAL BALANCE" }
+                    Text { text::{12, bold, white} "VISA" }
+                }
+
+                Text { text::{34, bold, white} margin::{bottom::28} "$4,218.90" }
+
+                Text { text::{15, #d8d2f7} margin::{bottom::4} "•••• •••• •••• 4821" }
+
+                Row {
+                    direction::row
+                    gap::12
+                    Text { text::{13, white} "Mark Bender" }
+                    Text { text::{13, #d8d2f7} "12/29" }
+                }
+            }
+        }
+
+        Row {
+            direction::row
+            gap::12
+
+            Button {
+                click||top_up
+                radius::14
+                padding::14
+                background::#6c5ce7
+                color::white
+                hover::{ filter::"brightness(1.12)", transform::"translateY(-1px)", shadow::"0 6px 16px rgba(0,0,0,.28)" }
+                "Top up"
+            }
+
+            Menu {
+                position::relative
+
+                Button {
+                    click||toggle_menu
+                    radius::14
+                    padding::14
+                    background::#12141a
+                    color::#6c5ce7
+                    border::{1, #6c5ce7}
+                    hover::{ filter::"brightness(1.12)", transform::"translateY(-1px)" }
+                    "Send / Request"
+                }
+
+                MenuPanel {
+                    position::absolute
+                    z::50
+                    top::56
+                    left::0
+                    direction::column
+                    gap::4
+                    padding::8
+                    radius::12
+                    background::#1b1e26
+                    border::{1, #2a2f3a}
+                    shadow::"0 12px 32px rgba(0,0,0,.4)"
+                    if{menu_open}
+                    MenuItem { click||send_money padding::8 radius::8 hover::{ background::#2a2f3a } "Send money" }

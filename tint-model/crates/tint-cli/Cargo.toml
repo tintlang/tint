@@ -13,3 +13,5 @@ tint-ast = { path = "../tint-ast" }
 tint-parser = { path = "../tint-parser" }
 tint-runtime = { path = "../tint-runtime" }
 tint-evaluator = { path = "../tint-evaluator" }
+tint-semantics = { path = "../tint-semantics" }
+base64 = "0.22"

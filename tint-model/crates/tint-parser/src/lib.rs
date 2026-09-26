@@ -15,13 +15,8 @@ pub mod symbols;
 pub mod token_stream;
 pub mod ui;
 
-mod parse_attribute;
-mod parse_enum;
-mod parse_fn;
-mod parse_ident;
+mod declarations;
 mod parse_pattern;
 mod parse_stmt;
-mod parse_struct;
-mod parse_ui;
 
 pub use parser::Parser;

@@ -21,6 +21,13 @@ impl LetInit {
             LetInit::Tint(expr) => expr.span(),
         }
     }
+
+    pub fn expr(&self) -> &Expr {
+        match self {
+            LetInit::Assign(expr) => expr,
+            LetInit::Tint(expr) => expr,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

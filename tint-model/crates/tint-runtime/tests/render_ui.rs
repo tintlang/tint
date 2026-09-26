@@ -41,10 +41,18 @@ ui fn Widget() {
 
     let card = &nodes[0];
     assert_eq!(card.tag, "Card");
-    assert!(card.style.contains(&("padding".to_string(), "24px".to_string())));
-    assert!(card.style.contains(&("background-color".to_string(), "#6c5ce7".to_string())));
-    assert!(card.hover_style.contains(&("background-color".to_string(), "#8a7ff0".to_string())));
-    assert!(card.hover_style.contains(&("transform".to_string(), "scale(1.04)".to_string())));
+    assert!(card
+        .style
+        .contains(&("padding".to_string(), "24px".to_string())));
+    assert!(card
+        .style
+        .contains(&("background-color".to_string(), "#6c5ce7".to_string())));
+    assert!(card
+        .hover_style
+        .contains(&("background-color".to_string(), "#8a7ff0".to_string())));
+    assert!(card
+        .hover_style
+        .contains(&("transform".to_string(), "scale(1.04)".to_string())));
 
     assert_eq!(card.children.len(), 1, "one child (the text node)");
     let text_node = &card.children[0];
@@ -106,7 +114,11 @@ ui fn Widget() {
         .collect();
     assert_eq!(
         texts,
-        vec![Some("A".to_string()), Some("B".to_string()), Some("C".to_string())],
+        vec![
+            Some("A".to_string()),
+            Some("B".to_string()),
+            Some("C".to_string())
+        ],
         "each repetition's \"{{tx}}\" interpolation resolved to that iteration's real value"
     );
 }

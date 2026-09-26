@@ -1,5 +1,5 @@
 use crate::{error::*, Parser};
-use tint_ast::{Expr, MatchArm, Pattern, Span};
+use tint_ast::{Expr, MatchArm, Span};
 use tint_lexer::TokenKind;
 
 impl Parser {

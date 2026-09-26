@@ -1,5 +1,3 @@
-// output.rs
-//
 // `print()`/`dbg()` (see utils/call.rs) used to go straight to real
 // stdout via `println!`, which is fine for the CLI but writes nowhere
 // useful when the evaluator runs inside a browser (tint-wasm has no real

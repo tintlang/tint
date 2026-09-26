@@ -1,0 +1,186 @@
+// ui/style.rs
+//
+// Resolves a UI node's `key::value` modifiers (tint_ast::UiModifier) into
+// plain CSS property/value pairs a renderer can apply directly -- as an
+// inline `style` attribute for the base list, and as a generated
+// `:hover { ... }` rule for the hover list (a nested `hover::{ ... }`
+// modifier is the language-level way to express what the sandbox used to
+// fake with hardcoded, tag-name-based CSS -- see sandbox/src/components/
+// UiPreviewNode.svelte's TAG_DEFAULTS comment for the effects this is
+// meant to let Tint code state explicitly instead).
+//
+// Only LITERAL modifier values resolve here (numbers, idents, strings,
+// and nested tuples/mini-mods of those). A modifier whose value is an
+// arbitrary expression (`UiModifierValue::Expr`, e.g. a variable read, or
+// what `if{}`/`for{}` carry) is skipped: resolving those needs the
+// running VM's state/evaluator, which this pure AST-level pass over
+// `UiNode::modifiers` doesn't have access to (see builder.rs). That's a
+// separate, later piece of work, not a limitation of this resolver.
+
+use tint_ast::{UiModifier, UiModifierValue};
+
+/// Reconstruct the Tint modifier syntax for browser Elements inspection.
+pub fn format_modifier_source(modifiers: &[UiModifier]) -> String {
+    modifiers
+        .iter()
+        .map(format_modifier)
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn format_modifier(modifier: &UiModifier) -> String {
+    format!(
+        "{}::{}",
+        modifier.path.join("."),
+        format_modifier_value(&modifier.value)
+    )
+}
+
+fn format_modifier_value(value: &UiModifierValue) -> String {
+    match value {
+        UiModifierValue::Number(n) => format!("{}", n),
+        UiModifierValue::String(s) => format!("\"{}\"", s.replace('"', "\\\"")),
+        UiModifierValue::Ident(s) => s.clone(),
+        UiModifierValue::Expr(_) => "<expr>".to_string(),
+        UiModifierValue::Range(a, b) => format!("{}..{}", a, b),
+        UiModifierValue::Block(items) => format!(
+            "{{ {} }}",
+            items
+                .iter()
+                .map(format_modifier)
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        UiModifierValue::Tuple(items) => format!(
+            "{{ {} }}",
+            items
+                .iter()
+                .map(|item| match item {
+                    UiModifierValue::MiniMod { key, value } =>
+                        format!("{}::{}", key.join("."), format_modifier_value(value)),
+                    other => format_modifier_value(other),
+                })
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        UiModifierValue::MiniMod { key, value } => {
+            format!("{}::{}", key.join("."), format_modifier_value(value))
+        }
+    }
+}
+
+/// Flat list of resolved CSS `(property, value)` pairs, in the order the
+/// source modifiers were written.
+pub type StyleList = Vec<(String, String)>;
+
+/// Screen-size names a `mobile::{...}`/`tablet::{...}`/`laptop::{...}`/
+/// `desktop::{...}` modifier can use -- same nested-modifier shape as
+/// `hover::{...}` (a `key::{ sub_key::value, ... }` block), just keyed by
+/// viewport width instead of pointer state. The actual pixel ranges each
+/// name maps to live with the renderer that has a real viewport to
+/// measure (tint-wasm's `DomSession`), not here -- this module only
+/// resolves modifiers into style lists, it has no notion of "the current
+/// window size".
+const BREAKPOINT_NAMES: [&str; 4] = ["mobile", "tablet", "laptop", "desktop"];
+
+/// Splits a node's modifiers into: its base style, its `hover::{...}`
+/// style (if any), and one resolved `StyleList` per breakpoint name that
+/// was actually used (`mobile::{...}` etc. -- see `BREAKPOINT_NAMES`).
+/// The breakpoint list only contains entries for names the source
+/// actually wrote; a node with no `mobile::{...}` etc. gets an empty
+/// `Vec`, same "don't invent what wasn't asked for" rule as `hover_style`.
+pub fn resolve_style(modifiers: &[UiModifier]) -> (StyleList, StyleList, Vec<(String, StyleList)>) {
+    let mut style = Vec::new();
+    let mut hover_style = Vec::new();
+    let mut breakpoints: Vec<(String, StyleList)> = Vec::new();
+
+    for m in modifiers {
+        if is_style_group(&m.path) {
+            if let UiModifierValue::Tuple(items) = &m.value {
+                for item in items {
+                    if let UiModifierValue::MiniMod { key, value } = item {
+                        if m.path[0] == "motion" && key.len() == 1 && key[0] == "hover" {
+                            apply_nested_style(value, &mut hover_style);
+                            continue;
+                        }
+                        let key = grouped_property(&m.path[0], key);
+                        apply_property(&key, value, &mut style);
+                    }
+                }
+            }
+            continue;
+        }
+
+        if m.path.len() == 1 && m.path[0] == "hover" {
+            if let UiModifierValue::Tuple(items) = &m.value {
+                apply_group_items("motion", items, &mut hover_style);
+            }
+            continue;
+        }
+
+        if m.path.len() == 1 && BREAKPOINT_NAMES.contains(&m.path[0].as_str()) {
+            let mut bp_style = Vec::new();
+            if let UiModifierValue::Tuple(items) = &m.value {
+                apply_group_items("layout", items, &mut bp_style);
+            }
+            breakpoints.push((m.path[0].clone(), bp_style));
+            continue;
+        }
+
+        apply_property(&m.path, &m.value, &mut style);
+    }
+
+    (style, hover_style, breakpoints)
+}
+
+fn apply_nested_style(value: &UiModifierValue, out: &mut StyleList) {
+    if let UiModifierValue::Tuple(items) = value {
+        for item in items {
+            if let UiModifierValue::MiniMod { key, value } = item {
+                apply_property(key, value, out);
+            }
+        }
+    }
+}
+
+fn apply_group_items(group: &str, items: &[UiModifierValue], out: &mut StyleList) {
+    for item in items {
+        if let UiModifierValue::MiniMod { key, value } = item {
+            if key.len() == 1 && STYLE_GROUPS.contains(&key[0].as_str()) {
+                if let UiModifierValue::Tuple(nested) = value.as_ref() {
+                    apply_group_items(&key[0], nested, out);
+                }
+            } else {
+                let key = grouped_property(group, key);
+                apply_property(&key, value, out);
+            }
+        }
+    }
+}
+
+const STYLE_GROUPS: [&str; 3] = ["layout", "paint", "motion"];
+
+fn is_style_group(path: &[String]) -> bool {
+    path.len() == 1 && STYLE_GROUPS.contains(&path[0].as_str())
+}
+
+/// Groups are syntax only: their children resolve through the same property
+/// table as the flat form. This keeps the parser small while giving Tint a
+/// language-level organization that is not tied to CSS's property ordering.
+fn grouped_property(group: &str, path: &[String]) -> Vec<String> {
+    let mut out = path.to_vec();
+
+    if group == "paint" && out.len() == 1 && out[0] == "fill" {
+        out[0] = "background".to_string();
+    }
+    if group == "paint" && out.len() == 1 && out[0] == "outline" {
+        out[0] = "border".to_string();
+    }
+
+    out
+}
+
+include!("properties_base.rs");
+include!("properties_box.rs");
+include!("layout.rs");
+include!("dispatch.rs");
