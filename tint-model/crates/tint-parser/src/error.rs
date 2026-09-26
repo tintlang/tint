@@ -1,6 +1,5 @@
-
 use tint_ast::Span;
-use tint_lexer::{TokenKind};
+use tint_lexer::TokenKind;
 
 #[derive(Debug)]
 pub enum ParserError {

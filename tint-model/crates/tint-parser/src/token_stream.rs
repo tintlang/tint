@@ -1,4 +1,4 @@
-use crate::error::{ParserError, PResult};
+use crate::error::{PResult, ParserError};
 use tint_ast::Span;
 use tint_lexer::{Token, TokenKind};
 
@@ -14,7 +14,10 @@ impl TokenStream {
     }
 
     pub fn clone_with_reset(&self) -> Self {
-        Self { tokens: self.tokens.clone(), pos: 0 }
+        Self {
+            tokens: self.tokens.clone(),
+            pos: 0,
+        }
     }
 
     pub fn peek(&self) -> &Token {
@@ -31,9 +34,13 @@ impl TokenStream {
         token
     }
 
-    pub fn checkpoint(&self) -> usize { self.pos }
+    pub fn checkpoint(&self) -> usize {
+        self.pos
+    }
 
-    pub fn restore(&mut self, checkpoint: usize) { self.pos = checkpoint; }
+    pub fn restore(&mut self, checkpoint: usize) {
+        self.pos = checkpoint;
+    }
 
     pub fn consume_if(&mut self, kind: TokenKind) -> bool {
         if self.check(kind) {
@@ -74,35 +81,60 @@ impl TokenStream {
             .unwrap_or_else(|| self.tokens.last().expect("token stream cannot be empty"))
     }
 
-    pub fn peek_n_kind(&self, n: usize) -> TokenKind { self.peek_n(n).kind.clone() }
-
-    pub fn prev(&self) -> &Token {
-        if self.pos == 0 { &self.tokens[0] } else { &self.tokens[self.pos - 1] }
+    pub fn peek_n_kind(&self, n: usize) -> TokenKind {
+        self.peek_n(n).kind.clone()
     }
 
-    pub fn at_end(&self) -> bool { self.peek().kind == TokenKind::Eof }
+    pub fn prev(&self) -> &Token {
+        if self.pos == 0 {
+            &self.tokens[0]
+        } else {
+            &self.tokens[self.pos - 1]
+        }
+    }
 
-    pub fn check(&self, kind: TokenKind) -> bool { self.peek().kind == kind }
+    pub fn at_end(&self) -> bool {
+        self.peek().kind == TokenKind::Eof
+    }
+
+    pub fn check(&self, kind: TokenKind) -> bool {
+        self.peek().kind == kind
+    }
 
     pub fn check2(&self, first: TokenKind, second: TokenKind) -> bool {
         self.check(first) && self.peek_n(1).kind == second
     }
 
-    pub fn peek_kind(&self) -> TokenKind { self.peek().kind.clone() }
-
-    pub fn peek2_kind(&self) -> TokenKind { self.peek_n(1).kind.clone() }
-
-    pub fn next_owned(&mut self) -> Token { self.next() }
-
-    pub fn error_here<T>(&self, msg: impl Into<String>) -> PResult<T> {
-        Err(ParserError::Message { msg: msg.into(), span: self.peek().span })
+    pub fn peek_kind(&self) -> TokenKind {
+        self.peek().kind.clone()
     }
 
-    pub fn last_span(&self) -> Span { self.prev().span }
+    pub fn peek2_kind(&self) -> TokenKind {
+        self.peek_n(1).kind.clone()
+    }
 
-    pub fn expect_ident(&mut self) -> PResult<Token> { self.expect(TokenKind::Ident) }
+    pub fn next_owned(&mut self) -> Token {
+        self.next()
+    }
 
-    pub fn expect_string(&mut self) -> PResult<Token> { self.expect(TokenKind::String) }
+    pub fn error_here<T>(&self, msg: impl Into<String>) -> PResult<T> {
+        Err(ParserError::Message {
+            msg: msg.into(),
+            span: self.peek().span,
+        })
+    }
+
+    pub fn last_span(&self) -> Span {
+        self.prev().span
+    }
+
+    pub fn expect_ident(&mut self) -> PResult<Token> {
+        self.expect(TokenKind::Ident)
+    }
+
+    pub fn expect_string(&mut self) -> PResult<Token> {
+        self.expect(TokenKind::String)
+    }
 
     /// Returns true for `name[.segment]* {`, the prefix used by block-style UI modifiers.
     pub fn is_modifier_start(&self) -> bool {

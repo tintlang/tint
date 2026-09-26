@@ -1,9 +1,9 @@
 // async_rt/scheduler.rs
 
 use super::future::FutureHandle;
-use std::task::{Context, Poll, Waker, RawWaker, RawWakerVTable};
-use std::pin::Pin;
 use std::collections::VecDeque;
+use std::pin::Pin;
+use std::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
 
 pub struct Scheduler {
     queue: VecDeque<FutureHandle>,
@@ -11,14 +11,16 @@ pub struct Scheduler {
 
 impl Scheduler {
     pub fn new() -> Self {
-        Self { queue: VecDeque::new() }
+        Self {
+            queue: VecDeque::new(),
+        }
     }
 
     pub fn spawn(&mut self, f: impl std::future::Future<Output = ()> + 'static) {
         let id = self.queue.len();
         self.queue.push_back(FutureHandle::new(id, f));
     }
-    
+
     pub fn poll_all(&mut self) -> bool {
         let mut progressed = false;
         let mut n = self.queue.len();

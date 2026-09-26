@@ -16,7 +16,10 @@ impl<T> StateCell<T> {
         }
     }
 
-    pub fn get(&self) -> T where T: Clone {
+    pub fn get(&self) -> T
+    where
+        T: Clone,
+    {
         self.value.borrow().clone()
     }
 
@@ -29,4 +32,3 @@ impl<T> StateCell<T> {
         self.version.get()
     }
 }
-

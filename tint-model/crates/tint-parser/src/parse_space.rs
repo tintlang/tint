@@ -1,10 +1,10 @@
-use crate::Parser;
 use crate::error::PResult;
-use tint_lexer::TokenKind;
+use crate::Parser;
 use tint_ast::Item;
+use tint_ast::SpaceDecl;
 use tint_ast::SpaceKind;
 use tint_ast::Span;
-use tint_ast::SpaceDecl;
+use tint_lexer::TokenKind;
 
 impl Parser {
     pub fn parse_space(&mut self) -> PResult<SpaceDecl> {
@@ -30,9 +30,8 @@ impl Parser {
         &mut self,
         name: String,
         kind: SpaceKind,
-        start: Span
+        start: Span,
     ) -> PResult<SpaceDecl> {
-
         self.stream.expect(TokenKind::LBrace)?;
 
         let mut items = Vec::new();
@@ -60,7 +59,6 @@ impl Parser {
         })
     }
 
-
     fn validate_item_in_space(&self, item: &Item, kind: SpaceKind) -> PResult<()> {
         use SpaceKind::*;
 
@@ -78,11 +76,7 @@ impl Parser {
             },
 
             Logic => match item {
-                Item::Fn(_)
-                | Item::Struct(_)
-                | Item::Enum(_)
-                | Item::Impl(_)
-                => Ok(()),
+                Item::Fn(_) | Item::Struct(_) | Item::Enum(_) | Item::Impl(_) => Ok(()),
 
                 _ => self.error("Only fn, struct, enum, impl allowed in logic space"),
             },
@@ -91,11 +85,10 @@ impl Parser {
         }
     }
 
-
     fn determine_space_kind(item: &Item) -> SpaceKind {
         match item {
             Item::Kernel(_) => SpaceKind::GPU,
-            Item::UiFn(_)   => SpaceKind::UI,
+            Item::UiFn(_) => SpaceKind::UI,
 
             Item::Fn(_)
             | Item::Struct(_)
@@ -103,12 +96,12 @@ impl Parser {
             | Item::Impl(_)
             | Item::TypeAlias(_)
             | Item::Use(_)
+            | Item::Import(_)
             | Item::Mod(_)
             | Item::GlobalLet(_)
             | Item::ExportFn(_, _)
             | Item::ExportStruct(_)
-            | Item::ExportEnum(_)
-            => SpaceKind::Logic,
+            | Item::ExportEnum(_) => SpaceKind::Logic,
 
             // Defensive fallback for an otherwise unreachable branch.
             _ => SpaceKind::Logic,

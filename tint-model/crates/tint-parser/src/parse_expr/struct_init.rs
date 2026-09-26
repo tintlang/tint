@@ -1,15 +1,9 @@
-
-use crate::{Parser, error::*};
-use tint_ast::{Expr, StructInitField, Span};
+use crate::{error::*, Parser};
+use tint_ast::{Expr, Span, StructInitField};
 use tint_lexer::TokenKind;
 
 impl Parser {
-    pub(crate) fn parse_struct_init(
-        &mut self,
-        name: String,
-        start_span: Span,
-    ) -> PResult<Expr> {
-
+    pub(crate) fn parse_struct_init(&mut self, name: String, start_span: Span) -> PResult<Expr> {
         self.stream.expect(TokenKind::LBrace)?;
 
         let mut fields = Vec::new();
@@ -19,7 +13,10 @@ impl Parser {
         // StyleDetector: None / Tint / Colon
         // -------------------------------
         #[derive(PartialEq)]
-        enum Style { Tint, Colon }
+        enum Style {
+            Tint,
+            Colon,
+        }
         let mut style: Option<Style> = None;
 
         // empty struct {}
@@ -58,15 +55,15 @@ impl Parser {
                             Some(Style::Tint) => {}
                             Some(Style::Colon) => {
                                 return Err(ParserError::Message {
-                                    msg: "Struct initializer mixes Tint `{}` and Colon `:` styles".into(),
+                                    msg: "Struct initializer mixes Tint `{}` and Colon `:` styles"
+                                        .into(),
                                     span: field_span,
                                 });
                             }
                         }
 
-
                         self.stream.expect(TokenKind::LBrace)?;
-                        let expr = self.parse_expr()?;           // `parse_expr` stops before the closing brace.
+                        let expr = self.parse_expr()?; // `parse_expr` stops before the closing brace.
                         self.stream.expect(TokenKind::RBrace)?;
                         fields.push(StructInitField::Tint {
                             name: field_name,
@@ -82,7 +79,8 @@ impl Parser {
                             Some(Style::Colon) => {}
                             Some(Style::Tint) => {
                                 return Err(ParserError::Message {
-                                    msg: "Struct initializer mixes Tint `{}` and Colon `:` styles".into(),
+                                    msg: "Struct initializer mixes Tint `{}` and Colon `:` styles"
+                                        .into(),
                                     span: field_span,
                                 });
                             }

@@ -1,8 +1,8 @@
-use crate::{Parser, error::*};
-use tint_ast::Expr;
-use tint_lexer::TokenKind;
+use crate::{error::*, Parser};
 use tint_ast::BorrowKind;
+use tint_ast::Expr;
 use tint_ast::Span;
+use tint_lexer::TokenKind;
 
 impl Parser {
     /// Parse:
@@ -28,10 +28,13 @@ impl Parser {
 
             match ident.lexeme.as_str() {
                 "strict" => kind = BorrowKind::Strict,
-                "group"  => kind = BorrowKind::Group,
+                "group" => kind = BorrowKind::Group,
                 other => {
                     return Err(ParserError::Message {
-                        msg: format!("Unknown borrow tag `@{}` (only @strict / @group allowed)", other),
+                        msg: format!(
+                            "Unknown borrow tag `@{}` (only @strict / @group allowed)",
+                            other
+                        ),
                         span: ident.span,
                     });
                 }
@@ -51,7 +54,6 @@ impl Parser {
         };
 
         let span = Span::merge(start_span, self.stream.last_span());
-
 
         Ok(Expr::Borrow {
             kind,

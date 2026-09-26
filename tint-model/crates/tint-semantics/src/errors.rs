@@ -1,5 +1,5 @@
-use tint_ast::span::Span;
 use std::fmt;
+use tint_ast::span::Span;
 
 #[derive(Debug, Clone)]
 pub struct SemanticError {

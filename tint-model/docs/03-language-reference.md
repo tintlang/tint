@@ -1,4 +1,4 @@
-# Language Reference (Syntax v2.9)
+# Language Reference
 
 This is the terse, precise syntax spec. For explanations, rationale, and worked
 examples, see the `guide/` and `ui/` folders — this document is the lookup
@@ -10,14 +10,14 @@ It assumes the [Logic Mode / UI Mode](02-core-model.md) split.
 
 Tokens: identifiers (`myVar`, `addUser`, `UserProfile`), literals (`10`, `3.14`,
 `"hello"`), keywords (`fn`, `let`, `state`, `ui`, `match`, `enum`, `module`,
-`export`, ...), symbols `{} () <> </> /> : = -> => .. + |`, and `//` line comments
+`export`, ...), symbols `{} () : = -> => .. + |`, and `//` line comments
 only (`/* */` is not supported).
 
 Strings interpolate with `{}`: `"value = {a + b}"`.
 
 ### Naming rules
 
-- UI components: PascalCase — `<Button>`, `<Panel>` (`<panel>` is an error)
+- UI nodes: PascalCase — `Button`, `Panel` (`panel` is not the canonical form)
 - functions and variables: camelCase — `drawRect`, `userId`
 - constants: UPPER_SNAKE_CASE — `const PI = 3.14`
 - modules: dotted — `module ui.widgets`
@@ -40,11 +40,12 @@ Operator precedence matches Rust. Vector operators extend arithmetic: `+ - * · 
 
 **Semicolons** are an optional statement terminator in Logic Mode (`let x = 10;` and
 `let x = 10` are both valid) and are **forbidden anywhere in UI Mode** — before,
-inside, or after a UI node, or inside `{...}` interpolation. `<Panel;>`,
-`<Text>{value};</Text>`, `<Button onClick=run>;` are all errors.
+inside, or after a UI node, or inside `{...}` interpolation. `Panel { ... };`,
+`Text { "{value}" };`, `Button { click||run };` are all errors because UI mode
+does not use semicolon terminators.
 
 In UI Mode, expressions are allowed **only inside string interpolation**:
-`<Text>"Sum: {a + b}"</Text>`.
+`Text { "Sum: {a + b}" }`.
 
 ## 2. Types
 
@@ -133,8 +134,8 @@ No overloads, no varargs, no kwargs, no default parameters.
 Ownership: move by default (`consume(a)` moves `a`); `clone a` for an explicit
 copy; `borrow immut tex { sample(tex) }` for read-only access.
 
-In UI Mode, functions can't be defined or called except as a handler value:
-`<Button onClick=increment>`.
+In UI Mode, functions are referenced by named event attributes:
+`Button { click||increment }`.
 
 ## 4. Control flow (Logic Mode only)
 
@@ -156,7 +157,7 @@ match node {
 let {x, y} = v              // pattern destructuring
 ```
 
-UI Mode uses `<Block if=...>` / `<Block for=...>` / `<Block match=...>` instead —
+UI Mode uses `if{...}`, `for{...}`, and `match{...}` directly on a named node;
 see `ui/blocks.md`.
 
 Errors/`try`:
@@ -170,69 +171,23 @@ fn load() throws -> Data {
 
 `try` and `Result` are fully forbidden in UI Mode.
 
-## 5. UI modifiers, assignment, and animation tokens
+## 5. UI modifiers, themes, and motion
 
-Every visual parameter uses `{}`; every logical/behavioral attribute uses `=`.
-Full modifier catalogue: `ui/modifiers.md`. Full styling/effects: `ui/styling.md`.
-
-```
-padding{20}
-<Block if=isReady>
-<Button onClick=submit>
-```
-
-Animation transitions use `->`, with semantic shorthands:
+UI modifiers use `::`; logic attributes use `||`. The canonical style form groups
+properties by intent:
 
 ```
-opacity: 0 -> 1
-visible = 1        hidden = 0
-grow    = scale 1.0 -> 1.1     shrink = scale 1.0 -> 0.9
-enter   = opacity 0->1 + y 12px->0px
-exit    = opacity 1->0 + y 0px->12px
-```
-
-## 6. Style system: `tintstyle` and `theme`
-
-Both are declarative, zero-cost UI-Mode DSLs (inlined into TintIR at compile time);
-neither allows logic, expressions, or computation.
-
-**`tintstyle`** — reusable mixin groups of modifiers, top-level only:
-
-```
-tintstyle CardStyle {
-    padding{14}
-    radius{12}
-    background{gray-900}
-    shadow{0px 4px 16px black{24%}}
+Card {
+    layout::{ padding::24, gap::12, direction::column }
+    paint::{ gradient::{ angle::135, from::#6c5ce7, to::#8b7cf0 }, radius::20 }
+    motion::{ transition::"transform .2s ease", hover::{ scale::1.03 } }
 }
-
-<Panel ...CardStyle>
-    <Text>"Hello"</Text>
-</Panel>
 ```
 
-`...Name` inlines the style. A `tintstyle` cannot contain `<UI/>` elements,
-variables, `state`, `signal`, or `computed`, but may reference `theme` fields.
-
-**`theme`** — a namespaced hierarchy of visual tokens (colors, lengths, numbers,
-opacity only — no expressions, strings, variables, or function calls):
-
-```
-theme DarkTheme.Button {
-    primary{blue-400}
-    background{gray-900}
-    textColor{white}
-}
-
-<Text color{DarkTheme.Button.textColor}>
-```
-
-Theme fields are compile-time aliases; they cannot be read in Logic Mode
-(`let x = DarkTheme.Button.background` is an error) and a theme is not an object
-(`background{DarkTheme}` is an error — you must name a leaf field).
-
-Precedence when combined: manual UI modifiers > `tintstyle` modifiers > theme
-fields referenced inside a `tintstyle`.
+The supported groups are `layout`, `paint`, and `motion`. Layout includes flex
+and `grid::{ columns, rows, gap }`; use `minmax(0, 1fr)` tracks for panes that
+must not widen their page. Theme variants use `theme::name { ... }`. Internal
+links use `route||"/path"`. See `ui/modifiers.md` for the complete list.
 
 ## 7. `ui fn` and reactivity
 
@@ -241,10 +196,10 @@ ui fn Counter() {
     state n = 0
     fn inc() { n = n + 1 }
 
-    <Column>
-        <Text>{n}</Text>
-        <Button onClick=inc>"+"</Button>
-    </Column>
+    Column {
+        Text { "{n}" }
+        Button { click||inc "+" }
+    }
 }
 ```
 
@@ -272,73 +227,55 @@ Typing rules for `state` / `signal` / `computed`:
 UI types: `string, number, bool, UI, UIChild, UIChildren, Color, Length, Texture,
 SlotRef`.
 
-**Binding:** `<Input bind=text />` — `bind` only accepts `state` or `signal`
-(`bind=42`, `bind=user.name` are errors).
-
 **Event propagation:** target → bubble, with `stopPropagation`; there is no capture
 phase. Full event catalogue: `guide/events.md`.
 
-## 8. Lifecycle
+## 8. Async status
+
+`async`/`await` is not implemented in the current runtime. See
+`guide/async.md`; it is not part of the active UI syntax.
+
+## 10. Modifier values
+
+Inside a modifier tuple, items are comma-separated. UI nodes use named blocks;
+there is no indentation-sensitive syntax:
 
 ```
-animate:onMount{...}
-onUpdate(state)
-onDestroy=cleanup
+Button {
+    click||open_menu
+    layout::{ padding.x::18, padding.y::10 }
+    paint::{ radius::full }
+}
 ```
-
-## 9. Async (Logic Mode only — see `guide/async.md` for the full model)
-
-```
-async fn load() { ... }
-<Button onClick=load />
-```
-
-`await` is only valid inside `fn`/`async fn`.
-
-## 10. List/parameter syntax
-
-Inside `{}`, items are comma-separated: `text{xl, bold}`. Outside `{}`, on a tag,
-commas between attributes are accepted and ignored by the parser:
-
-```
-<Button
-    onClick=foo,
-    padding{20},
->
-```
-
-Strings are for user-facing text only — never for system configuration like
-`theme`/`mode` (use an `enum` there).
 
 ## 11. Symbol semantics
 
 | Symbol | Meaning |
 |---|---|
-| `{}` | logic block scope, UI modifier, or object literal (by context) |
+| `{}` | logic block scope, UI node, or modifier tuple (by context) |
 | `()` | function call |
-| `=` | logic assignment / logic attribute |
+| `=` | logic assignment |
+| `||` | named UI event attribute |
 | `:` | type annotation |
-| `->` | animation transition, or function return type |
+| `->` | function return type |
 | `=>` | match case |
 | `..` | range |
-| `<>` | UI node |
+| `::` | modifier path/value separator |
 | `""` | string literal |
 
 ## 12. Common errors
 
 ```
-padding=20            // visual param needs {}, not =
-increment{5}           // logic function call needs (), not {}
-fn x() { <Text/> }     // no UI inside Logic Mode
-animate=...             // animate needs {}, not =
-<Else> outside <Block>  // Else only inside <Block if>
+padding=20             // visual values use ::
+increment{5}            // logic function call needs ()
+fn x() { Text { "x" } } // UI is not written in Logic Mode
 for x in list() {}      // list() returns an object; iterate the collection itself
 log("text")             // VM/debug helpers use {}: log{"text"}
 ```
 
 ## 13. Fragments, comments, entry point
 
-Empty fragments `<>...</>` are not allowed. Comments are `//` only. Entry point:
+Empty fragments are not part of the UI syntax. Comments are `//` only. Entry point:
 
 ```
 ui fn App() { ... }
@@ -390,7 +327,7 @@ m = m * matrix.rotateZ(3.14)          // * is the only overloaded operator
 borrow immut m { gpu.apply_transform(m) }
 ```
 
-Not usable in UI Mode (`<Panel transform{matrix.identity}>` is an error), not
+Not usable in UI Mode (`Panel { transform::"matrix.identity" }` is an error), not
 comparable or hashable.
 
 ## 17. Stdlib
@@ -433,27 +370,14 @@ Param          ::= Ident ":" Type
 
 # --- UI blocks ---
 UiBlock        ::= UiNode+
-UiNode         ::= "<" Ident AttributeList "/>"
-                 | "<" Ident AttributeList ">" UiChildren "</" Ident ">"
-UiChildren     ::= (UiNode | TextLiteral | Interpolation | Block)*
-
-# --- Offset modifiers (axis model, shared by layout/offset modifiers) ---
-OffsetModifierIdent ::= "offset" | "offset" "." Axis
-Axis           ::= "t" | "b" | "l" | "r" | "x" | "y" | "all"
-ModifierItem   ::= OffsetModifierIdent UiModifierBlock
-                 | Ident
-                 | Ident ":" ModifierValue
-                 | Ident UiModifierBlock
-
-# --- Attributes ---
-AttributeList  ::= (Attribute (","?) )*
-Attribute      ::= AttributeName "=" Value
-                 | AttributeName UiModifierBlock
-AttributeName  ::= Ident (":" Ident)?              # supports animate:onMount
-Value          ::= Ident | Literal | Interpolation | FnCall
-UiModifierBlock ::= "{" UiModifierContent "}"
-UiModifierContent ::= (ModifierItem ("," ModifierItem)*)?
-ModifierValue  ::= Literal | Ident | Interpolation | AnimationExpr
+UiNode         ::= Ident "{" UiContent "}"
+UiContent      ::= (Modifier | Attribute | UiNode | TextLiteral)*
+Modifier       ::= Ident ("." Ident)* "::" ModifierValue
+Attribute      ::= Ident "||" (Ident | Literal | "{" Expr "}")
+ModifierValue  ::= Literal | Ident | "{" TupleContent "}"
+TupleContent   ::= (Literal | Ident | MiniModifier) ("," (Literal | Ident | MiniModifier))*
+MiniModifier   ::= Ident ("." Ident)* "::" ModifierValue
+ThemeNode      ::= "theme" "::" Ident "{" UiContent "}"
 
 # --- Text & interpolation ---
 TextLiteral    ::= '"' (Char | Interpolation)* '"'

@@ -99,7 +99,12 @@ fn taffy_style(style: &StyleList) -> Style {
             "justify-content" => s.justify_content = justify_content(value),
             "padding" => {
                 let lp = length_percentage_px(value);
-                padding = Rect { left: lp, right: lp, top: lp, bottom: lp };
+                padding = Rect {
+                    left: lp,
+                    right: lp,
+                    top: lp,
+                    bottom: lp,
+                };
             }
             "padding-left" => padding.left = length_percentage_px(value),
             "padding-right" => padding.right = length_percentage_px(value),
@@ -107,7 +112,12 @@ fn taffy_style(style: &StyleList) -> Style {
             "padding-bottom" => padding.bottom = length_percentage_px(value),
             "margin" => {
                 let m = length_percentage_auto_px(value);
-                margin = Rect { left: m, right: m, top: m, bottom: m };
+                margin = Rect {
+                    left: m,
+                    right: m,
+                    top: m,
+                    bottom: m,
+                };
             }
             "margin-left" => margin.left = length_percentage_auto_px(value),
             "margin-right" => margin.right = length_percentage_auto_px(value),
@@ -223,7 +233,12 @@ pub fn compute_layout(
         let y = parent_y + layout.location.y;
         out.insert(
             id,
-            NodeLayout { x, y, width: layout.size.width, height: layout.size.height },
+            NodeLayout {
+                x,
+                y,
+                width: layout.size.width,
+                height: layout.size.height,
+            },
         );
         for &child in &tree.nodes[id].children {
             collect(tree, child, taffy_tree, tint_to_taffy, x, y, out);

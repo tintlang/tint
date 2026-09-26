@@ -1,7 +1,7 @@
-use crate::Span;
-use crate::Type;
 use super::expr::Expr;
+use crate::Span;
 use crate::StructInitField;
+use crate::Type;
 
 #[derive(Debug, Clone)]
 pub enum Pattern {
@@ -30,7 +30,8 @@ pub enum Pattern {
     Typed {
         pat: Box<Pattern>,
         ty: Type,
-        span: Span },
+        span: Span,
+    },
 
     Map {
         fields: Vec<PatternField>,
@@ -44,8 +45,8 @@ pub enum Pattern {
 
     Group {
         fields: Vec<PatternField>,
-        span: Span
-    }
+        span: Span,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -66,7 +67,6 @@ pub enum PatternField {
     // ..
     Rest(Span),
 }
-
 
 #[derive(Debug, Clone)]
 pub struct MatchArm {

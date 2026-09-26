@@ -1,5 +1,4 @@
-
-use crate::{Parser, error::*};
+use crate::{error::*, Parser};
 use tint_ast::Expr;
 
 impl Parser {

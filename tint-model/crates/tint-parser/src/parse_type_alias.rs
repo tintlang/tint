@@ -1,7 +1,6 @@
-
-use crate::{Parser};
 use crate::error::*;
-use tint_ast::{Span, Item, TypeAliasDecl};
+use crate::Parser;
+use tint_ast::{Item, Span, TypeAliasDecl};
 use tint_lexer::TokenKind;
 
 impl Parser {

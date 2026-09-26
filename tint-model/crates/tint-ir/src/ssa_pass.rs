@@ -2,7 +2,7 @@
 // SSA Optimization Passes (compatible with current TintIR)
 // =============================================================
 
-use crate::ir::{ProgramIR, FunctionIR, Block, Instr, Value};
+use crate::ir::{Block, FunctionIR, Instr, ProgramIR, Value};
 
 // =============================================================
 // PUBLIC ENTRY POINT
@@ -131,9 +131,9 @@ fn dead_code_elimination(func: &mut FunctionIR) -> bool {
 
         block.instrs.retain(|instr| {
             match instr {
-                Instr::Binary { dst, .. }
-                | Instr::Unary { dst, .. }
-                | Instr::Const { dst, .. } => live.contains(dst),
+                Instr::Binary { dst, .. } | Instr::Unary { dst, .. } | Instr::Const { dst, .. } => {
+                    live.contains(dst)
+                }
 
                 _ => true, // keep load/store/return
             }
@@ -171,7 +171,9 @@ fn used_values(instr: &Instr) -> Vec<u32> {
             result.extend(args.clone());
             result
         }
-        Instr::Match { scrutinee, arms, .. } => {
+        Instr::Match {
+            scrutinee, arms, ..
+        } => {
             let mut used = vec![*scrutinee];
             for (_, guard, result_id) in arms {
                 if let Some(g) = guard {
@@ -184,10 +186,11 @@ fn used_values(instr: &Instr) -> Vec<u32> {
         Instr::MapInit { entries, .. } => entries.iter().map(|(_, v)| *v).collect(),
         Instr::MapAccess { map, .. } => vec![*map],
         Instr::FieldStore { base, src, .. } => vec![*base, *src],
-        Instr::IndexStore { arr, index, src, .. } => vec![*arr, *index, *src],
+        Instr::IndexStore {
+            arr, index, src, ..
+        } => vec![*arr, *index, *src],
         Instr::TupleExtract { tuple, .. } => vec![*tuple],
         Instr::LoadLocal { .. } => vec![],
         Instr::Const { .. } => vec![],
     }
 }
-

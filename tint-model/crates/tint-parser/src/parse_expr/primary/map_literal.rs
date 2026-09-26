@@ -1,4 +1,4 @@
-use crate::{Parser, error::*};
+use crate::{error::*, Parser};
 use tint_ast::{Expr, Span};
 use tint_lexer::TokenKind;
 
@@ -21,7 +21,10 @@ impl Parser {
         let mut entries = Vec::new();
 
         #[derive(PartialEq)]
-        enum Style { Tint, Colon }
+        enum Style {
+            Tint,
+            Colon,
+        }
         let mut style: Option<Style> = None;
 
         // empty literal
@@ -52,7 +55,9 @@ impl Parser {
                         Some(Style::Tint) => {}
                         Some(Style::Colon) => {
                             return Err(ParserError::Message {
-                                msg: "Cannot mix Colon `:` style with Tint `{}` style in map literal".into(),
+                                msg:
+                                    "Cannot mix Colon `:` style with Tint `{}` style in map literal"
+                                        .into(),
                                 span: key_span,
                             });
                         }
@@ -71,7 +76,9 @@ impl Parser {
                         Some(Style::Colon) => {}
                         Some(Style::Tint) => {
                             return Err(ParserError::Message {
-                                msg: "Cannot mix Tint `{}` style with Colon `:` style in map literal".into(),
+                                msg:
+                                    "Cannot mix Tint `{}` style with Colon `:` style in map literal"
+                                        .into(),
                                 span: key_span,
                             });
                         }

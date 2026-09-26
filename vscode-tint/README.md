@@ -1,6 +1,6 @@
 # Tint Language for VSCode
 
-Syntax highlighting and development tools for the [Tint](https://github.com/hawerz/tintlang) UI programming language.
+Syntax highlighting and development tools for the [Tint](https://github.com/tintlang/tint) UI programming language.
 
 ## Features
 
@@ -16,14 +16,14 @@ Syntax highlighting and development tools for the [Tint](https://github.com/hawe
 If you have the Tint CLI installed:
 
 ```bash
-cargo install --path /path/to/tintlang/tint-model/crates/tint-cli
+cargo install --path /path/to/tint/tint-model/crates/tint-cli
 ```
 
 Then install this extension from VSCode marketplace (or manually).
 
 ### Manual Installation
 
-1. Clone the tintlang repository
+1. Clone the [tintlang/tint](https://github.com/tintlang/tint) repository
 2. Navigate to `vscode-tint` directory
 3. Run `npm install` && `npm run compile`
 4. Run `code --install-extension tint-lang-0.1.0.vsix`

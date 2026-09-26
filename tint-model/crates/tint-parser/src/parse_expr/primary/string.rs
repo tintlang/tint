@@ -1,5 +1,4 @@
-
-use crate::{Parser, error::*};
+use crate::{error::*, Parser};
 use tint_ast::{Expr, Span};
 
 impl Parser {
@@ -14,7 +13,7 @@ impl Parser {
     }
 
     pub(crate) fn parse_interpolated_string(&mut self, raw: String, span: Span) -> PResult<Expr> {
-        use tint_ast::StringPart::{Text, Expr as PartExpr};
+        use tint_ast::StringPart::{Expr as PartExpr, Text};
 
         let mut parts = Vec::new();
         let chars: Vec<char> = raw.chars().collect();
@@ -35,12 +34,16 @@ impl Parser {
                     let mut depth = 1;
 
                     while i < chars.len() && depth > 0 {
-                        if chars[i] == '{' { depth += 1; }
-                        if chars[i] == '}' { depth -= 1; }
+                        if chars[i] == '{' {
+                            depth += 1;
+                        }
+                        if chars[i] == '}' {
+                            depth -= 1;
+                        }
                         i += 1;
                     }
 
-                    let expr_src = &raw[start..i-1];
+                    let expr_src = &raw[start..i - 1];
 
                     let mut parser = Parser::new_expr_only(expr_src.into(), span);
                     let expr = parser.parse_expr()?;

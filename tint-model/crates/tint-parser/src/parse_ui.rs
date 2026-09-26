@@ -1,11 +1,9 @@
-
-use crate::Parser;
 use crate::error::*;
+use crate::Parser;
 use tint_ast::*;
 use tint_lexer::TokenKind;
 
 impl Parser {
-
     /// Parse:  ui fn Name(params...) {  <UI> / BlockUI  }
     pub(crate) fn parse_ui_fn(&mut self) -> PResult<UiFnDecl> {
         // "ui"

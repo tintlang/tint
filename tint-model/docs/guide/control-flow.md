@@ -1,7 +1,7 @@
 # TintLogic: Control Flow
 
-All of this is Logic Mode only — UI Mode uses `<Block if=...>` / `<Block for=...>` /
-`<Block match=...>` instead (see `ui/blocks.md`).
+This chapter covers Logic Mode. UI control flow uses `if{...}`, `for{...}`, and
+`match{...}` directly on named UI nodes (see `ui/blocks.md`).
 
 ## If / else
 
@@ -82,8 +82,7 @@ mistake here:
 ```
 log("text")          // wrong — VM helpers use {}
 increment{5}           // wrong — logic functions use ()
-shadow(4px)             // wrong — that's a UI modifier, it uses {}
-animate( ... )           // wrong — animate is a {} block, not a call
+shadow(4px)             // wrong — that's a UI modifier, it uses ::
 ```
 
 ## Full example

@@ -1,5 +1,5 @@
-pub mod lock;
 pub mod intrinsic;
+pub mod lock;
 
 pub struct BorrowManager {
     locked: Option<usize>,

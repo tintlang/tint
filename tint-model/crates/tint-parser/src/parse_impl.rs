@@ -1,6 +1,6 @@
-use crate::Parser;
 use crate::error::PResult;
-use tint_ast::{Item, ImplBlock, Span};
+use crate::Parser;
+use tint_ast::{ImplBlock, Item, Span};
 use tint_lexer::TokenKind;
 
 impl Parser {

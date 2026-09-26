@@ -25,20 +25,10 @@ pub trait EvalHost {
     fn assign_to(&mut self, lhs: &Expr, value: Value) -> bool;
 
     /// Resolve and invoke a named function.
-    fn call_fn(
-        &mut self,
-        name: &str,
-        args: &[Value],
-        span: Span,
-    ) -> EvalResult<Value>;
+    fn call_fn(&mut self, name: &str, args: &[Value], span: Span) -> EvalResult<Value>;
 
     /// Invoke a user-defined function by name.
-    fn call_user_fn(
-        &mut self,
-        name: &str,
-        args: &[Value],
-        span: Span,
-    ) -> EvalResult<Value>;
+    fn call_user_fn(&mut self, name: &str, args: &[Value], span: Span) -> EvalResult<Value>;
 
     fn set_var(&mut self, name: &str, value: Value);
 

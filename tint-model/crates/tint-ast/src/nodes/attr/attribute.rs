@@ -21,4 +21,3 @@ impl AttributeList {
         self.items.is_empty()
     }
 }
-

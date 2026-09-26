@@ -4,8 +4,8 @@ use tint_ast::{Pattern, PatternField};
 pub struct IrVM {
     pub program: ProgramIR,
     locals: std::collections::HashMap<String, Value>,
-    values: Vec<Value>, // SSA value table
-    computed: std::collections::HashSet<ValueId>, // which dsts have actually been computed
+    values: Vec<Value>,                                   // SSA value table
+    computed: std::collections::HashSet<ValueId>,         // which dsts have actually been computed
     current_instrs: Vec<Instr>, // instrs of the function currently executing
     dst_index: std::collections::HashMap<ValueId, usize>, // dst -> index in current_instrs
 }
@@ -191,248 +191,277 @@ impl IrVM {
 
     fn exec_instr(&mut self, instr: &Instr) -> Option<Value> {
         match instr {
-                Instr::Const { dst, value } => {
-                    self.alloc_value(*dst, value.clone());
-                }
+            Instr::Const { dst, value } => {
+                self.alloc_value(*dst, value.clone());
+            }
 
-                Instr::LoadLocal { dst, name } => {
-                    let v = self.locals.get(name)
-                        .unwrap_or_else(|| panic!("Undefined variable {}", name))
-                        .clone();
+            Instr::LoadLocal { dst, name } => {
+                let v = self
+                    .locals
+                    .get(name)
+                    .unwrap_or_else(|| panic!("Undefined variable {}", name))
+                    .clone();
 
-                    self.alloc_value(*dst, v);
-                }
+                self.alloc_value(*dst, v);
+            }
 
-                Instr::StoreLocal { name, src } => {
-                    let v = self.get_value(*src);
-                    self.locals.insert(name.clone(), v);
-                }
+            Instr::StoreLocal { name, src } => {
+                let v = self.get_value(*src);
+                self.locals.insert(name.clone(), v);
+            }
 
-                Instr::Unary { dst, op, src } => {
-                    let v = self.get_value(*src).unwrap_number();
+            Instr::Unary { dst, op, src } => {
+                let v = self.get_value(*src).unwrap_number();
+                let out = match op.as_str() {
+                    "-" => -v,
+                    "+" => v,
+                    _ => panic!("Unknown unary op {}", op),
+                };
+                self.alloc_value(*dst, Value::Number(out));
+            }
+
+            Instr::Binary { dst, op, lhs, rhs } => {
+                let l = self.get_value(*lhs);
+                let r = self.get_value(*rhs);
+
+                // "+" also means string concatenation once either side
+                // is a String (e.g. `"" + id + ":" + name`).
+                let out = if op == "+"
+                    && (matches!(l, Value::String(_)) || matches!(r, Value::String(_)))
+                {
+                    Value::String(format!(
+                        "{}{}",
+                        Self::display_value(&l),
+                        Self::display_value(&r)
+                    ))
+                } else {
+                    let l = l.unwrap_number();
+                    let r = r.unwrap_number();
+
                     let out = match op.as_str() {
-                        "-" => -v,
-                        "+" =>  v,
-                        _ => panic!("Unknown unary op {}", op),
-                    };
-                    self.alloc_value(*dst, Value::Number(out));
-                }
-
-                Instr::Binary { dst, op, lhs, rhs } => {
-                    let l = self.get_value(*lhs);
-                    let r = self.get_value(*rhs);
-
-                    // "+" also means string concatenation once either side
-                    // is a String (e.g. `"" + id + ":" + name`).
-                    let out = if op == "+" && (matches!(l, Value::String(_)) || matches!(r, Value::String(_))) {
-                        Value::String(format!("{}{}", Self::display_value(&l), Self::display_value(&r)))
-                    } else {
-                        let l = l.unwrap_number();
-                        let r = r.unwrap_number();
-
-                        let out = match op.as_str() {
-                            "+" => l + r,
-                            "-" => l - r,
-                            "*" => l * r,
-                            "/" => l / r,
-                            _ => panic!("Unknown binary op {}", op),
-                        };
-
-                        Value::Number(out)
+                        "+" => l + r,
+                        "-" => l - r,
+                        "*" => l * r,
+                        "/" => l / r,
+                        _ => panic!("Unknown binary op {}", op),
                     };
 
-                    self.alloc_value(*dst, out);
-                }
+                    Value::Number(out)
+                };
 
-                Instr::Call { dst, func, args } => {
-                    println!("WARNING: Call not implemented, returning unit");
-                    self.alloc_value(*dst, Value::Unit);
-                }
+                self.alloc_value(*dst, out);
+            }
 
-                Instr::FieldAccess { dst, base, field } => {
-                    let obj = self.get_value(*base);
-                    match obj {
-                        Value::StructInstance { ref fields, .. } => {
-                            if let Some((_, v)) = fields.iter().find(|(k, _)| k == field) {
-                                self.alloc_value(*dst, v.clone());
-                            } else {
-                                panic!("Field {} not found in struct", field);
-                            }
-                        }
-                        Value::Map(ref m) => {
-                            if let Some(v) = m.get(field) {
-                                self.alloc_value(*dst, v.clone());
-                            } else {
-                                panic!("Key {} not found in map", field);
-                            }
-                        }
-                        _ => panic!("Field access on non-struct/map: {:?}", obj),
-                    }
-                }
+            Instr::Call { dst, func, args } => {
+                println!("WARNING: Call not implemented, returning unit");
+                self.alloc_value(*dst, Value::Unit);
+            }
 
-                Instr::NamespaceAccess { dst, .. } => {
-                    println!("WARNING: namespace access not implemented");
-                    self.alloc_value(*dst, Value::Unit);
-                }
-
-                Instr::Index { dst, arr, index } => {
-                    let array = self.get_value(*arr);
-                    let idx = self.get_value(*index).unwrap_number() as usize;
-                    match array {
-                        Value::List(ref items) | Value::Tuple(ref items) => {
-                            if idx < items.len() {
-                                self.alloc_value(*dst, items[idx].clone());
-                            } else {
-                                panic!("Index {} out of bounds", idx);
-                            }
-                        }
-                        _ => panic!("Index access on non-list/tuple: {:?}", array),
-                    }
-                }
-
-                Instr::FieldStore { .. } => {
-                    println!("WARNING: field store not implemented");
-                }
-
-                Instr::IndexStore { .. } => {
-                    println!("WARNING: index store not implemented");
-                }
-
-                Instr::Match { dst, scrutinee, arms } => {
-                    let scrutinee_value = self.get_value(*scrutinee);
-                    
-                    // Try to match against each arm
-                    let mut matched = false;
-                    for (pattern, guard, result_id) in arms {
-                        // Try to match the pattern
-                        if let Some(bindings) = self.match_pattern(pattern, &scrutinee_value) {
-                            // Pattern matched, check guard if present
-                            let guard_passes = if let Some(_guard_id) = guard {
-                                // TODO: evaluate guard expression
-                                true
-                            } else {
-                                true
-                            };
-                            
-                            if guard_passes {
-                                // Bind all variables from pattern match
-                                for (var_name, var_value) in bindings {
-                                    self.locals.insert(var_name, var_value);
-                                }
-                                
-                                // Execute the result value
-                                let result = self.get_value(*result_id);
-                                self.alloc_value(*dst, result);
-                                matched = true;
-                                break;
-                            }
+            Instr::FieldAccess { dst, base, field } => {
+                let obj = self.get_value(*base);
+                match obj {
+                    Value::StructInstance { ref fields, .. } => {
+                        if let Some((_, v)) = fields.iter().find(|(k, _)| k == field) {
+                            self.alloc_value(*dst, v.clone());
+                        } else {
+                            panic!("Field {} not found in struct", field);
                         }
                     }
-                    
-                    if !matched {
-                        // No arm matched - return unit or could panic
-                        self.alloc_value(*dst, Value::Unit);
-                    }
-                }
-
-                Instr::StructInit { dst, name, fields, .. } => {
-                    let mut field_values = Vec::new();
-                    for (field_name, field_id) in fields {
-                        field_values.push((field_name.clone(), self.get_value(*field_id)));
-                    }
-                    self.alloc_value(*dst, Value::StructInstance { name: name.clone(), fields: field_values });
-                }
-
-                Instr::VariantInit { dst, enum_name, variant, fields } => {
-                    let mut args = Vec::new();
-
-                    for (_, src) in fields {
-                        let v = self.get_value(*src);
-                        args.push(v);
-                    }
-
-                    let v = Value::EnumInstance {
-                        enum_name: enum_name.clone(),
-                        variant: variant.clone(),
-                        args,
-                    };
-
-                    self.alloc_value(*dst, v);
-                }
-
-                Instr::StructUpdate { dst, base, updates } => {
-                    println!("WARNING: struct update not implemented, returning unit");
-                    self.alloc_value(*dst, Value::Unit);
-                }
-
-                Instr::Tuple { dst, items } => {
-                    // Сгенерировать runtime-значение tuple: Vec<Value>
-                    let mut out = Vec::new();
-                    for id in items {
-                        out.push(self.get_value(*id));
-                    }
-                    self.alloc_value(*dst, Value::Tuple(out));
-                }
-
-                Instr::TupleExtract { dst, tuple, index } => {
-                    let v = self.get_value(*tuple);
-                    match v {
-                        Value::Tuple(items) => {
-                            let elem = items
-                                .get(*index)
-                                .unwrap_or_else(|| panic!("Tuple index {} out of bounds", index))
-                                .clone();
-
-                            self.alloc_value(*dst, elem);
+                    Value::Map(ref m) => {
+                        if let Some(v) = m.get(field) {
+                            self.alloc_value(*dst, v.clone());
+                        } else {
+                            panic!("Key {} not found in map", field);
                         }
-                        other => panic!("TupleExtract on non-tuple value: {:?}", other),
                     }
-                }
-
-                Instr::Array { dst, items } => {
-                    let mut out = Vec::new();
-                    for id in items {
-                        out.push(self.get_value(*id));
-                    }
-                    self.alloc_value(*dst, Value::List(out));
-                }
-
-                Instr::MapInit { dst, entries } => {
-                    let mut m = std::collections::HashMap::new();
-                    for (k, id) in entries {
-                        m.insert(k.clone(), self.get_value(*id));
-                    }
-                    self.alloc_value(*dst, Value::Map(m));
-                }
-
-                Instr::MapAccess { dst, map, key } => {
-                    let m = self.get_value(*map); 
-
-                    match m {
-                        Value::Map(ref hm) => {
-                            // HashMap<String, Value>, key: String -> hm.get(&key)
-                            if let Some(v) = hm.get(key) {    
-                                self.alloc_value(*dst, v.clone()); 
-                            } else {
-                                panic!("Map missing key `{}`", key);
-                            }
-                        }
-                        other => panic!("MapAccess on non-map: {:?}", other),
-                    }
-                }
-
-                Instr::Return(id) => {
-                    return Some(self.get_value(*id));
+                    _ => panic!("Field access on non-struct/map: {:?}", obj),
                 }
             }
+
+            Instr::NamespaceAccess { dst, .. } => {
+                println!("WARNING: namespace access not implemented");
+                self.alloc_value(*dst, Value::Unit);
+            }
+
+            Instr::Index { dst, arr, index } => {
+                let array = self.get_value(*arr);
+                let idx = self.get_value(*index).unwrap_number() as usize;
+                match array {
+                    Value::List(ref items) | Value::Tuple(ref items) => {
+                        if idx < items.len() {
+                            self.alloc_value(*dst, items[idx].clone());
+                        } else {
+                            panic!("Index {} out of bounds", idx);
+                        }
+                    }
+                    _ => panic!("Index access on non-list/tuple: {:?}", array),
+                }
+            }
+
+            Instr::FieldStore { .. } => {
+                println!("WARNING: field store not implemented");
+            }
+
+            Instr::IndexStore { .. } => {
+                println!("WARNING: index store not implemented");
+            }
+
+            Instr::Match {
+                dst,
+                scrutinee,
+                arms,
+            } => {
+                let scrutinee_value = self.get_value(*scrutinee);
+
+                // Try to match against each arm
+                let mut matched = false;
+                for (pattern, guard, result_id) in arms {
+                    // Try to match the pattern
+                    if let Some(bindings) = self.match_pattern(pattern, &scrutinee_value) {
+                        // Pattern matched, check guard if present
+                        let guard_passes = if let Some(_guard_id) = guard {
+                            // TODO: evaluate guard expression
+                            true
+                        } else {
+                            true
+                        };
+
+                        if guard_passes {
+                            // Bind all variables from pattern match
+                            for (var_name, var_value) in bindings {
+                                self.locals.insert(var_name, var_value);
+                            }
+
+                            // Execute the result value
+                            let result = self.get_value(*result_id);
+                            self.alloc_value(*dst, result);
+                            matched = true;
+                            break;
+                        }
+                    }
+                }
+
+                if !matched {
+                    // No arm matched - return unit or could panic
+                    self.alloc_value(*dst, Value::Unit);
+                }
+            }
+
+            Instr::StructInit {
+                dst, name, fields, ..
+            } => {
+                let mut field_values = Vec::new();
+                for (field_name, field_id) in fields {
+                    field_values.push((field_name.clone(), self.get_value(*field_id)));
+                }
+                self.alloc_value(
+                    *dst,
+                    Value::StructInstance {
+                        name: name.clone(),
+                        fields: field_values,
+                    },
+                );
+            }
+
+            Instr::VariantInit {
+                dst,
+                enum_name,
+                variant,
+                fields,
+            } => {
+                let mut args = Vec::new();
+
+                for (_, src) in fields {
+                    let v = self.get_value(*src);
+                    args.push(v);
+                }
+
+                let v = Value::EnumInstance {
+                    enum_name: enum_name.clone(),
+                    variant: variant.clone(),
+                    args,
+                };
+
+                self.alloc_value(*dst, v);
+            }
+
+            Instr::StructUpdate { dst, base, updates } => {
+                println!("WARNING: struct update not implemented, returning unit");
+                self.alloc_value(*dst, Value::Unit);
+            }
+
+            Instr::Tuple { dst, items } => {
+                // Сгенерировать runtime-значение tuple: Vec<Value>
+                let mut out = Vec::new();
+                for id in items {
+                    out.push(self.get_value(*id));
+                }
+                self.alloc_value(*dst, Value::Tuple(out));
+            }
+
+            Instr::TupleExtract { dst, tuple, index } => {
+                let v = self.get_value(*tuple);
+                match v {
+                    Value::Tuple(items) => {
+                        let elem = items
+                            .get(*index)
+                            .unwrap_or_else(|| panic!("Tuple index {} out of bounds", index))
+                            .clone();
+
+                        self.alloc_value(*dst, elem);
+                    }
+                    other => panic!("TupleExtract on non-tuple value: {:?}", other),
+                }
+            }
+
+            Instr::Array { dst, items } => {
+                let mut out = Vec::new();
+                for id in items {
+                    out.push(self.get_value(*id));
+                }
+                self.alloc_value(*dst, Value::List(out));
+            }
+
+            Instr::MapInit { dst, entries } => {
+                let mut m = std::collections::HashMap::new();
+                for (k, id) in entries {
+                    m.insert(k.clone(), self.get_value(*id));
+                }
+                self.alloc_value(*dst, Value::Map(m));
+            }
+
+            Instr::MapAccess { dst, map, key } => {
+                let m = self.get_value(*map);
+
+                match m {
+                    Value::Map(ref hm) => {
+                        // HashMap<String, Value>, key: String -> hm.get(&key)
+                        if let Some(v) = hm.get(key) {
+                            self.alloc_value(*dst, v.clone());
+                        } else {
+                            panic!("Map missing key `{}`", key);
+                        }
+                    }
+                    other => panic!("MapAccess on non-map: {:?}", other),
+                }
+            }
+
+            Instr::Return(id) => {
+                return Some(self.get_value(*id));
+            }
+        }
 
         None
     }
 
     // Pattern matching helper functions
-    fn match_pattern(&self, pattern: &Pattern, value: &Value) -> Option<std::collections::HashMap<String, Value>> {
+    fn match_pattern(
+        &self,
+        pattern: &Pattern,
+        value: &Value,
+    ) -> Option<std::collections::HashMap<String, Value>> {
         let mut bindings = std::collections::HashMap::new();
-        
+
         if self.pattern_matches(pattern, value, &mut bindings) {
             Some(bindings)
         } else {
@@ -440,19 +469,24 @@ impl IrVM {
         }
     }
 
-    fn pattern_matches(&self, pattern: &Pattern, value: &Value, bindings: &mut std::collections::HashMap<String, Value>) -> bool {
+    fn pattern_matches(
+        &self,
+        pattern: &Pattern,
+        value: &Value,
+        bindings: &mut std::collections::HashMap<String, Value>,
+    ) -> bool {
         match pattern {
             Pattern::Wildcard(_) => {
                 // Wildcard matches everything without binding
                 true
             }
-            
+
             Pattern::Ident(name, _) => {
                 // Ident matches anything and binds it
                 bindings.insert(name.clone(), value.clone());
                 true
             }
-            
+
             Pattern::Number(num_str, _) => {
                 // Match a specific number
                 if let Ok(n) = num_str.parse::<f64>() {
@@ -465,7 +499,7 @@ impl IrVM {
                     false
                 }
             }
-            
+
             Pattern::String(s, _) => {
                 // Match a specific string
                 if let Value::String(v) = value {
@@ -474,14 +508,14 @@ impl IrVM {
                     false
                 }
             }
-            
+
             Pattern::Tuple(patterns, _) => {
                 // Match a tuple - recursively match each element
                 if let Value::Tuple(values) = value {
                     if patterns.len() != values.len() {
                         return false;
                     }
-                    
+
                     for (pat, val) in patterns.iter().zip(values.iter()) {
                         if !self.pattern_matches(pat, val, bindings) {
                             return false;
@@ -492,19 +526,24 @@ impl IrVM {
                     false
                 }
             }
-            
+
             Pattern::Struct { name, fields, .. } => {
                 // Match a struct
-                if let Value::StructInstance { name: struct_name, fields: struct_fields } = value {
+                if let Value::StructInstance {
+                    name: struct_name,
+                    fields: struct_fields,
+                } = value
+                {
                     if struct_name != name {
                         return false;
                     }
-                    
+
                     for field_pattern in fields {
                         match field_pattern {
                             PatternField::Shorthand { field, .. } => {
                                 // Bind the field value to a variable with the same name
-                                if let Some((_, v)) = struct_fields.iter().find(|(k, _)| k == field) {
+                                if let Some((_, v)) = struct_fields.iter().find(|(k, _)| k == field)
+                                {
                                     bindings.insert(field.clone(), v.clone());
                                 } else {
                                     return false;
@@ -512,7 +551,8 @@ impl IrVM {
                             }
                             PatternField::Assign { field, pat, .. } => {
                                 // Match the field value against the pattern
-                                if let Some((_, v)) = struct_fields.iter().find(|(k, _)| k == field) {
+                                if let Some((_, v)) = struct_fields.iter().find(|(k, _)| k == field)
+                                {
                                     if !self.pattern_matches(pat, v, bindings) {
                                         return false;
                                     }
@@ -530,18 +570,23 @@ impl IrVM {
                     false
                 }
             }
-            
+
             Pattern::Variant { name, args, .. } => {
                 // Match an enum variant
-                if let Value::EnumInstance { enum_name, variant, args: variant_args } = value {
+                if let Value::EnumInstance {
+                    enum_name,
+                    variant,
+                    args: variant_args,
+                } = value
+                {
                     if variant != name {
                         return false;
                     }
-                    
+
                     if args.len() != variant_args.len() {
                         return false;
                     }
-                    
+
                     for (pat, val) in args.iter().zip(variant_args.iter()) {
                         if !self.pattern_matches(pat, val, bindings) {
                             return false;
@@ -552,7 +597,7 @@ impl IrVM {
                     false
                 }
             }
-            
+
             // For now, other patterns just match without binding
             _ => true,
         }

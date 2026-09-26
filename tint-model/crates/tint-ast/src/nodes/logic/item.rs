@@ -1,19 +1,20 @@
-use crate::Span;
-use crate::Stmt;
 use crate::pattern::Pattern;
 use crate::AttributeList;
+use crate::Span;
+use crate::Stmt;
 use crate::UiNode;
 
-use super::{
-    stmt::{Block},
-    expr::Expr,
-    types::Type,
-    pattern::{MatchArm},
-};
+use super::{expr::Expr, pattern::MatchArm, stmt::Block, types::Type};
 
 #[derive(Debug, Clone)]
 pub struct UseDecl {
     pub path: Vec<String>, // ["math", "vec3"]
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct ImportDecl {
+    pub path: String,
     pub span: Span,
 }
 
@@ -27,7 +28,7 @@ pub struct ModDecl {
 #[derive(Debug, Clone)]
 pub struct TypeAliasDecl {
     pub name: String,
-    pub ty: Type,     // union(i32 | f32 | f64)
+    pub ty: Type, // union(i32 | f32 | f64)
     pub span: Span,
 }
 
@@ -36,32 +37,32 @@ pub struct KernelDecl {
     pub name: String,
     pub params: Vec<Param>,
     pub ret_ty: Option<Type>,
-    pub body: Block,       // kernel body 
+    pub body: Block, // kernel body
     pub span: Span,
 }
 
 #[derive(Debug, Clone)]
 pub struct ImplBlock {
     pub span: Span,
-    pub generics: Vec<String>,   // <T, U>
-    pub target: Type,            // Vec3<T>, Texture, List<i32>
-    pub methods: Vec<FnDecl>,    // fn foo() {}
+    pub generics: Vec<String>, // <T, U>
+    pub target: Type,          // Vec3<T>, Texture, List<i32>
+    pub methods: Vec<FnDecl>,  // fn foo() {}
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum SpaceKind {
-    Auto,      
-    All,       
-    GPU,       
-    UI,        
-    Logic,      
+    Auto,
+    All,
+    GPU,
+    UI,
+    Logic,
 }
 
 #[derive(Debug, Clone)]
 pub struct SpaceDecl {
     pub name: String,
-    pub kind: SpaceKind,     // Auto until items parsed
-    pub items: Vec<Item>,    // fn, kernel, ui fn, struct, impl, etc.
+    pub kind: SpaceKind,  // Auto until items parsed
+    pub items: Vec<Item>, // fn, kernel, ui fn, struct, impl, etc.
     pub span: Span,
 }
 
@@ -73,22 +74,23 @@ pub enum Item {
     Enum(EnumDecl),
     Mod(ModDecl),
     Use(UseDecl),
+    Import(ImportDecl),
     GlobalLet(Stmt),
-    Impl(ImplBlock), 
+    Impl(ImplBlock),
     TypeAlias(TypeAliasDecl),
     ExportFn(FnDecl, Span),
     ExportStruct(StructDecl),
     ExportEnum(EnumDecl),
-    Kernel(KernelDecl), 
+    Kernel(KernelDecl),
     Space(SpaceDecl),
 }
 
 // FUNCTION DECLARATIONS
 #[derive(Debug, Clone)]
 pub struct FnDecl {
-    pub attributes: AttributeList, 
+    pub attributes: AttributeList,
     pub name: String,
-    pub generics: Vec<String>, 
+    pub generics: Vec<String>,
     pub params: Vec<Param>,
     pub ret_ty: Option<Type>,
     pub async_: bool,
@@ -116,7 +118,7 @@ pub struct UiFnDecl {
     /// assigning to it, both go through the same scope, which is what
     /// makes a value set by a click visible in the next render.
     pub state: Vec<UiStateDecl>,
-    pub body: Vec<UiNode>, 
+    pub body: Vec<UiNode>,
     pub span: Span,
 }
 
@@ -127,17 +129,16 @@ pub struct UiStateDecl {
     pub span: Span,
 }
 
-
 #[derive(Debug, Clone)]
 pub enum DefaultValue {
-    Single(Expr),      // x {10}
-    Broadcast(Expr),   // (a,b,c) {10}
+    Single(Expr),    // x {10}
+    Broadcast(Expr), // (a,b,c) {10}
 }
 
 #[derive(Debug, Clone)]
 pub struct Param {
     pub pattern: Pattern,
-    pub ty: Option<Type>, 
+    pub ty: Option<Type>,
     pub default: Option<DefaultValue>,
 }
 
@@ -168,7 +169,7 @@ pub enum StructMember {
 pub struct StructDecl {
     pub name: String,
     pub members: Vec<StructMember>,
-    pub exported: bool, 
+    pub exported: bool,
     pub span: Span,
 }
 
@@ -188,7 +189,8 @@ pub enum StructField {
         span: Span,
     },
 
-    TintField {   // name
+    TintField {
+        // name
         name: String,
         span: Span,
     },
@@ -199,7 +201,7 @@ pub struct EnumDecl {
     pub name: String,
     pub generics: Vec<String>,
     pub variants: Vec<EnumVariant>,
-    pub exported: bool, 
+    pub exported: bool,
     pub span: Span,
 }
 

@@ -3,35 +3,30 @@
 use std::collections::HashMap;
 
 use crate::{
-    scope::RuntimeScopeStack,
-    resources::ResourceTable,
-    state::StateStore,
-    ui::UiRuntime,
-    async_rt::Scheduler,
-    borrow::BorrowManager,
-    value::RuntimeValue,
+    async_rt::Scheduler, borrow::BorrowManager, resources::ResourceTable, scope::RuntimeScopeStack,
+    state::StateStore, ui::UiRuntime, value::RuntimeValue,
 };
 
 use tint_evaluator::eval_pattern::bind_pattern;
-use tint_ir::{SsaCompiler, optimize, IrVM, ProgramIR, ir::Value as IrValue};
+use tint_ir::{ir::Value as IrValue, optimize, IrVM, ProgramIR, SsaCompiler};
 
-use tint_ast::{
-    Program, Item, FnDecl, UiFnDecl, Expr, Stmt, Block, Span, FnBody
-};
+use tint_ast::{Block, Expr, FnBody, FnDecl, Item, Program, Span, Stmt, UiFnDecl};
 
-use tint_evaluator::{
-    EvalHost, Value as EvalValue,
-    eval_expr, eval_stmt,
-    call::call_builtin,
-};
-use tint_evaluator::eval_host::Flow;
 use tint_evaluator::errors::EvalResult;
+use tint_evaluator::eval_host::Flow;
+use tint_evaluator::{call::call_builtin, eval_expr, eval_stmt, EvalHost, Value as EvalValue};
 
 pub struct TintVM {
-    // Runtime 
+    // Runtime
     pub scopes: RuntimeScopeStack,
     pub logic_functions: HashMap<String, FnDecl>,
     pub ui_functions: HashMap<String, UiFnDecl>,
+
+    // Real Rust functions registered from outside the language (see
+    // `register_native`) -- direct Rust interop: no Rust parsing, no
+    // borrow-checking of Tint code, just an ordinary Rust closure called
+    // by name from `.tn` source.
+    pub native_fns: HashMap<String, Box<dyn Fn(&[EvalValue]) -> EvalResult<EvalValue>>>,
 
     pub resources: ResourceTable,
     pub state: StateStore,
@@ -39,7 +34,7 @@ pub struct TintVM {
     pub borrow: BorrowManager,
     pub ui: UiRuntime,
 
-    // IR 
+    // IR
     pub ir_program: ProgramIR,
     pub last_result: EvalValue,
 }
@@ -50,6 +45,7 @@ impl TintVM {
             scopes: RuntimeScopeStack::new(),
             logic_functions: HashMap::new(),
             ui_functions: HashMap::new(),
+            native_fns: HashMap::new(),
 
             resources: ResourceTable::new(),
             state: StateStore::new(),
@@ -60,6 +56,31 @@ impl TintVM {
             ir_program: ProgramIR::new(),
             last_result: EvalValue::Unit,
         }
+    }
+
+    /// Registers a real Rust function under `name`, directly callable from
+    /// `.tn` source as `name(...)` -- e.g. `vm.register_native("now_ms", |_args| {
+    /// Ok(EvalValue::Number(SystemTime::now()...))` }` then `now_ms()` in Tint
+    /// runs that exact Rust code.
+    ///
+    /// This is the direct-interop alternative to teaching Tint's own parser
+    /// and semantic checker to understand Rust syntax (and to reimplementing
+    /// something like rustc's borrow checker, which isn't a separable
+    /// library -- see the discussion this is from). A native fn is just a
+    /// Rust closure over already-evaluated `Value` arguments/return; it can
+    /// call into any real Rust code (the standard library, other crates
+    /// linked into the binary) with zero Tint-side awareness of Rust's
+    /// grammar or ownership rules -- borrow-checking happens where it always
+    /// does, at `rustc` compile time for the Rust code inside the closure.
+    ///
+    /// Registered names are checked first in both `call_fn` and
+    /// `call_user_fn`, ahead of builtins/UI fns/logic fns, so a native fn
+    /// can shadow any of those on purpose.
+    pub fn register_native<F>(&mut self, name: impl Into<String>, f: F)
+    where
+        F: Fn(&[EvalValue]) -> EvalResult<EvalValue> + 'static,
+    {
+        self.native_fns.insert(name.into(), Box::new(f));
     }
 
     // PROGRAM ENTRY
@@ -79,7 +100,7 @@ impl TintVM {
                 }
             }
         }
-        
+
         println!("====================\n");
         optimize(&mut self.ir_program);
         self.register_functions(program);
@@ -89,11 +110,17 @@ impl TintVM {
 
     // FUNCTION REGISTRATION
     fn register_functions(&mut self, program: &Program) {
-        eprintln!("DEBUG register_functions: registering {} items", program.items.len());
+        eprintln!(
+            "DEBUG register_functions: registering {} items",
+            program.items.len()
+        );
         for item in &program.items {
             match item {
                 Item::Fn(f) => {
-                    eprintln!("DEBUG register_functions: registering logic function: {}", f.name);
+                    eprintln!(
+                        "DEBUG register_functions: registering logic function: {}",
+                        f.name
+                    );
                     self.logic_functions.insert(f.name.clone(), f.clone());
                 }
                 Item::UiFn(ui) => {
@@ -137,24 +164,33 @@ impl TintVM {
             EvalValue::String(s) => RuntimeValue::String(s),
             EvalValue::Bool(b) => RuntimeValue::Bool(b),
             EvalValue::Unit => RuntimeValue::Unit,
-            EvalValue::Tuple(items) => RuntimeValue::Tuple(items.into_iter().map(Self::eval_to_rt).collect()),
-            EvalValue::List(items) => RuntimeValue::List(items.into_iter().map(Self::eval_to_rt).collect()),
-            EvalValue::StructInstance { name, fields } => {
-                RuntimeValue::StructInstance {
-                    name,
-                    fields: fields.into_iter().map(|(k, v)| (k, Self::eval_to_rt(v))).collect(),
-                }
+            EvalValue::Tuple(items) => {
+                RuntimeValue::Tuple(items.into_iter().map(Self::eval_to_rt).collect())
             }
-            EvalValue::EnumInstance { enum_name, variant, args } => {
-                RuntimeValue::EnumInstance {
-                    enum_name,
-                    variant,
-                    args: args.into_iter().map(Self::eval_to_rt).collect(),
-                }
+            EvalValue::List(items) => {
+                RuntimeValue::List(items.into_iter().map(Self::eval_to_rt).collect())
             }
-            EvalValue::Map(map) => {
-                RuntimeValue::Map(map.into_iter().map(|(k, v)| (k, Self::eval_to_rt(v))).collect())
-            }
+            EvalValue::StructInstance { name, fields } => RuntimeValue::StructInstance {
+                name,
+                fields: fields
+                    .into_iter()
+                    .map(|(k, v)| (k, Self::eval_to_rt(v)))
+                    .collect(),
+            },
+            EvalValue::EnumInstance {
+                enum_name,
+                variant,
+                args,
+            } => RuntimeValue::EnumInstance {
+                enum_name,
+                variant,
+                args: args.into_iter().map(Self::eval_to_rt).collect(),
+            },
+            EvalValue::Map(map) => RuntimeValue::Map(
+                map.into_iter()
+                    .map(|(k, v)| (k, Self::eval_to_rt(v)))
+                    .collect(),
+            ),
             other => panic!("Unsupported EvalValue: {:?}", other),
         }
     }
@@ -164,24 +200,33 @@ impl TintVM {
             RuntimeValue::Number(n) => EvalValue::Number(*n),
             RuntimeValue::String(s) => EvalValue::String(s.clone()),
             RuntimeValue::Bool(b) => EvalValue::Bool(*b),
-            RuntimeValue::Tuple(items) => EvalValue::Tuple(items.iter().map(Self::rt_to_eval).collect()),
-            RuntimeValue::List(items) => EvalValue::List(items.iter().map(Self::rt_to_eval).collect()),
-            RuntimeValue::StructInstance { name, fields } => {
-                EvalValue::StructInstance {
-                    name: name.clone(),
-                    fields: fields.iter().map(|(k, v)| (k.clone(), Self::rt_to_eval(v))).collect(),
-                }
+            RuntimeValue::Tuple(items) => {
+                EvalValue::Tuple(items.iter().map(Self::rt_to_eval).collect())
             }
-            RuntimeValue::EnumInstance { enum_name, variant, args } => {
-                EvalValue::EnumInstance {
-                    enum_name: enum_name.clone(),
-                    variant: variant.clone(),
-                    args: args.iter().map(Self::rt_to_eval).collect(),
-                }
+            RuntimeValue::List(items) => {
+                EvalValue::List(items.iter().map(Self::rt_to_eval).collect())
             }
-            RuntimeValue::Map(map) => {
-                EvalValue::Map(map.iter().map(|(k, v)| (k.clone(), Self::rt_to_eval(v))).collect())
-            }
+            RuntimeValue::StructInstance { name, fields } => EvalValue::StructInstance {
+                name: name.clone(),
+                fields: fields
+                    .iter()
+                    .map(|(k, v)| (k.clone(), Self::rt_to_eval(v)))
+                    .collect(),
+            },
+            RuntimeValue::EnumInstance {
+                enum_name,
+                variant,
+                args,
+            } => EvalValue::EnumInstance {
+                enum_name: enum_name.clone(),
+                variant: variant.clone(),
+                args: args.iter().map(Self::rt_to_eval).collect(),
+            },
+            RuntimeValue::Map(map) => EvalValue::Map(
+                map.iter()
+                    .map(|(k, v)| (k.clone(), Self::rt_to_eval(v)))
+                    .collect(),
+            ),
             _ => EvalValue::Unit,
         }
     }
@@ -199,23 +244,21 @@ impl TintVM {
             }
         }
 
-            last
-        }
-            
-        fn call_ui_fn(
-            &mut self,
-            ui: &UiFnDecl,
-            args: &[EvalValue],
-            span: Span,
-        ) -> EvalResult<EvalValue> {
+        last
+    }
 
-
+    fn call_ui_fn(
+        &mut self,
+        ui: &UiFnDecl,
+        args: &[EvalValue],
+        span: Span,
+    ) -> EvalResult<EvalValue> {
         println!("⛰ UI CALL → {}(", ui.name);
         for (i, a) in args.iter().enumerate() {
             println!("    arg[{i}] = {:?}", a);
         }
         println!(")");
-        
+
         println!("UI FN CALL: {}", ui.name);
 
         // 1) Параметры
@@ -238,31 +281,45 @@ impl TintVM {
         Ok(EvalValue::Unit)
     }
 
-
-fn eval_value_to_ir_value(v: EvalValue) -> IrValue {
+    fn eval_value_to_ir_value(v: EvalValue) -> IrValue {
         match v {
             EvalValue::Number(n) => IrValue::Number(n),
             EvalValue::String(s) => IrValue::String(s),
             EvalValue::Bool(b) => IrValue::Bool(b),
             EvalValue::Unit => IrValue::Unit,
-            EvalValue::Tuple(items) => IrValue::Tuple(items.into_iter().map(Self::eval_value_to_ir_value).collect()),
-            EvalValue::List(items) => IrValue::List(items.into_iter().map(Self::eval_value_to_ir_value).collect()),
-            EvalValue::EnumInstance { enum_name, variant, args } => {
-                IrValue::EnumInstance {
-                    enum_name,
-                    variant,
-                    args: args.into_iter().map(Self::eval_value_to_ir_value).collect(),
-                }
-            }
-            EvalValue::Map(map) => {
-                IrValue::Map(map.into_iter().map(|(k, v)| (k, Self::eval_value_to_ir_value(v))).collect())
-            }
-            EvalValue::StructInstance { name, fields } => {
-                IrValue::StructInstance {
-                    name,
-                    fields: fields.into_iter().map(|(k, v)| (k, Self::eval_value_to_ir_value(v))).collect(),
-                }
-            }
+            EvalValue::Tuple(items) => IrValue::Tuple(
+                items
+                    .into_iter()
+                    .map(Self::eval_value_to_ir_value)
+                    .collect(),
+            ),
+            EvalValue::List(items) => IrValue::List(
+                items
+                    .into_iter()
+                    .map(Self::eval_value_to_ir_value)
+                    .collect(),
+            ),
+            EvalValue::EnumInstance {
+                enum_name,
+                variant,
+                args,
+            } => IrValue::EnumInstance {
+                enum_name,
+                variant,
+                args: args.into_iter().map(Self::eval_value_to_ir_value).collect(),
+            },
+            EvalValue::Map(map) => IrValue::Map(
+                map.into_iter()
+                    .map(|(k, v)| (k, Self::eval_value_to_ir_value(v)))
+                    .collect(),
+            ),
+            EvalValue::StructInstance { name, fields } => IrValue::StructInstance {
+                name,
+                fields: fields
+                    .into_iter()
+                    .map(|(k, v)| (k, Self::eval_value_to_ir_value(v)))
+                    .collect(),
+            },
             // Lambdas/functions/host-functions/namespaces have no IR-value
             // representation; the IR VM doesn't support calling through them.
             EvalValue::Lambda { .. }
@@ -272,30 +329,45 @@ fn eval_value_to_ir_value(v: EvalValue) -> IrValue {
         }
     }
 
-fn ir_value_to_eval_value(v: IrValue) -> EvalValue {
+    fn ir_value_to_eval_value(v: IrValue) -> EvalValue {
         match v {
             IrValue::Number(n) => EvalValue::Number(n),
             IrValue::String(s) => EvalValue::String(s),
             IrValue::Bool(b) => EvalValue::Bool(b),
             IrValue::Unit => EvalValue::Unit,
-            IrValue::Tuple(items) => EvalValue::Tuple(items.into_iter().map(Self::ir_value_to_eval_value).collect()),
-            IrValue::List(items) => EvalValue::List(items.into_iter().map(Self::ir_value_to_eval_value).collect()),
-            IrValue::EnumInstance { enum_name, variant, args } => {
-                EvalValue::EnumInstance {
-                    enum_name,
-                    variant,
-                    args: args.into_iter().map(Self::ir_value_to_eval_value).collect(),
-                }
-            }
-            IrValue::Map(map) => {
-                EvalValue::Map(map.into_iter().map(|(k, v)| (k, Self::ir_value_to_eval_value(v))).collect())
-            }
-            IrValue::StructInstance { name, fields } => {
-                EvalValue::StructInstance {
-                    name,
-                    fields: fields.into_iter().map(|(k, v)| (k, Self::ir_value_to_eval_value(v))).collect(),
-                }
-            }
+            IrValue::Tuple(items) => EvalValue::Tuple(
+                items
+                    .into_iter()
+                    .map(Self::ir_value_to_eval_value)
+                    .collect(),
+            ),
+            IrValue::List(items) => EvalValue::List(
+                items
+                    .into_iter()
+                    .map(Self::ir_value_to_eval_value)
+                    .collect(),
+            ),
+            IrValue::EnumInstance {
+                enum_name,
+                variant,
+                args,
+            } => EvalValue::EnumInstance {
+                enum_name,
+                variant,
+                args: args.into_iter().map(Self::ir_value_to_eval_value).collect(),
+            },
+            IrValue::Map(map) => EvalValue::Map(
+                map.into_iter()
+                    .map(|(k, v)| (k, Self::ir_value_to_eval_value(v)))
+                    .collect(),
+            ),
+            IrValue::StructInstance { name, fields } => EvalValue::StructInstance {
+                name,
+                fields: fields
+                    .into_iter()
+                    .map(|(k, v)| (k, Self::ir_value_to_eval_value(v)))
+                    .collect(),
+            },
         }
     }
 
@@ -363,8 +435,12 @@ impl EvalHost for TintVM {
         self.scopes.set(name, Self::eval_to_rt(v));
     }
 
-    fn push_scope(&mut self) { self.scopes.push(); }
-    fn pop_scope(&mut self) { self.scopes.pop(); }
+    fn push_scope(&mut self) {
+        self.scopes.push();
+    }
+    fn pop_scope(&mut self) {
+        self.scopes.pop();
+    }
 
     fn assign_to(&mut self, lhs: &Expr, value: EvalValue) -> bool {
         match lhs {
@@ -424,9 +500,14 @@ impl EvalHost for TintVM {
     // -----------------------
     // FUNCTION CALL DISPATCH
     // -----------------------
-    fn call_fn(&mut self, name: &str, args: &[EvalValue], span: Span)
-        -> EvalResult<EvalValue>
-    {
+    fn call_fn(&mut self, name: &str, args: &[EvalValue], span: Span) -> EvalResult<EvalValue> {
+        // 0) user-registered native Rust functions (see `register_native`) --
+        // checked first so a native fn can shadow a builtin/UI/logic fn on
+        // purpose.
+        if let Some(f) = self.native_fns.get(name) {
+            return f(args);
+        }
+
         // 1) builtins (math, print, etc.)
         if let Ok(v) = call_builtin(self, name, args, span) {
             return Ok(v);
@@ -438,7 +519,6 @@ impl EvalHost for TintVM {
             let ui = self.ui_functions.get(name).cloned().unwrap();
             return self.call_ui_fn(&ui, args, span);
         }
-
 
         // 3) Logic functions -> IR VM
         if self.is_ir_function(name) {
@@ -466,14 +546,22 @@ impl EvalHost for TintVM {
         name: &str,
         args: &[EvalValue],
         span: Span,
-    ) -> EvalResult<EvalValue>
-    {
+    ) -> EvalResult<EvalValue> {
+        // Native Rust functions are reachable from this path too, so a
+        // `click||`/`hover_in||` handler can be a real Rust closure, not
+        // just a Tint `fn`.
+        if let Some(f) = self.native_fns.get(name) {
+            return f(args);
+        }
+
         let func = match self.logic_functions.get(name).cloned() {
             Some(f) => f,
-            None => return Err(tint_evaluator::errors::EvalError::InvalidOp {
-                msg: format!("Unknown function '{}'", name),
-                span,
-            }),
+            None => {
+                return Err(tint_evaluator::errors::EvalError::InvalidOp {
+                    msg: format!("Unknown function '{}'", name),
+                    span,
+                })
+            }
         };
 
         self.scopes.push();
@@ -502,8 +590,7 @@ impl EvalHost for TintVM {
         match v {
             // если IR передал имя функции как строку
             EvalValue::String(name) => {
-                return self.call_fn(&name, args, span)
-                    .unwrap_or(EvalValue::Unit);
+                return self.call_fn(&name, args, span).unwrap_or(EvalValue::Unit);
             }
 
             // если IR передал Unit: считаем это no-op
@@ -514,162 +601,163 @@ impl EvalHost for TintVM {
     }
 
     fn bind_pattern(&mut self, pat: &tint_ast::Pattern, value: &EvalValue) -> bool {
-    use tint_ast::{Pattern, PatternField};
+        use tint_ast::{Pattern, PatternField};
 
-    match pat {
-        Pattern::Wildcard(_) => true,
+        match pat {
+            Pattern::Wildcard(_) => true,
 
-        Pattern::Ident(name, _) => {
-            self.define_var(name, value.clone());
-            true
-        }
+            Pattern::Ident(name, _) => {
+                self.define_var(name, value.clone());
+                true
+            }
 
-        Pattern::Mut { inner, .. } => {
-            self.bind_pattern(inner, value)
-        }
+            Pattern::Mut { inner, .. } => self.bind_pattern(inner, value),
 
-        Pattern::Number(s, _) => match value {
-            EvalValue::Number(n) => n.to_string() == *s,
-            _ => false,
-        },
+            Pattern::Number(s, _) => match value {
+                EvalValue::Number(n) => n.to_string() == *s,
+                _ => false,
+            },
 
-        Pattern::String(s, _) => match value {
-            EvalValue::String(v) => v == s,
-            _ => false,
-        },
+            Pattern::String(s, _) => match value {
+                EvalValue::String(v) => v == s,
+                _ => false,
+            },
 
-                // Group pattern: { a, b: pat }
-        Pattern::Group { fields, .. } => match value {
-            EvalValue::Map(map) => {
-                for f in fields {
-                    match f {
-                        // shorthand: { a }
-                        PatternField::Shorthand { field, .. } => {
-                            if let Some(v) = map.get(field) {
-                                self.define_var(field, v.clone());
-                            } else {
-                                return false;
+            // Group pattern: { a, b: pat }
+            Pattern::Group { fields, .. } => match value {
+                EvalValue::Map(map) => {
+                    for f in fields {
+                        match f {
+                            // shorthand: { a }
+                            PatternField::Shorthand { field, .. } => {
+                                if let Some(v) = map.get(field) {
+                                    self.define_var(field, v.clone());
+                                } else {
+                                    return false;
+                                }
                             }
-                        }
 
-                        // assign: { a: pat }
-                        PatternField::Assign { field, pat, .. } => {
-                            if let Some(v) = map.get(field) {
+                            // assign: { a: pat }
+                            PatternField::Assign { field, pat, .. } => {
+                                if let Some(v) = map.get(field) {
+                                    if !self.bind_pattern(pat, v) {
+                                        return false;
+                                    }
+                                } else {
+                                    return false;
+                                }
+                            }
+
+                            PatternField::Rest(_) => { /* ignore */ }
+                        }
+                    }
+                    true
+                }
+                _ => false,
+            },
+
+            // Tuple pattern: (a, b, c)
+            Pattern::Tuple(p_items, _) => match value {
+                EvalValue::Tuple(v_items) => {
+                    if p_items.len() != v_items.len() {
+                        return false;
+                    }
+                    for (p, v) in p_items.iter().zip(v_items.iter()) {
+                        if !self.bind_pattern(p, v) {
+                            return false;
+                        }
+                    }
+                    true
+                }
+                _ => false,
+            },
+
+            // Struct pattern: User { x, y }
+            Pattern::Struct { name, fields, .. } => match value {
+                EvalValue::StructInstance {
+                    name: vname,
+                    fields: vfields,
+                } => {
+                    if vname != name {
+                        return false;
+                    }
+
+                    for pf in fields {
+                        match pf {
+                            PatternField::Shorthand { field, .. } => {
+                                // get value from struct
+                                let Some(v) =
+                                    vfields.iter().find(|(k, _)| k == field).map(|(_, v)| v)
+                                else {
+                                    return false;
+                                };
+
+                                // bind variable
+                                self.define_var(field, v.clone());
+                            }
+
+                            PatternField::Assign { field, pat, .. } => {
+                                let Some(v) =
+                                    vfields.iter().find(|(k, _)| k == field).map(|(_, v)| v)
+                                else {
+                                    return false;
+                                };
+
                                 if !self.bind_pattern(pat, v) {
                                     return false;
                                 }
-                            } else {
-                                return false;
                             }
+
+                            PatternField::Rest(_) => continue,
                         }
-
-                        PatternField::Rest(_) => { /* ignore */ }
                     }
+
+                    true
                 }
-                true
-            }
-            _ => false,
-        },
+                _ => false,
+            },
 
-        // Tuple pattern: (a, b, c)
-        Pattern::Tuple(p_items, _) => match value {
-            EvalValue::Tuple(v_items) => {
-                if p_items.len() != v_items.len() {
-                    return false;
-                }
-                for (p, v) in p_items.iter().zip(v_items.iter()) {
-                    if !self.bind_pattern(p, v) {
-                        return false;
-                    }
-                }
-                true
-            }
-            _ => false,
-        },
-
-        // Struct pattern: User { x, y }
-        Pattern::Struct { name, fields, .. } => match value {
-            EvalValue::StructInstance { name: vname, fields: vfields } => {
-                if vname != name {
-                    return false;
-                }
-
-                for pf in fields {
-                    match pf {
-                        PatternField::Shorthand { field, .. } => {
-                            // get value from struct
-                            let Some(v) = vfields
-                                .iter()
-                                .find(|(k,_)| k == field)
-                                .map(|(_,v)| v)
-                            else {
-                                return false;
-                            };
-
-                            // bind variable
-                            self.define_var(field, v.clone());
-                        }
-
-                        PatternField::Assign { field, pat, .. } => {
-                            let Some(v) = vfields
-                                .iter()
-                                .find(|(k,_)| k == field)
-                                .map(|(_,v)| v)
-                            else {
-                                return false;
-                            };
-
-                            if !self.bind_pattern(pat, v) {
-                                return false;
+            // Map pattern: map { x, y: pat, .. }
+            Pattern::Map { fields, .. } => match value {
+                EvalValue::Map(hm) => {
+                    for pf in fields {
+                        match pf {
+                            // x  -> bind variable x = hm["x"]
+                            PatternField::Shorthand { field, .. } => {
+                                let Some(v) = hm.get(field) else {
+                                    return false;
+                                };
+                                self.define_var(field, v.clone());
                             }
-                        }
 
-                        PatternField::Rest(_) => continue,
-                    }
-                }
-
-                true
-            }
-            _ => false,
-        },
-
-        // Map pattern: map { x, y: pat, .. }
-        Pattern::Map { fields, .. } => match value {
-            EvalValue::Map(hm) => {
-                for pf in fields {
-                    match pf {
-                        // x  -> bind variable x = hm["x"]
-                        PatternField::Shorthand { field, .. } => {
-                            let Some(v) = hm.get(field) else {
-                                return false;
-                            };
-                            self.define_var(field, v.clone());
-                        }
-
-                        // x: pat -> recursively bind
-                        PatternField::Assign { field, pat, .. } => {
-                            let Some(v) = hm.get(field) else {
-                                return false;
-                            };
-                            if !self.bind_pattern(pat, v) {
-                                return false;
+                            // x: pat -> recursively bind
+                            PatternField::Assign { field, pat, .. } => {
+                                let Some(v) = hm.get(field) else {
+                                    return false;
+                                };
+                                if !self.bind_pattern(pat, v) {
+                                    return false;
+                                }
                             }
-                        }
 
-                        // .. -> allow extra keys
-                        PatternField::Rest(_) => continue,
+                            // .. -> allow extra keys
+                            PatternField::Rest(_) => continue,
+                        }
                     }
+
+                    true
                 }
 
-                true
-            }
-
-            _ => false,
-        },
+                _ => false,
+            },
 
             // Enum pattern: Ok(x), Error(msg)
             Pattern::Variant { name, args, .. } => match value {
-                EvalValue::EnumInstance { variant, args: v_args, .. } => {
+                EvalValue::EnumInstance {
+                    variant,
+                    args: v_args,
+                    ..
+                } => {
                     if variant != name {
                         return false;
                     }
@@ -695,28 +783,20 @@ impl EvalHost for TintVM {
         }
     }
 
-    fn apply_compound(
-        &mut self,
-        left: &EvalValue,
-        op: &str,
-        right: &EvalValue
-    ) -> EvalValue {
+    fn apply_compound(&mut self, left: &EvalValue, op: &str, right: &EvalValue) -> EvalValue {
         match (left, op, right) {
-            (EvalValue::Number(a), "+=", EvalValue::Number(b)) =>
-                EvalValue::Number(a + b),
+            (EvalValue::Number(a), "+=", EvalValue::Number(b)) => EvalValue::Number(a + b),
 
-            (EvalValue::Number(a), "-=", EvalValue::Number(b)) =>
-                EvalValue::Number(a - b),
+            (EvalValue::Number(a), "-=", EvalValue::Number(b)) => EvalValue::Number(a - b),
 
-            (EvalValue::Number(a), "*=", EvalValue::Number(b)) =>
-                EvalValue::Number(a * b),
+            (EvalValue::Number(a), "*=", EvalValue::Number(b)) => EvalValue::Number(a * b),
 
-            (EvalValue::Number(a), "/=", EvalValue::Number(b)) =>
-                EvalValue::Number(a / b),
+            (EvalValue::Number(a), "/=", EvalValue::Number(b)) => EvalValue::Number(a / b),
 
             // Strings: s += "text"
-            (EvalValue::String(a), "+=", EvalValue::String(b)) =>
-                EvalValue::String(format!("{}{}", a, b)),
+            (EvalValue::String(a), "+=", EvalValue::String(b)) => {
+                EvalValue::String(format!("{}{}", a, b))
+            }
 
             // Lists: list += elem
             (EvalValue::List(a), "+=", v) => {
@@ -728,7 +808,6 @@ impl EvalHost for TintVM {
             _ => EvalValue::Unit,
         }
     }
-
 
     fn namespace_lookup(&mut self, _ns: EvalValue, item: &str) -> EvalValue {
         panic!("Namespaces not supported: {}", item);
@@ -744,10 +823,11 @@ impl EvalHost for TintVM {
                 }
                 panic!("Field '{}' not found in struct", field);
             }
-            EvalValue::Map(map) => {
-                map.get(field).cloned().unwrap_or(EvalValue::Unit)
-            }
-            other => panic!("Field lookup not supported: obj={:?}, field={}", other, field),
+            EvalValue::Map(map) => map.get(field).cloned().unwrap_or(EvalValue::Unit),
+            other => panic!(
+                "Field lookup not supported: obj={:?}, field={}",
+                other, field
+            ),
         }
     }
 
@@ -789,9 +869,7 @@ impl EvalHost for TintVM {
             Pattern::Wildcard(_) => true,
 
             // `mut x`
-            Pattern::Mut { inner, .. } => {
-                self.match_pattern(value, inner)
-            }
+            Pattern::Mut { inner, .. } => self.match_pattern(value, inner),
 
             // `_ = expr`
             Pattern::Ident(_, _) => true,
@@ -861,7 +939,10 @@ impl EvalHost for TintVM {
 
             // struct patterns: User { id, name }
             Pattern::Struct { name, fields, .. } => match value {
-                EvalValue::StructInstance { name: vname, fields: vfields } => {
+                EvalValue::StructInstance {
+                    name: vname,
+                    fields: vfields,
+                } => {
                     if vname != name {
                         return false;
                     }
@@ -878,7 +959,7 @@ impl EvalHost for TintVM {
                             // field: pattern
                             PatternField::Assign { field, pat, .. } => {
                                 let Some(v) =
-                                    vfields.iter().find(|(k,_)| k == field).map(|(_,v)| v)
+                                    vfields.iter().find(|(k, _)| k == field).map(|(_, v)| v)
                                 else {
                                     return false;
                                 };
@@ -941,7 +1022,6 @@ impl EvalHost for TintVM {
                 }
                 return self.match_pattern(value, pat);
             }
-
         }
     }
 }

@@ -1,5 +1,5 @@
-use crate::{value::Value, EvalHost};
 use crate::errors::{EvalError, EvalResult};
+use crate::{value::Value, EvalHost};
 use tint_ast::Span;
 
 pub fn call_builtin<H: EvalHost>(
@@ -26,7 +26,9 @@ pub fn call_builtin<H: EvalHost>(
         }
 
         "sqrt" => {
-            let x = args.get(0).and_then(|v| v.as_number())
+            let x = args
+                .get(0)
+                .and_then(|v| v.as_number())
                 .ok_or(EvalError::InvalidOp {
                     msg: "sqrt expects 1 number".into(),
                     span,

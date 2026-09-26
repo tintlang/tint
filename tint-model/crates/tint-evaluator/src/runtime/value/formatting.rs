@@ -21,7 +21,7 @@ impl fmt::Display for Value {
                 write!(f, ")")
             }
 
-                        Value::List(items) => {
+            Value::List(items) => {
                 write!(f, "[")?;
                 for (i, item) in items.iter().enumerate() {
                     if i > 0 {
@@ -32,7 +32,7 @@ impl fmt::Display for Value {
                 write!(f, "]")
             }
 
-                        Value::StructInstance { name, fields } => {
+            Value::StructInstance { name, fields } => {
                 write!(f, "{} {{ ", name)?;
                 let mut first = true;
                 for (k, v) in fields {
@@ -45,7 +45,11 @@ impl fmt::Display for Value {
                 write!(f, " }}")
             }
 
-                        Value::EnumInstance { enum_name, variant, args } => {
+            Value::EnumInstance {
+                enum_name,
+                variant,
+                args,
+            } => {
                 write!(f, "{}::{}(", enum_name, variant)?;
                 for (i, v) in args.iter().enumerate() {
                     if i > 0 {
@@ -60,7 +64,9 @@ impl fmt::Display for Value {
                 write!(f, "map {{ ")?;
                 let mut first = true;
                 for (k, v) in map {
-                    if !first { write!(f, ", ")?; }
+                    if !first {
+                        write!(f, ", ")?;
+                    }
                     first = false;
                     write!(f, "{}: {}", k, v)?;
                 }
@@ -98,16 +104,24 @@ impl fmt::Debug for Value {
                 write!(f, "{} {{ ", name)?;
                 for (i, (k, v)) in fields.iter().enumerate() {
                     write!(f, "{}: {:?}", k, v)?;
-                    if i + 1 < fields.len() { write!(f, ", ")?; }
+                    if i + 1 < fields.len() {
+                        write!(f, ", ")?;
+                    }
                 }
                 write!(f, " }}")
             }
 
-            Value::EnumInstance { enum_name, variant, args } => {
+            Value::EnumInstance {
+                enum_name,
+                variant,
+                args,
+            } => {
                 write!(f, "{}::{}(", enum_name, variant)?;
                 for (i, v) in args.iter().enumerate() {
                     write!(f, "{:?}", v)?;
-                    if i + 1 < args.len() { write!(f, ", ")?; }
+                    if i + 1 < args.len() {
+                        write!(f, ", ")?;
+                    }
                 }
                 write!(f, ")")
             }
@@ -118,22 +132,20 @@ impl fmt::Debug for Value {
                 write!(f, "map {{ ")?;
                 for (i, (k, v)) in map.iter().enumerate() {
                     write!(f, "{}: {:?}", k, v)?;
-                    if i + 1 < map.len() { write!(f, ", ")?; }
+                    if i + 1 < map.len() {
+                        write!(f, ", ")?;
+                    }
                 }
                 write!(f, " }}")
             }
 
-            Value::Lambda { .. } =>
-                write!(f, "<lambda>"),
+            Value::Lambda { .. } => write!(f, "<lambda>"),
 
-            Value::Function { name, .. } =>
-                write!(f, "<fn {}>", name),
+            Value::Function { name, .. } => write!(f, "<fn {}>", name),
 
-            Value::HostFunction(_) =>
-                write!(f, "<host-fn>"),
+            Value::HostFunction(_) => write!(f, "<host-fn>"),
 
-            Value::Namespace { name, .. } =>
-                write!(f, "<namespace {}>", name),
+            Value::Namespace { name, .. } => write!(f, "<namespace {}>", name),
         }
     }
 }

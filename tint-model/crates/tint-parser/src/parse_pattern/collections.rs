@@ -32,7 +32,10 @@ impl Parser {
         let mut fields = Vec::new();
 
         if self.stream.consume_if(TokenKind::RBrace) {
-            return Ok(Pattern::Map { fields, span: start });
+            return Ok(Pattern::Map {
+                fields,
+                span: start,
+            });
         }
 
         loop {
@@ -40,9 +43,11 @@ impl Parser {
             let field_span = self.stream.last_span();
 
             match self.stream.peek_kind() {
-
                 TokenKind::Comma | TokenKind::RBrace => {
-                    fields.push(PatternField::Shorthand { field, span: field_span });
+                    fields.push(PatternField::Shorthand {
+                        field,
+                        span: field_span,
+                    });
                 }
 
                 TokenKind::Colon => {
@@ -89,5 +94,4 @@ impl Parser {
             span: Span::merge(start, self.stream.last_span()),
         })
     }
-
 }

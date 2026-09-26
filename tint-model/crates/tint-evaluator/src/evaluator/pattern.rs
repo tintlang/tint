@@ -2,11 +2,7 @@ use tint_ast::*;
 
 use crate::{value::Value, EvalHost};
 
-pub fn bind_pattern<H: EvalHost>(
-    host: &mut H,
-    pat: &Pattern,
-    val: &Value,
-) {
+pub fn bind_pattern<H: EvalHost>(host: &mut H, pat: &Pattern, val: &Value) {
     match pat {
         Pattern::Ident(name, _) => {
             host.define_var(name, val.clone());
@@ -77,7 +73,11 @@ pub fn bind_pattern<H: EvalHost>(
             }
         }
         Pattern::Struct { name, fields, .. } => {
-            if let Value::StructInstance { name: vname, fields: vfields } = val {
+            if let Value::StructInstance {
+                name: vname,
+                fields: vfields,
+            } = val
+            {
                 if vname != name {
                     panic!("Struct pattern expects `{}`, got `{}`", name, vname);
                 }
@@ -85,18 +85,20 @@ pub fn bind_pattern<H: EvalHost>(
                 for f in fields {
                     match f {
                         PatternField::Shorthand { field, .. } => {
-                            if let Some(v) = vfields.iter()
-                                .find(|(k,_)| k == field)
-                                .map(|(_,v)| v.clone())
+                            if let Some(v) = vfields
+                                .iter()
+                                .find(|(k, _)| k == field)
+                                .map(|(_, v)| v.clone())
                             {
                                 host.define_var(field, v);
                             }
                         }
 
                         PatternField::Assign { field, pat, .. } => {
-                            if let Some(v) = vfields.iter()
-                                .find(|(k,_)| k == field)
-                                .map(|(_,v)| v.clone())
+                            if let Some(v) = vfields
+                                .iter()
+                                .find(|(k, _)| k == field)
+                                .map(|(_, v)| v.clone())
                             {
                                 bind_pattern(host, pat, &v);
                             }
@@ -110,7 +112,12 @@ pub fn bind_pattern<H: EvalHost>(
             }
         }
         Pattern::Variant { name, args, .. } => {
-            if let Value::EnumInstance { variant, args: v_args, .. } = val {
+            if let Value::EnumInstance {
+                variant,
+                args: v_args,
+                ..
+            } = val
+            {
                 if variant != name {
                     panic!("Variant mismatch: expected `{}`, got `{}`", name, variant);
                 }
@@ -118,7 +125,6 @@ pub fn bind_pattern<H: EvalHost>(
                 for (subpat, subval) in args.iter().zip(v_args.iter()) {
                     bind_pattern(host, subpat, subval);
                 }
-
             } else {
                 panic!("Variant pattern applied to non-enum value");
             }

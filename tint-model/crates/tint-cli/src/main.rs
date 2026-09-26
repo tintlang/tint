@@ -74,7 +74,10 @@ fn main() {
         Some("repl") | None => cmd_repl(),
 
         Some(other) => {
-            eprintln!("unknown command '{}'. usage: tint <run|check|build|repl> [args]", other);
+            eprintln!(
+                "unknown command '{}'. usage: tint <run|check|build|repl> [args]",
+                other
+            );
             std::process::exit(1);
         }
     }
@@ -143,10 +146,15 @@ fn cmd_run(path: &str, fn_name: &str) {
     };
 
     let mut vm = TintVM::new();
+    register_natives(&mut vm);
     vm.run_program(&program);
 
-    if !has_fn(&program, fn_name) {
-        println!("compiled OK ({} item(s)), no `fn {}` to run", program.items.len(), fn_name);
+    if !has_fn(&program, fn_name) && !vm.native_fns.contains_key(fn_name) {
+        println!(
+            "compiled OK ({} item(s)), no `fn {}` to run",
+            program.items.len(),
+            fn_name
+        );
         return;
     }
 
@@ -169,6 +177,25 @@ fn has_fn(program: &Program, name: &str) -> bool {
         .items
         .iter()
         .any(|item| matches!(item, Item::Fn(f) if f.name == name))
+}
+
+/// Demo native Rust functions, registered on every `tint run` -- direct
+/// Rust interop (`TintVM::register_native`): call real Rust from `.tn`
+/// source under a plain name, no Rust syntax inside the language at all.
+/// `now_ms` in particular does something Tint itself has no way to
+/// express (reading the system clock), so `tint run <file> now_ms` (with
+/// no matching `fn now_ms` in the file) is a concrete, runnable proof this
+/// reaches all the way from the CLI into real Rust and back.
+fn register_natives(vm: &mut TintVM) {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    vm.register_native("now_ms", |_args| {
+        let ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_millis() as f64)
+            .unwrap_or(0.0);
+        Ok(Value::Number(ms))
+    });
 }
 
 fn cmd_build(path: &str, output: Option<&str>) {
@@ -211,7 +238,8 @@ fn generate_standalone_html(source_code: &str) -> String {
         .replace("${", "\\${");
 
     // HTML template with embedded WASM bootstrap
-    format!(r#"<!DOCTYPE html>
+    format!(
+        r#"<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -367,7 +395,8 @@ fn generate_standalone_html(source_code: &str) -> String {
     </script>
 </body>
 </html>
-"#)
+"#
+    )
 }
 
 fn cmd_repl() {

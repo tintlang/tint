@@ -106,6 +106,7 @@ pub enum TokenKind {
     Module,
     Export,
     Use,
+    Import,
 
     At,
     Eof,

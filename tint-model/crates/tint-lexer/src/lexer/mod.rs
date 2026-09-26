@@ -3,8 +3,8 @@ mod literals;
 mod operators;
 
 use crate::{Token, TokenKind};
-use tint_ast::Span;
 use std::str::Chars;
+use tint_ast::Span;
 
 pub struct Lexer<'a> {
     pub(super) chars: Chars<'a>,

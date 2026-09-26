@@ -31,20 +31,22 @@ subject.
 - `events.md`, `async.md` — events and asynchronous code
 - `modules.md` — the file-based module system and `run.tn`
 - `resources-and-borrowing.md` — `buffer` / `image` / `tensor` / `vec` and the `borrow` model
-- `gpu-kernels.md`, `tint2d.md`, `tensors.md` — GPU compute, the 2D engine, and the tensor/ML layer
+- `gpu-kernels.md`, `tensors.md` — GPU compute and the tensor/ML layer
 - `kits.md` — reusable field groups for structs (`kit`)
 
 **UI** (`ui/`) — the declarative UI layer
-- `ui-syntax.md` — `<Block>` vs rendered components, state, the full example
-- `modifiers.md` — the `{}` modifier DSL (layout, offset, visual, color, gradients)
-- `styling.md` — TintStyle/TintColor and combo effects (`shadow+inner{...}`)
-- `animations.md` — `animate{}`, triggers, timelines, frame-based physics
-- `blocks.md`, `panels.md` — the `<Block>` and `<Panel>` components
-- `slots.md` — the slot system (`<HeaderSlot/>`, `<Children/>`, ...)
+- `ui-syntax.md` — Tint block nodes, state, themes, imports, grid, and routes
+- `modifiers.md` — the `::` modifier syntax and semantic groups (`layout`, `paint`, `motion`)
+- `styling.md` — the currently implemented layout, paint, gradient, blur, and hover modifiers
+- `animations.md` — current transition and hover behavior
+- `blocks.md` — UI block control flow currently supported by the parser
+
+The browser sandbox is a Tint-rendered app. Run `npm run dev:all` from
+`tint-model/sandbox` for Vite HMR, nested `.tn` import reloads, and automatic
+Rust/WASM rebuilds. The landing page is `/`; the workbench is `/sandbox`.
 
 **Project**
 - `project-status.md` — what's implemented, what isn't, and the roadmap
-- `examples-and-drafts.md` — informal syntax experiments and scratch examples, kept for reference but not part of the spec
 
 ## Reading order
 

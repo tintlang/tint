@@ -3,8 +3,8 @@
 use std::any::Any;
 use std::collections::{HashMap, HashSet};
 
-use super::{StateCell, SignalCell, ComputedCell, WatchEntry};
 use super::WatchCallback;
+use super::{ComputedCell, SignalCell, StateCell, WatchEntry};
 
 pub type StateId = usize;
 
@@ -31,7 +31,6 @@ pub trait AnyComputed: Any {
     fn as_any(&self) -> &dyn Any;
 }
 
-
 impl<T: Clone + 'static> AnyState for StateCell<T> {
     fn as_any(&self) -> &dyn Any {
         self
@@ -49,7 +48,6 @@ impl<T: Clone + 'static> AnyComputed for ComputedCell<T> {
         self
     }
 }
-
 
 impl StateStore {
     pub fn new() -> Self {
@@ -137,6 +135,4 @@ impl StateStore {
             }
         }
     }
-
 }
-

@@ -21,6 +21,7 @@ use super::tree::{UiNodeId, UiTree};
 #[derive(Debug, Clone, Serialize)]
 pub struct UiRenderNode {
     pub tag: String,
+    pub tint_source: String,
     pub text: Option<String>,
     pub style: Vec<(String, String)>,
     pub hover_style: Vec<(String, String)>,
@@ -29,6 +30,7 @@ pub struct UiRenderNode {
     pub on_hover_enter: Option<String>,
     pub on_hover_leave: Option<String>,
     pub svg: Option<String>,
+    pub route: Option<String>,
     pub children: Vec<UiRenderNode>,
 }
 
@@ -40,6 +42,7 @@ pub fn to_render_tree(tree: &UiTree, id: UiNodeId) -> UiRenderNode {
     let node = &tree.nodes[id];
     UiRenderNode {
         tag: node.tag.clone(),
+        tint_source: node.tint_source.clone(),
         text: node.text.clone(),
         style: node.style.clone(),
         hover_style: node.hover_style.clone(),
@@ -48,6 +51,7 @@ pub fn to_render_tree(tree: &UiTree, id: UiNodeId) -> UiRenderNode {
         on_hover_enter: node.on_hover_enter.clone(),
         on_hover_leave: node.on_hover_leave.clone(),
         svg: node.svg.clone(),
+        route: node.route.clone(),
         children: node
             .children
             .iter()

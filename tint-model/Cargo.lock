@@ -300,6 +300,17 @@ name = "tint-ast"
 version = "0.1.0"
 
 [[package]]
+name = "tint-cli"
+version = "0.1.0"
+dependencies = [
+ "tint-ast",
+ "tint-evaluator",
+ "tint-lexer",
+ "tint-parser",
+ "tint-runtime",
+]
+
+[[package]]
 name = "tint-evaluator"
 version = "0.1.0"
 dependencies = [

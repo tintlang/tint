@@ -1,0 +1,28 @@
+// Landing shell. Section files are expanded here by the .tn import loader.
+import "./landing-actions.tn";
+
+ui fn Landing() {
+    state theme = "dark"
+
+    theme::dark {
+        Page {
+            layout::{ direction::column }
+            paint::{ background::#0a0a0a }
+            import "./topbar.tn";
+            import "./hero.tn";
+            import "./demo.tn";
+            import "./footer.tn";
+        }
+    }
+
+    theme::light {
+        Page {
+            layout::{ direction::column }
+            paint::{ background::#ffffff }
+            import "./topbar.tn";
+            import "./hero.tn";
+            import "./demo.tn";
+            import "./footer.tn";
+        }
+    }
+}

@@ -1,10 +1,8 @@
-
-use crate::{Parser, error::*};
-use tint_ast::{StructDecl, StructField, StructMember, KitRef, Span};
+use crate::{error::*, Parser};
+use tint_ast::{KitRef, Span, StructDecl, StructField, StructMember};
 use tint_lexer::TokenKind;
 
 impl Parser {
-
     // Parse struct member: either field OR @kit.path
     fn parse_struct_member(&mut self) -> PResult<StructMember> {
         let tok = self.stream.peek();
@@ -40,11 +38,7 @@ impl Parser {
 
             let span = Span::merge(start, self.stream.last_span());
 
-            return Ok(StructMember::Kit(KitRef {
-                path,
-                body,
-                span,
-            }));
+            return Ok(StructMember::Kit(KitRef { path, body, span }));
         }
 
         // Otherwise parse a regular struct field.
@@ -62,7 +56,7 @@ impl Parser {
 
         self.stream.expect(TokenKind::LBrace)?;
 
-        let mut fields = Vec::new();          // ONLY StructField here (no kit!)
+        let mut fields = Vec::new(); // ONLY StructField here (no kit!)
         let mut style: Option<&'static str> = None;
 
         // members loop
@@ -73,7 +67,7 @@ impl Parser {
                 StructMember::Field(f) => {
                     // determine style
                     let this_style = match f {
-                        StructField::Typed { .. }     => "typed",
+                        StructField::Typed { .. } => "typed",
                         StructField::TintTyped { .. } => "tinttyped",
                         StructField::TintField { .. } => "tintfield",
                     };
@@ -108,7 +102,7 @@ impl Parser {
 
         Ok(StructDecl {
             name,
-            members: fields,     // NOTE: YOU MUST UPDATE StructDecl
+            members: fields, // NOTE: YOU MUST UPDATE StructDecl
             exported: false,
             span: Span::merge(start, end),
         })

@@ -1,8 +1,8 @@
 // ============================================
 // tint-ir/src/builder.rs — SSA Builder
 // ============================================
-use tint_ast::Pattern;
 use crate::ir::*;
+use tint_ast::Pattern;
 
 /// SSA Builder: allocates ValueId, builds Ops with destinations (dst)
 pub struct IrBuilder {
@@ -57,12 +57,7 @@ impl IrBuilder {
     // ---------------------------------------
     // UNARY
     // ---------------------------------------
-    pub fn emit_unary(
-        &mut self,
-        block: &mut Block,
-        op: String,
-        src: ValueId,
-    ) -> ValueId {
+    pub fn emit_unary(&mut self, block: &mut Block, op: String, src: ValueId) -> ValueId {
         let dst = self.fresh_value();
         block.instrs.push(Instr::Unary { dst, op, src });
         dst
@@ -77,12 +72,7 @@ impl IrBuilder {
         dst
     }
 
-    pub fn emit_store(
-        &mut self,
-        block: &mut Block,
-        name: String,
-        src: ValueId,
-    ) {
+    pub fn emit_store(&mut self, block: &mut Block, name: String, src: ValueId) {
         block.instrs.push(Instr::StoreLocal { name, src });
     }
 
@@ -90,17 +80,12 @@ impl IrBuilder {
     // CALL: foo(a,b)
     // NOTE: compiler gives (fnValueId, arg_ids)
     // ---------------------------------------
-    pub fn emit_call(
-        &mut self,
-        block: &mut Block,
-        func: ValueId,
-        args: Vec<ValueId>,
-    ) -> ValueId {
+    pub fn emit_call(&mut self, block: &mut Block, func: ValueId, args: Vec<ValueId>) -> ValueId {
         let dst = self.fresh_value();
         block.instrs.push(Instr::Call { dst, func, args });
         dst
     }
-    
+
     // ---------------------------------------
     // FIELD: obj.field
     // ---------------------------------------
@@ -125,19 +110,16 @@ impl IrBuilder {
         item: String,
     ) -> ValueId {
         let dst = self.fresh_value();
-        block.instrs.push(Instr::NamespaceAccess { dst, base, item });
+        block
+            .instrs
+            .push(Instr::NamespaceAccess { dst, base, item });
         dst
     }
 
     // ---------------------------------------
     // INDEX: arr[i]
     // ---------------------------------------
-    pub fn emit_index(
-        &mut self,
-        block: &mut Block,
-        arr: ValueId,
-        index: ValueId,
-    ) -> ValueId {
+    pub fn emit_index(&mut self, block: &mut Block, arr: ValueId, index: ValueId) -> ValueId {
         let dst = self.fresh_value();
         block.instrs.push(Instr::Index { dst, arr, index });
         dst
@@ -172,56 +154,42 @@ impl IrBuilder {
         dst
     }
 
-    pub fn emit_map_init(
-        &mut self,
-        block: &mut Block,
-        entries: Vec<(String, ValueId)>
-    ) -> ValueId {
+    pub fn emit_map_init(&mut self, block: &mut Block, entries: Vec<(String, ValueId)>) -> ValueId {
         let dst = self.fresh_value();
         block.instrs.push(Instr::MapInit { dst, entries });
         dst
     }
 
-    pub fn emit_map_access(
-        &mut self,
-        block: &mut Block,
-        map: ValueId,
-        key: String,
-    ) -> ValueId {
+    pub fn emit_map_access(&mut self, block: &mut Block, map: ValueId, key: String) -> ValueId {
         let dst = self.fresh_value();
         block.instrs.push(Instr::MapAccess { dst, map, key });
         dst
     }
 
-pub fn emit_field_store(
-    &mut self,
-    block: &mut Block,
-    base: ValueId,
-    field: String,
-    src: ValueId,
-) {
-    block.instrs.push(Instr::FieldStore { base, field, src });
-}
-
-pub fn emit_index_store(
-    &mut self,
-    block: &mut Block,
-    arr: ValueId,
-    index: ValueId,
-    src: ValueId,
-) {
-    block.instrs.push(Instr::IndexStore { arr, index, src });
-}
-
-
-        // ---------------------------------------
-    // TUPLE: (a, b, c)
-    // ---------------------------------------
-    pub fn emit_tuple(
+    pub fn emit_field_store(
         &mut self,
         block: &mut Block,
-        items: Vec<ValueId>,
-    ) -> ValueId {
+        base: ValueId,
+        field: String,
+        src: ValueId,
+    ) {
+        block.instrs.push(Instr::FieldStore { base, field, src });
+    }
+
+    pub fn emit_index_store(
+        &mut self,
+        block: &mut Block,
+        arr: ValueId,
+        index: ValueId,
+        src: ValueId,
+    ) {
+        block.instrs.push(Instr::IndexStore { arr, index, src });
+    }
+
+    // ---------------------------------------
+    // TUPLE: (a, b, c)
+    // ---------------------------------------
+    pub fn emit_tuple(&mut self, block: &mut Block, items: Vec<ValueId>) -> ValueId {
         let dst = self.fresh_value();
         block.instrs.push(Instr::Tuple { dst, items });
         dst
@@ -237,11 +205,7 @@ pub fn emit_index_store(
         index: usize,
     ) -> ValueId {
         let dst = self.fresh_value();
-        block.instrs.push(Instr::TupleExtract {
-            dst,
-            tuple,
-            index,
-        });
+        block.instrs.push(Instr::TupleExtract { dst, tuple, index });
         dst
     }
 
@@ -252,19 +216,13 @@ pub fn emit_index_store(
         updates: Vec<(String, ValueId)>,
     ) -> ValueId {
         let dst = self.fresh_value();
-        block.instrs.push(Instr::StructUpdate {
-            dst,
-            base,
-            updates,
-        });
+        block
+            .instrs
+            .push(Instr::StructUpdate { dst, base, updates });
         dst
     }
 
-    pub fn emit_array(
-        &mut self,
-        block: &mut Block,
-        items: Vec<ValueId>,
-    ) -> ValueId {
+    pub fn emit_array(&mut self, block: &mut Block, items: Vec<ValueId>) -> ValueId {
         let dst = self.fresh_value();
         block.instrs.push(Instr::Array { dst, items });
         dst
@@ -277,7 +235,11 @@ pub fn emit_index_store(
         arms: Vec<(Pattern, Option<ValueId>, ValueId)>,
     ) -> ValueId {
         let dst = self.fresh_value();
-        block.instrs.push(Instr::Match { dst, scrutinee, arms });
+        block.instrs.push(Instr::Match {
+            dst,
+            scrutinee,
+            arms,
+        });
         dst
     }
 

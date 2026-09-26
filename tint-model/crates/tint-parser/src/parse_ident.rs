@@ -1,6 +1,5 @@
-
-use tint_lexer::{TokenKind, Token};
-use crate::{Parser, error::*};
+use crate::{error::*, Parser};
+use tint_lexer::{Token, TokenKind};
 
 impl Parser {
     /// Parse identifier (variable names, component names, module segments)
@@ -9,8 +8,7 @@ impl Parser {
         let tok: Token = self.stream.next_owned();
 
         match tok.kind {
-            TokenKind::Ident
-            | TokenKind::SelfKw => {
+            TokenKind::Ident | TokenKind::SelfKw => {
                 return Ok(tok.lexeme.clone());
             }
 

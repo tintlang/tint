@@ -47,7 +47,7 @@ impl Parser {
             body,
             span: Span::merge(start, end),
         })
-}
+    }
     pub(crate) fn parse_loop_stmt(&mut self) -> PResult<Stmt> {
         let start = self.stream.next().span;
         let body = self.parse_block()?;

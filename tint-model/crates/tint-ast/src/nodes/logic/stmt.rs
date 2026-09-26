@@ -1,10 +1,6 @@
+use super::pattern::Pattern;
+use super::{expr::Expr, pattern::MatchArm, types::Type};
 use crate::Span;
-use super::pattern::Pattern; 
-use super::{
-    expr::Expr,
-    pattern::{MatchArm},
-    types::Type,
-};
 
 #[derive(Debug, Clone)]
 pub struct Block {
@@ -14,8 +10,8 @@ pub struct Block {
 
 #[derive(Debug, Clone)]
 pub enum LetInit {
-    Assign(Expr),   // let a = expr
-    Tint(Expr),     // let a{expr}
+    Assign(Expr), // let a = expr
+    Tint(Expr),   // let a{expr}
 }
 
 impl LetInit {
@@ -31,8 +27,8 @@ impl LetInit {
 pub enum Stmt {
     Let {
         pattern: Pattern,
-        ty: Option<Type>,   // let a: i32 = 10
-        init: LetInit,      // Either `= expr` or Tint-style `{expr}` initialization.
+        ty: Option<Type>, // let a: i32 = 10
+        init: LetInit,    // Either `= expr` or Tint-style `{expr}` initialization.
         span: Span,
     },
 

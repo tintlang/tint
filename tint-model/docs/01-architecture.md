@@ -49,14 +49,14 @@ Tint is unusual in spanning the whole GPU stack, from UI down to compute, in one
 language:
 
 ```
-HIGH LEVEL   TintUI       declarative UI (<Panel>, <Text>, ...)
+HIGH LEVEL   TintUI       declarative UI (Panel, Text, ...)
 MID LEVEL    Tint2D       gpu2d { ... } — a GPU-only Canvas2D equivalent
 LOW LEVEL    TintGPU      kernel { ... } — WGSL-like compute
 ```
 
-**TintUI** lays out and renders the declarative tree: panels, text, icons, blend,
-shadow, blur, animations, vector rendering. This is the mode Lynbor-style editors
-and tools use.
+**TintUI** lays out and renders the declarative tree: named nodes, text, layout,
+paint, transitions, hover states, and events. The current browser backend is a
+direct DOM renderer (`DomSession`) with no UI framework.
 
 **Tint2D** is a declarative, 100% WebGPU "Canvas2D": built-in shadow/blur/glow,
 returns a `Texture`, and uses a real path engine instead of raster hacks. See
@@ -83,39 +83,12 @@ WebGPU / wgpu-native backend
 Final frame
 ```
 
-## UI rendering modes
+## UI rendering
 
-**Zero-HTML Mode** — the UI is rendered entirely through WebGPU; there is no DOM
-node anywhere. This is the default for editors and tools.
-
-**Hybrid DOM Mode** — `<Text>` becomes `<div>`, `<Button>` becomes `<button>`, and so
-on. Used for landing pages, SEO, and conventional web apps.
-
-### RST — Tint Semantic Tree (SEO)
-
-In Hybrid DOM Mode, TintVM can additionally emit a semantic, read-only DOM mirror of
-the UI purely for search engines — the **Tint Semantic Tree (RST)**:
-
-- WebGPU stays the source of the visible UI
-- the DOM mirror is generated automatically by TintVM, not by hand-written Rust/JS
-- it does not accept user events
-- it updates reactively, like a read-only shadow DOM
-
-```
-<Panel>
-    <Text>"Hello"</Text>
-</Panel>
-```
-
-becomes, in the RST:
-
-```
-<tint-panel>
-    <tint-text>Hello</tint-text>
-</tint-panel>
-```
-
-RST is only active in Hybrid DOM Mode; it is disabled in Zero-HTML Mode.
+Tint UI is written as named block nodes and rendered directly by the active
+backend. In the browser, `DomSession` maps nodes to DOM elements, applies the
+resolved `layout`/`paint`/`motion` styles, and binds named event attributes.
+`route||"/path"` becomes a normal browser link.
 
 ### WebGL2 fallback
 

@@ -1,9 +1,12 @@
 pub mod evaluator;
+pub mod output;
 pub mod runtime;
 pub mod utils;
-pub mod output;
 
-pub use evaluator::{block as eval_block, expr as eval_expr, function as eval_fn, host as eval_host, pattern as eval_pattern, stmt as eval_stmt};
+pub use evaluator::{
+    block as eval_block, expr as eval_expr, function as eval_fn, host as eval_host,
+    pattern as eval_pattern, stmt as eval_stmt,
+};
 pub use runtime::{env, host_vm, value};
 pub use utils::{call, errors, pattern_match};
 

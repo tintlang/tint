@@ -1,5 +1,5 @@
-use crate::{EvalHost};
 use crate::eval_host::Flow;
+use crate::EvalHost;
 use tint_ast::Block;
 
 pub fn eval_block_flow<H: EvalHost>(host: &mut H, block: &Block) -> Flow {

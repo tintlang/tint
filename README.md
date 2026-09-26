@@ -4,9 +4,11 @@ A UI programming language that compiles to WebAssembly and runs in the browser.
 
 ```tint
 ui fn App() {
-    Column { padding::24 gap::12 background::#12141a
+    Column {
+        layout::{ padding::24, gap::12 }
+        paint::{ background::#12141a }
         Text { text::{24, bold, white} "Hello Tint" }
-        Button { radius::8 color::white "Click me" }
+        Button { paint::{ radius::8, color::white } "Click me" }
     }
 }
 ```
@@ -15,13 +17,16 @@ ui fn App() {
 
 - **Compiler pipeline**: Lexer → Parser → AST → Semantic Checker → SSA IR → Optimizer → WASM
 - **UI as first-class citizen**: No HTML/CSS/JS split—UI is the language
-- **Modifiers system**: `padding::`, `margin::`, `color::`, `background::`, `radius::`, `border::`, `gap::`, `grow::`, `align::`, `justify::`, `position::`/`z::`/`top::`/`left::`, `size::`, `opacity::`, `text::`
+- **Semantic modifier groups**: `layout::{...}`, `paint::{...}`, and `motion::{...}`; flat modifiers remain accepted for compatibility
 - **Control flow**: `if/else`, `for` loops, functions with persistence, full comparison operators (`< > <= >= == !=`) alongside `&& ||`
 - **Real state + events**: `state`, `click||`, `hover_in||`/`hover_out||` drive a persistent, re-rendering session
-- **Responsive design**: `mobile::{}`/`tablet::{}`/`laptop::{}`/`desktop::{}` style breakpoints, plus a host-exposed `viewport_width` variable for structural `if{}` layout swaps (see `examples/landing.tn`)
-- **Two rendering backends**: the Svelte-driven sandbox preview, and `DomSession` — a direct-DOM renderer (Rust/`web-sys`, no JS framework) for embedding Tint UIs in a plain page
-- **Interactive sandbox**: Edit, compile, and preview in the browser (Svelte 5 + CodeMirror 6 + xterm.js)
+- **Responsive design**: `mobile::{}`/`tablet::{}`/`laptop::{}`/`desktop::{}` style breakpoints, plus a host-exposed `viewport_width` variable for structural `if{}` layout swaps (see `tint-model/sandbox/src/landing/`)
+- **Layout primitives**: flex direction and a typed `grid::{ columns, rows, gap }` modifier with `minmax(0, 1fr)`-friendly tracks
+- **Internal routing**: `route||"/path"` renders as a normal browser link, including `/` and `/sandbox`
+- **Direct DOM rendering**: `DomSession` renders Tint through Rust/`web-sys`, without a UI framework
+- **Interactive sandbox**: Edit, compile, and preview in the browser with Tint, CodeMirror 6, and WASM
 - **CLI tools**: Check syntax, run, build to HTML
+- **Native Rust interop**: `TintVM::register_native("name", |args| ...)` registers a real Rust closure that `.tn` source calls directly by name -- no Rust syntax inside the language, no reimplementing rustc's borrow checker, just an ordinary Rust function called across the boundary (see `tint run <file> now_ms`, a demo native in `tint-cli`)
 - **VSCode extension**: Syntax highlighting + build commands
 
 ## Quick Start
@@ -30,7 +35,7 @@ ui fn App() {
 
 ```bash
 # Install
-cd tintlang/tint-model
+cd tint/tint-model
 cargo build -p tint-cli --release
 export PATH="$PWD/target/release:$PATH"
 
@@ -61,7 +66,7 @@ tint repl
 ```bash
 cd tint-model/sandbox
 npm install
-npm run dev
+npm run dev:all
 ```
 
 Open browser to `http://localhost:5173` and edit code live.
@@ -69,7 +74,7 @@ Open browser to `http://localhost:5173` and edit code live.
 ## Project Structure
 
 ```
-tintlang/
+tint/
 ├── tint-model/              # Core language implementation (Rust)
 │   ├── crates/
 │   │   ├── tint-lexer/      # Tokenization
@@ -81,7 +86,7 @@ tintlang/
 │   │   ├── tint-runtime/    # VM + UI renderer
 │   │   ├── tint-wasm/       # WASM bindings
 │   │   └── tint-cli/        # Command-line tool
-│   ├── sandbox/             # Web IDE (Svelte 5)
+│   ├── sandbox/             # Tint-rendered Web IDE
 │   └── tests/               # Integration tests
 └── vscode-tint/             # VSCode extension (TypeScript)
 ```
@@ -100,12 +105,15 @@ tintlang/
 ✅ CLI tooling
 ✅ VSCode integration
 ✅ Hover effects & animations
+✅ Grid layout and internal route links
+✅ Automatic `.tn` reload and Rust/WASM rebuild with `npm run dev:all`
 
 ## Known Gaps
 
 ❌ Multiple independent component instances (state is one flat scope per `UiSession`)
 ❌ `match{}` in UI trees (parsed, not evaluated)
-❌ Cross-file imports
+✅ Compile-time `.tn` imports in the Vite sandbox source pipeline
+❌ A native fn (or any function) called from *inside* a plain `fn`'s own body, when that `fn` runs the normal top-level way -- the IR VM's `Call` instruction is still a stub (see `ir_vm.rs`). Native fns ARE reachable from click/hover handlers, UI fn bodies, and any other tree-walked call site today (see `tint-runtime/tests/native_fn.rs`)
 ❌ Type annotations (inference-only)
 ❌ Generics
 ❌ Async/await
@@ -118,10 +126,12 @@ Create `app.tn`:
 
 ```tint
 ui fn App() {
-    Column { padding::24 gap::16 background::#f5f7fa
+    Column {
+        layout::{ padding::24, gap::16 }
+        paint::{ background::#f5f7fa }
         Text { text::{32, bold, #000} "Dashboard" }
         
-        Card { radius::12 padding::16 background::white
+        Card { layout::{ padding::16 } paint::{ radius::12, background::white }
             Row { gap::8
                 Text { text::{14, #666} "Status:" }
                 Text { text::{14, bold, #00aa00} "Online" }
@@ -129,7 +139,7 @@ ui fn App() {
         }
         
         for { item in ["Item 1", "Item 2", "Item 3"] }
-            ListItem { padding::12 radius::8 background::#eee
+            ListItem { layout::{ padding::12 } paint::{ radius::8, background::#eee }
                 Text { "{item}" }
             }
     }
@@ -147,20 +157,22 @@ open app.html
 
 Style breakpoints (`mobile::{}`/`tablet::{}`/`laptop::{}`/`desktop::{}`) restyle a node per
 viewport width, and a host-exposed `viewport_width` variable lets `if{}` swap in structurally
-different content — not just a different style. See `examples/landing.tn` for a full page built
-this way (a nav that becomes a hamburger menu below 768px, a hero that stacks on mobile), rendered
-through `DomSession` with no JS framework:
+different content — not just a different style. See `tint-model/sandbox/src/landing/` for a full
+page built this way (a nav that becomes a hamburger menu below 768px, a hero that stacks on
+mobile), rendered through `DomSession` with no JS framework -- it's the site's own real landing
+page (`sandbox/src/main.tn` mounted by a minimal `sandbox/index.html`), split into `landing.tn`, `topbar.tn`, `hero.tn`, `demo.tn`, and
+`footer.tn`, with compile-time `.tn` imports and `theme::dark`/`theme::light`
+blocks instead of duplicated comment-marked trees:
 
 ```tint
 Nav {
-    direction::row
-    NavLinks { direction::row gap::24 if{viewport_width >= 768} Text { "Docs" } }
-    MenuButton { click||toggle_menu radius::10 padding::10 if{viewport_width < 768} "Menu" }
+    layout::{ direction::row }
+    NavLinks { layout::{ direction::row, gap::24 } if{viewport_width >= 768} Text { "Docs" } }
+    MenuButton { click||toggle_menu layout::{ padding::10 } paint::{ radius::10 } if{viewport_width < 768} "Menu" }
 }
 
 Hero {
-    direction::row
-    gap::40
+    layout::{ direction::row, gap::40 }
     mobile::{ direction::column, gap::24 }
     HeroCopy { grow::1 Text { text::{44, bold, white} "..." } }
 }
@@ -207,6 +219,6 @@ Unlicense (public domain) - do whatever you want with it.
 
 ## Author
 
-Mark Bender ([@BenderMare1316](https://x.com/BenderMare1316))
+Mark Bender ([@hawerz](https://github.com/hawerz))
 
 Feedback welcome—especially on syntax design, compiler architecture, or whether you'd use this for something real.

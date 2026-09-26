@@ -104,7 +104,7 @@ fn update() {
 }
 
 ui fn App() {
-    <Button onClick=update>"Recompute"</Button>
+    Button { click||update "Recompute" }
 }
 ```
 
@@ -166,23 +166,9 @@ No Python, no PyTorch, no JS — everything runs on WebGPU, in the browser.
 **Autodiff** (planned, not yet built): `let grads = MLP.backward(loss)`, with
 TintVM constructing the gradient graph automatically.
 
-**ML + UI** compose directly — a tensor can be rendered as an image with no manual
-conversion step, and training and UI updates stay reactive together:
-
-```
-ui fn Dashboard(loss: number, tensor img) {
-    <Column padding{20}>
-        <Text text{xl}> "Loss: {loss}" </Text>
-
-        <Tint2D height{320}>
-            tint2d {
-                texture img
-                colormap{inferno}
-            }
-        </Tint2D>
-    </Column>
-}
-```
+The current UI runtime does not define a tensor-to-image component boundary.
+Keep tensor operations in Logic Mode and expose ordinary UI state through named
+handlers until a dedicated resource UI API is implemented.
 
 **A small CNN:**
 

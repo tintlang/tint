@@ -1,8 +1,8 @@
 mod formatting;
 mod methods;
 
-use std::{collections::HashMap, rc::Rc};
 use crate::env::Env;
+use std::{collections::HashMap, rc::Rc};
 
 /// Runtime value produced by the Tint evaluator.
 #[derive(Clone)]

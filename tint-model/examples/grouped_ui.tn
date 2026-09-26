@@ -1,0 +1,8 @@
+ui fn App() {
+    Card {
+        layout::{ direction::column, gap::12, padding::24 }
+        paint::{ gradient::{ angle::135, from::#6c5ce7, to::#8b7cf0 }, radius::20, border::{1, #8b7cf0} }
+        motion::{ transition::"transform .2s ease", hover::{ scale::1.03, shadow::"0 16px 40px rgba(0,0,0,.35)" } }
+        Text { text::{18, bold, white} "Card" }
+    }
+}

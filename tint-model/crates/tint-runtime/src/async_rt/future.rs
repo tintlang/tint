@@ -1,8 +1,8 @@
 // async_rt/future.rs
 
-use std::pin::Pin;
 use std::future::Future;
-use std::task::{Waker, Poll, Context};
+use std::pin::Pin;
+use std::task::{Context, Poll, Waker};
 
 pub struct FutureHandle {
     pub id: usize,

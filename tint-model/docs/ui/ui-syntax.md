@@ -1,228 +1,104 @@
-# TintUI Syntax
+# Tint UI syntax
 
-TintUI is a declarative, strict, WebGPU-first UI DSL — no HTML, CSS, JSX, or DOM
-patterns. It rests on one rule:
+Tint UI is a declarative tree. A rendered node is a named block; text is a
+quoted child.
 
-| Syntax | Used for |
-|---|---|
-| `{}` | styles, modifiers, geometry, animation, Tint2D |
-| `=` | logic, events, bindings, conditions, data |
-
-## Entry point
-
-```
+```tn
 ui fn App() {
-    <Column spacing{20} padding{20}>
-        <Text> "Hello Tint!" </Text>
-    </Column>
-}
-```
+    Page {
+        layout::{ direction::column, gap::16, padding::24 }
+        paint::{ background::#0a0a0a }
 
-## The logic layer — `<Block>`
-
-`<Block>` never renders anything itself; it just drives `if`/`for`/`match` inside
-the UI tree.
-
-```
-<Block if=visible>
-    <Text> "Visible!" </Text>
-</Block>
-
-<Block for=item in items>
-    <Panel padding{12}>
-        <Text> "{item.name}" </Text>
-    </Panel>
-</Block>
-
-<Block match=status>
-    <case ready>   <Text>"OK"</Text> </case>
-    <case error>   <Text>"Error"</Text> </case>
-    <case loading> <Text>"Loading…"</Text> </case>
-</Block>
-```
-
-Full details: `ui/blocks.md`.
-
-## The panels layer — components that render
-
-### `<Panel>`
-
-```
-<Panel
-    padding{16}
-    spacing{12}
-    radius{12px}
-    color{gray-900{20%}}
->
-    <Text> "Hello Tint" </Text>
-</Panel>
-```
-
-Full details: `ui/panels.md`.
-
-### `<Text>`
-
-```
-<Text style=text{xl, bold}>
-    "Tint UI"
-</Text>
-```
-
-```
-text{sm}    text{xl, bold}    text{24px}    text{lg, italic}    color{blue-400}
-```
-
-### `<Button>`
-
-```
-<Button onClick=increment>
-    "+"
-</Button>
-
-<Button
-    onClick=increment
-    onHover{scale: 1 -> 1.05}
-    shadow{0px 4px 16px black{20%}}
->
-    "Hover me"
-</Button>
-```
-
-### Layout — `<Row>` / `<Column>`
-
-```
-<Row spacing{12}>
-    <Text> "A" </Text>
-    <Text> "B" </Text>
-</Row>
-
-<Column spacing{16} padding{20}>
-    ...
-</Column>
-```
-
-Layout modifiers: `gap{12}`, `padding{20}`, `spacing{24}`, `width{100%}`,
-`height{240px}`.
-
-### `<Icon>` / `<Image>`
-
-```
-<Icon size{24}>
-    TintPath"M10 2 L14 12..."
-</Icon>
-
-<Image source=myTexture radius{12px} />
-```
-
-## State and binding
-
-```
-ui Counter {
-    state count = 0;
-
-    <Column spacing{16}>
-        <Text> "Count: {count}" </Text>
-
-        <Button onClick=increment>
-            "+"
-        </Button>
-    </Column>
-}
-
-fn increment() {
-    count += 1;
-}
-```
-
-## Animation
-
-```
-<Panel
-    animate{opacity: 0 -> 1, y: 12px -> 0px}
-    speed{normal}
->
-
-<Button
-    onHover{scale: 1 -> 1.1}
-    onLeave{scale: 1.1 -> 1}
->
-```
-
-Mount and change triggers:
-
-```
-animate:onMount{opacity: 0 -> 1}
-animate:onChange(count){scale: 1 -> 1.15}
-```
-
-Full details: `ui/animations.md`.
-
-## Effects (TintStyle)
-
-```
-shadow+inner{0px 2px 12px black{18%}}      // combo
-
-shadow{4px 8px 20px black{20%}}
-inner{0px 0px 10px blue-300{40%}}
-glow{blue-500{50%}}
-blur{20px}
-```
-
-Full details: `ui/styling.md`.
-
-## Tint2D (GPU immediate mode)
-
-```
-<Canvas>
-    tint2d {
-        fillRect 0 0 200 40;
-        strokePath line { width=2px }
+        Text { text::{24, bold, white} "Hello Tint" }
+        Button { click||open_menu "Open" }
     }
-</Canvas>
-```
-
-Full details: `guide/tint2d.md`.
-
-## Full example
-
-```
-ui App {
-    state count = 0;
-
-    <Column spacing{24} padding{24}>
-
-        <Text style=text{3xl, bold}>
-            "Tint UI Framework"
-        </Text>
-
-        <Button
-            onClick=increment
-            onHover{scale: 1 -> 1.1}
-            shadow{0px 4px 16px black{20%}}
-        >
-            "+"
-        </Button>
-
-        <Block if=(count > 0)>
-            <Text style=text{xl}> "Count: {count}" </Text>
-        </Block>
-
-        <Panel padding{12} radius{8px} color{gray-900{10%}}>
-            <Text> "Static card" </Text>
-        </Panel>
-
-    </Column>
-}
-
-fn increment() {
-    count += 1;
 }
 ```
 
-## Principles
+Indentation is optional. Braces define the tree and commas separate values
+inside a modifier tuple.
 
-All visual parameters go through `{}`, all logical parameters through `=`.
-`<Block>` drives logic but never renders; `<Panel>` and the rest render through
-WebGPU. The UI is fully declarative, string interpolation `{}` works inside logic,
-animation is built into the language, typing is complete, and there is zero
-HTML/CSS underneath any of it.
+## Nodes and modifiers
+
+```tn
+Card {
+    layout::{ direction::column, padding::24 }
+    paint::{
+        radius::20,
+        gradient::{ angle::135, from::#6c5ce7, to::#8b7cf0 }
+    }
+    motion::{ transition::"transform .2s ease", hover::{ scale::1.03 } }
+
+    Text { text::{18, bold, white} "Balance" }
+}
+```
+
+`layout`, `paint`, and `motion` are semantic modifier groups. The flat form is
+still parsed for compatibility, but the grouped form is canonical.
+
+Grid layouts use the `grid` modifier. A numeric column count creates equal
+tracks; a string can provide an explicit track list. `minmax(0, 1fr)` keeps a
+long editor or preview from forcing the page wider:
+
+```tn
+Workspace {
+    layout::{ grid::{ columns::"minmax(0, 1fr) minmax(0, 1fr)", gap::24 } }
+    mobile::{ grid::{ columns::"1fr" } }
+}
+```
+
+## State and events
+
+State is declared inside a UI function. Event attributes use `||` followed by a
+handler name:
+
+```tn
+ui fn Counter() {
+    state count = 0
+
+    Column {
+        Text { "Count: {count}" }
+        Button { click||increment "+" }
+    }
+}
+```
+
+Internal navigation uses the same attribute channel with `route||"/path"`.
+The DOM renderer emits a normal `<a href="...">`, so links work with browser
+history and can target paths such as `/` and `/sandbox`:
+
+```tn
+Logo { route||"/" "Tint" }
+SandboxLink { route||"/sandbox" "Open sandbox" }
+```
+
+`route||` is for application paths. External URLs should remain ordinary
+host/browser links rather than being treated as Tint routes.
+
+## Themes and imports
+
+```tn
+import "./topbar.tn";
+
+ui fn Landing() {
+    state theme = "dark"
+
+    theme::dark { Page { paint::{ background::#0a0a0a } } }
+    theme::light { Page { paint::{ background::#ffffff } } }
+}
+```
+
+Theme blocks are selected at runtime. `.tn` imports are currently expanded by
+the sandbox loader before parsing.
+
+## Conditions and responsive styles
+
+```tn
+Caption {
+    if{viewport_width >= 640}
+    mobile::{ paint::{ color::#9a9a9a } }
+    "Visible on wide screens"
+}
+```
+
+The supported responsive names are `mobile`, `tablet`, `laptop`, and `desktop`.

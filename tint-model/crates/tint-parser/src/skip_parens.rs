@@ -1,7 +1,6 @@
-
-use tint_lexer::TokenKind;
 use crate::error::PResult;
 use crate::Parser;
+use tint_lexer::TokenKind;
 
 impl Parser {
     /// Skips a function declaration during the symbol-collection pass.
@@ -32,8 +31,8 @@ impl Parser {
 
     pub(crate) fn skip_attributes(&mut self) -> PResult<()> {
         self.stream.expect(TokenKind::LBracket)?; // '['
-        self.stream.expect(TokenKind::At)?;       // '@'
-        self.stream.expect(TokenKind::LParen)?;   // '('
+        self.stream.expect(TokenKind::At)?; // '@'
+        self.stream.expect(TokenKind::LParen)?; // '('
 
         loop {
             self.stream.expect(TokenKind::Ident)?;
@@ -42,7 +41,7 @@ impl Parser {
             }
         }
 
-        self.stream.expect(TokenKind::RParen)?;   // ')'
+        self.stream.expect(TokenKind::RParen)?; // ')'
         self.stream.expect(TokenKind::RBracket)?; // ']'
         Ok(())
     }
@@ -98,8 +97,7 @@ impl Parser {
     pub(crate) fn skip_expr(&mut self) -> PResult<()> {
         loop {
             match self.stream.peek_kind() {
-                TokenKind::Semicolon |
-                TokenKind::RBrace => {
+                TokenKind::Semicolon | TokenKind::RBrace => {
                     return Ok(());
                 }
 

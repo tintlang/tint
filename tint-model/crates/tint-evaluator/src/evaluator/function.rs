@@ -1,9 +1,9 @@
-use crate::{value::Value, EvalHost};
 use crate::eval_block::eval_block_flow;
 use crate::eval_expr::eval_expr;
-use tint_ast::{Block, Expr, FnDecl, FnBody, Span};
 use crate::eval_host::Flow;
 use crate::eval_pattern::bind_pattern;
+use crate::{value::Value, EvalHost};
+use tint_ast::{Block, Expr, FnBody, FnDecl, Span};
 
 #[derive(Clone)]
 pub enum FnBodyKind {
@@ -11,12 +11,7 @@ pub enum FnBodyKind {
     Expr(Expr),
 }
 
-pub fn eval_user_fn<H: EvalHost>(
-    host: &mut H,
-    f: &FnDecl,
-    args: &[Value],
-    _span: Span,
-) -> Value {
+pub fn eval_user_fn<H: EvalHost>(host: &mut H, f: &FnDecl, args: &[Value], _span: Span) -> Value {
     // Function calls execute in a fresh scope.
     host.push_scope();
 
@@ -24,9 +19,7 @@ pub fn eval_user_fn<H: EvalHost>(
         bind_pattern(host, &param.pattern, arg);
     }
     let result = match &f.body {
-        FnBody::Expr(expr) => {
-            Value::from(eval_expr(host, expr))
-        }
+        FnBody::Expr(expr) => Value::from(eval_expr(host, expr)),
 
         FnBody::Block(block) => {
             match eval_block_flow(host, block) {

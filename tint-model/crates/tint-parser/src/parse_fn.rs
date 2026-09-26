@@ -1,16 +1,13 @@
-
-use crate::{Parser};
 use crate::error::*;
+use crate::Parser;
 use tint_ast::*;
 use tint_lexer::TokenKind;
 
 impl Parser {
-
     // fn name(params...) -> Type { block }
     // async fn name(params...) { ... }
     // fn name(params...) = expr
     pub(crate) fn parse_fn_decl(&mut self) -> PResult<FnDecl> {
-
         // async
         let async_span = if self.stream.consume_if(TokenKind::Async) {
             Some(self.stream.last_span())
@@ -99,14 +96,17 @@ impl Parser {
     // fn f(x: i32) {}
     // fn f(x {10}) {}
     fn parse_fn_params(&mut self) -> PResult<Vec<Param>> {
-    self.stream.expect(TokenKind::LParen)?;
+        self.stream.expect(TokenKind::LParen)?;
 
         if self.stream.consume_if(TokenKind::RParen) {
             return Ok(vec![]);
         }
 
         #[derive(PartialEq)]
-        enum Style { Tint, Typed }
+        enum Style {
+            Tint,
+            Typed,
+        }
         let mut style: Option<Style> = None;
 
         let mut params = Vec::new();
@@ -141,7 +141,6 @@ impl Parser {
                     default = Some(DefaultValue::Single(expr));
                 }
             }
-
             // 3) Tint-style default: pattern {expr}
             else if self.stream.consume_if(TokenKind::LBrace) {
                 match style {
@@ -170,7 +169,11 @@ impl Parser {
             }
 
             // push parameter
-            params.push(Param { pattern: pat, ty, default });
+            params.push(Param {
+                pattern: pat,
+                ty,
+                default,
+            });
 
             // , or end
             if !self.stream.consume_if(TokenKind::Comma) {

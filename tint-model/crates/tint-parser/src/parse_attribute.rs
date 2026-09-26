@@ -1,4 +1,4 @@
-use crate::{Parser, error::*};
+use crate::{error::*, Parser};
 use tint_ast::attr::{Attribute, AttributeList};
 use tint_lexer::TokenKind;
 
@@ -12,8 +12,8 @@ impl Parser {
 
     pub(crate) fn parse_attributes(&mut self) -> PResult<AttributeList> {
         self.stream.expect(TokenKind::LBracket)?; // '['
-        self.stream.expect(TokenKind::At)?;       // '@'
-        self.stream.expect(TokenKind::LParen)?;   // '('
+        self.stream.expect(TokenKind::At)?; // '@'
+        self.stream.expect(TokenKind::LParen)?; // '('
 
         let mut list = AttributeList::empty();
 
@@ -36,10 +36,9 @@ impl Parser {
             }
         }
 
-        self.stream.expect(TokenKind::RParen)?;  // ')'
+        self.stream.expect(TokenKind::RParen)?; // ')'
         self.stream.expect(TokenKind::RBracket)?; // ']'
 
         Ok(list)
     }
 }
-

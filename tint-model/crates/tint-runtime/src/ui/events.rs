@@ -1,8 +1,8 @@
 // ui/events.rs
 
-use std::collections::HashMap;
-use crate::vm::TintVM;
 use super::tree::UiTree;
+use crate::vm::TintVM;
+use std::collections::HashMap;
 
 pub type EventCallback = String; // name of Tint function
 
@@ -12,7 +12,9 @@ pub struct UiEventSystem {
 
 impl UiEventSystem {
     pub fn new() -> Self {
-        Self { handlers: HashMap::new() }
+        Self {
+            handlers: HashMap::new(),
+        }
     }
 
     pub fn register(&mut self, node_id: usize, fn_name: &str) {

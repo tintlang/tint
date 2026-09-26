@@ -35,7 +35,9 @@ pub struct ScopeStack {
 
 impl ScopeStack {
     pub fn new() -> Self {
-        Self { stack: vec![Scope::new()] }
+        Self {
+            stack: vec![Scope::new()],
+        }
     }
 
     pub fn push(&mut self) {

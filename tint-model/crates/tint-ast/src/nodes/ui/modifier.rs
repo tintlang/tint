@@ -1,5 +1,5 @@
-use crate::Span;
 use crate::logic::expr::Expr;
+use crate::Span;
 
 #[derive(Debug, Clone)]
 pub struct UiModifier {
@@ -14,7 +14,7 @@ pub enum UiModifierValue {
     String(String),
     Expr(Expr),
     Range(f64, f64),
-    Block(Vec<UiModifier>), // padding::{ left::..., right::... }
+    Block(Vec<UiModifier>),      // padding::{ left::..., right::... }
     Tuple(Vec<UiModifierValue>), // text::{24, bold}
     Ident(String),
     MiniMod {

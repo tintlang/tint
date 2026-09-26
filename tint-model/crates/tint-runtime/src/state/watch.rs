@@ -1,5 +1,5 @@
-use std::fmt;
 use super::store::StateId;
+use std::fmt;
 
 pub type WatchCallback = Box<dyn Fn()>;
 

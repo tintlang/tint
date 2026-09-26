@@ -19,7 +19,7 @@ pub enum Value {
     StructInstance {
         name: String,
         fields: Vec<(String, Value)>,
-    },  
+    },
 
     EnumInstance {
         enum_name: String,
@@ -27,7 +27,7 @@ pub enum Value {
         args: Vec<Value>,
     },
 
-     Map(std::collections::HashMap<String, Value>), 
+    Map(std::collections::HashMap<String, Value>),
 }
 
 #[derive(Debug, Clone)]
@@ -38,25 +38,59 @@ pub struct Block {
 
 #[derive(Debug, Clone)]
 pub enum Instr {
-    Const { dst: ValueId, value: Value },
+    Const {
+        dst: ValueId,
+        value: Value,
+    },
 
-    LoadLocal { dst: ValueId, name: String },
-    StoreLocal { name: String, src: ValueId },
+    LoadLocal {
+        dst: ValueId,
+        name: String,
+    },
+    StoreLocal {
+        name: String,
+        src: ValueId,
+    },
 
-    Unary { dst: ValueId, op: String, src: ValueId },
-    Binary { dst: ValueId, op: String, lhs: ValueId, rhs: ValueId },
+    Unary {
+        dst: ValueId,
+        op: String,
+        src: ValueId,
+    },
+    Binary {
+        dst: ValueId,
+        op: String,
+        lhs: ValueId,
+        rhs: ValueId,
+    },
 
-    Call { dst: ValueId, func: ValueId, args: Vec<ValueId> },
+    Call {
+        dst: ValueId,
+        func: ValueId,
+        args: Vec<ValueId>,
+    },
 
-    FieldAccess { dst: ValueId, base: ValueId, field: String },
-    NamespaceAccess { dst: ValueId, base: ValueId, item: String },
+    FieldAccess {
+        dst: ValueId,
+        base: ValueId,
+        field: String,
+    },
+    NamespaceAccess {
+        dst: ValueId,
+        base: ValueId,
+        item: String,
+    },
 
-    Index { dst: ValueId, arr: ValueId, index: ValueId },
+    Index {
+        dst: ValueId,
+        arr: ValueId,
+        index: ValueId,
+    },
 
     StructInit {
         dst: ValueId,
         name: String,
-        fields: Vec<(String, ValueId)>
+        fields: Vec<(String, ValueId)>,
     },
 
     StructUpdate {
@@ -85,14 +119,13 @@ pub enum Instr {
 
     Tuple {
         dst: ValueId,
-        items: Vec<ValueId>
+        items: Vec<ValueId>,
     },
-
 
     TupleExtract {
         dst: ValueId,
         tuple: ValueId,
-        index: usize
+        index: usize,
     },
 
     MapInit {
@@ -103,10 +136,10 @@ pub enum Instr {
     MapAccess {
         dst: ValueId,
         map: ValueId,
-        key: String
+        key: String,
     },
 
-  FieldStore {
+    FieldStore {
         base: ValueId,
         field: String,
         src: ValueId,
@@ -117,7 +150,7 @@ pub enum Instr {
         index: ValueId,
         src: ValueId,
     },
-    
+
     Return(ValueId),
 }
 

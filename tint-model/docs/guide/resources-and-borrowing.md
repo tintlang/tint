@@ -70,8 +70,8 @@ component built to accept it:
 ```
 return frame                          // error: can't leave the UI boundary
 state img = frame                     // error
-<Panel padding{frame}>                // error: resource as a UI parameter
-<ImageView source=frame />            // fine — a real image-consuming component
+Panel { padding::frame }              // error: resource as a UI parameter
+ImageView { source||frame }            // component-specific value, if supported
 ```
 
 Assigning a resource to another name creates an alias, not a copy — both names
@@ -101,11 +101,10 @@ Rules:
 - one resource per block — `borrow a, b { ... }` is an error
 - borrows can't nest — `borrow a { borrow b { ... } }` is an error
 - while borrowed, the resource can't be read as a value: `borrow tex { let x = tex }` is an error
-- `borrow` is Logic Mode only — never inside a UI attribute, `animate{}`, or `color{}`
+- `borrow` is Logic Mode only — never inside a UI attribute or visual modifier.
 
 ```
-<Button onClick=borrow{tex{...}}>   // error
-animate{borrow{...}}                 // error
+Button { click||borrow }             // error: handlers are named functions
 ```
 
 The correct pattern is: a plain function does the borrowing, and the UI calls that
@@ -194,19 +193,10 @@ async fn wrong() {
 }
 ```
 
-## Slots
+## UI boundary
 
-A `borrow` can't appear directly inside slot content; put it in a function and call
-that from a slot handler instead:
-
-```
-<Children>
-    borrow img { ... }     // error
-</Children>
-
-fn update() { borrow img { ... } }
-<Slot onMount=update />
-```
+Resource borrowing stays in Logic Mode. UI nodes may call a named handler, but
+they do not contain borrow blocks or resource expressions.
 
 ## Matrix / shader interop
 
@@ -276,7 +266,7 @@ fn optimize() { borrow b { triangulate(b) } }
 ## Common errors, at a glance
 
 ```
-<Panel padding{frame}>          // resource used as a UI value
+Panel { padding::frame }        // resource used as a UI value
 borrow a, b { ... }              // more than one resource in a block
 buffer a; b = move a; use(a)     // use after move
 enum A { x(image) }              // resource embedded in a value type

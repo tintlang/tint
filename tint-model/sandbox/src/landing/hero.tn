@@ -1,0 +1,60 @@
+theme::dark {
+    Hero {
+        layout::{ direction::column, align::center, gap::22, padding.x::40, padding.y::100 }
+        mobile::{ padding.y::40, gap::18 }
+
+        Headline { text::{54, bold, white} "This page is written in Tint" }
+        Sub { text::{18, #9a9a9a} "No React. No Svelte. No HTML. Open source, compiled to WebAssembly, rendered straight to the DOM." }
+
+        CtaRow {
+            layout::{ direction::row, gap::12 }
+            mobile::{ direction::column }
+
+        SandboxBtn {
+            click||open_sandbox
+            route||"/sandbox"
+                layout::{ padding.x::18, padding.y::10 }
+                paint::{ radius::full, background::#ffffff, color::#0a0a0a }
+                motion::{ transition::"transform .2s ease", hover::{ scale::1.06 } }
+                "Sandbox"
+            }
+            GithubBtn {
+                click||open_github
+                layout::{ padding.x::18, padding.y::10 }
+                paint::{ radius::full, background::transparent, color::#ffffff, border::{1, #ffffff} }
+                motion::{ transition::"transform .2s ease", hover::{ scale::1.06 } }
+                "GitHub"
+            }
+        }
+    }
+}
+theme::light {
+    Hero {
+        layout::{ direction::column, align::center, gap::22, padding.x::40, padding.y::100 }
+        mobile::{ padding.y::40, gap::18 }
+
+        Headline { text::{54, bold, #0a0a0a} "This page is written in Tint." }
+        Sub { text::{18, #6a6a6a} "No React. No Svelte. No HTML. Open source, compiled to WebAssembly, rendered straight to the DOM." }
+
+        CtaRow {
+            layout::{ direction::row, gap::12 }
+            mobile::{ direction::column }
+
+        SandboxBtn {
+            click||open_sandbox
+            route||"/sandbox"
+                layout::{ padding.x::16, padding.y::10 }
+                paint::{ radius::full, background::#0a0a0a, color::#ffffff }
+                motion::{ transition::"transform .2s ease", hover::{ scale::1.06 } }
+                "Sandbox"
+            }
+            GithubBtn {
+                click||open_github
+                layout::{ padding.x::16, padding.y::10 }
+                paint::{ radius::full, background::transparent, color::#0a0a0a, border::{1, #0a0a0a} }
+                motion::{ transition::"transform .2s ease", hover::{ scale::1.06 } }
+                "GitHub"
+            }
+        }
+    }
+}

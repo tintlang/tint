@@ -60,8 +60,7 @@ impl Parser {
             _ => Err(ParserError::Message {
                 msg: "Unexpected token in pattern".into(),
                 span: tok.span,
-            })
+            }),
         }
     }
-
 }

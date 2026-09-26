@@ -1,7 +1,7 @@
-pub mod span;
-pub mod position;
 pub mod nodes;
+pub mod position;
+pub mod span;
 
-pub use span::Span;
-pub use position::Position;
 pub use nodes::*;
+pub use position::Position;
+pub use span::Span;

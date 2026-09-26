@@ -2,7 +2,7 @@
 pub enum Type {
     Simple(String),
     Generic(String, Vec<Type>),
-    Unit, 
+    Unit,
     Union(Vec<Type>),
 }
 

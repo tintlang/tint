@@ -18,7 +18,11 @@ impl Parser {
             if self.stream.consume_if(TokenKind::Dot) {
                 let field = self.parse_ident()?;
                 let span = Span::merge(start, self.stream.last_span());
-                expr = Expr::Field { target: Box::new(expr), field, span };
+                expr = Expr::Field {
+                    target: Box::new(expr),
+                    field,
+                    span,
+                };
                 continue;
             }
 
@@ -26,7 +30,11 @@ impl Parser {
                 let idx = self.parse_expr()?;
                 self.stream.expect(TokenKind::RBracket)?;
                 let span = Span::merge(start, idx.span());
-                expr = Expr::Index { target: Box::new(expr), index: Box::new(idx), span };
+                expr = Expr::Index {
+                    target: Box::new(expr),
+                    index: Box::new(idx),
+                    span,
+                };
                 continue;
             }
 
@@ -35,5 +43,4 @@ impl Parser {
 
         Ok(expr)
     }
-
-    }
+}

@@ -1,5 +1,5 @@
-use crate::Span;
 use crate::logic::expr::Expr;
+use crate::Span;
 
 #[derive(Debug, Clone)]
 pub enum UiTextPart {

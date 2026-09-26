@@ -105,14 +105,24 @@ impl SemanticChecker {
 
     fn visit_stmt(&mut self, stmt: &Stmt) {
         match stmt {
-            Stmt::Let { pattern, ty: _, init: _, span } => {
+            Stmt::Let {
+                pattern,
+                ty: _,
+                init: _,
+                span,
+            } => {
                 self.visit_let_pattern(pattern, *span);
             }
             Stmt::Assign { lhs, rhs, span: _ } => {
                 self.visit_expr(lhs);
                 self.visit_expr(rhs);
             }
-            Stmt::CompoundAssign { name, op: _, expr, span } => {
+            Stmt::CompoundAssign {
+                name,
+                op: _,
+                expr,
+                span,
+            } => {
                 if self.scopes.lookup(name).is_none() {
                     self.error(*span, SemanticErrorKind::UnknownIdent(name.clone()));
                 }
@@ -121,17 +131,32 @@ impl SemanticChecker {
             Stmt::Expr(e) => {
                 self.visit_expr(e);
             }
-            Stmt::If { cond, then: _, else_: _, span: _ } => {
+            Stmt::If {
+                cond,
+                then: _,
+                else_: _,
+                span: _,
+            } => {
                 self.visit_expr(cond);
             }
-            Stmt::For { var, start, end, body: _, span } => {
+            Stmt::For {
+                var,
+                start,
+                end,
+                body: _,
+                span,
+            } => {
                 if !self.scopes.define(var, Type::Simple("i32".to_string())) {
                     self.error(*span, SemanticErrorKind::DuplicateIdent(var.clone()));
                 }
                 self.visit_expr(start);
                 self.visit_expr(end);
             }
-            Stmt::Match { expr, arms: _, span: _ } => {
+            Stmt::Match {
+                expr,
+                arms: _,
+                span: _,
+            } => {
                 self.visit_expr(expr);
             }
             _ => {}
@@ -161,7 +186,11 @@ impl SemanticChecker {
 
             Expr::Number(_, _) | Expr::String(_, _) | Expr::Bool(_, _) | Expr::Unit(_) => {}
 
-            Expr::Call { target, args, span: _ } => {
+            Expr::Call {
+                target,
+                args,
+                span: _,
+            } => {
                 self.visit_expr(target);
                 for arg in args {
                     self.visit_expr(arg);
@@ -174,20 +203,37 @@ impl SemanticChecker {
                 }
             }
 
-            Expr::Unary { op: _, expr, span: _ } => {
+            Expr::Unary {
+                op: _,
+                expr,
+                span: _,
+            } => {
                 self.visit_expr(expr);
             }
 
-            Expr::Binary { left, right, op: _, span: _ } => {
+            Expr::Binary {
+                left,
+                right,
+                op: _,
+                span: _,
+            } => {
                 self.visit_expr(left);
                 self.visit_expr(right);
             }
 
-            Expr::Field { target, field: _, span: _ } => {
+            Expr::Field {
+                target,
+                field: _,
+                span: _,
+            } => {
                 self.visit_expr(target);
             }
 
-            Expr::Index { target, index, span: _ } => {
+            Expr::Index {
+                target,
+                index,
+                span: _,
+            } => {
                 self.visit_expr(target);
                 self.visit_expr(index);
             }
@@ -196,7 +242,11 @@ impl SemanticChecker {
                 // TODO: check interpolated parts
             }
 
-            Expr::Namespace { base: _, item: _, span: _ } => {
+            Expr::Namespace {
+                base: _,
+                item: _,
+                span: _,
+            } => {
                 // TODO: check namespace resolution
             }
 

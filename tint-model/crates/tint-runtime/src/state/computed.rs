@@ -1,7 +1,7 @@
-use std::rc::Rc;
+use crate::state::StateStore;
 use std::cell::RefCell;
 use std::fmt;
-use crate::state::StateStore;
+use std::rc::Rc;
 
 use super::store::StateId;
 pub struct ComputedCell<T: Clone> {
@@ -11,9 +11,9 @@ pub struct ComputedCell<T: Clone> {
 }
 
 impl<T: Clone> ComputedCell<T> {
-    pub fn new<F>(compute: F, deps: Vec<StateId>) -> Self 
+    pub fn new<F>(compute: F, deps: Vec<StateId>) -> Self
     where
-        F: 'static + Fn(&StateStore) -> T
+        F: 'static + Fn(&StateStore) -> T,
     {
         Self {
             compute: Rc::new(compute),

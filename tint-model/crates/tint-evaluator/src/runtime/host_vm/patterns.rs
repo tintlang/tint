@@ -128,7 +128,9 @@ pub(super) fn match_pattern(host: &mut HostVM, value: &Value, pattern: &Pattern)
                 return false;
             };
             value_name == name
-                && fields.iter().all(|field| match_struct_field(host, value_fields, field))
+                && fields
+                    .iter()
+                    .all(|field| match_struct_field(host, value_fields, field))
         }
         Pattern::Map { fields, .. } => {
             let Value::Map(map) = value else {
@@ -152,9 +154,7 @@ pub(super) fn match_pattern(host: &mut HostVM, value: &Value, pattern: &Pattern)
                     .zip(values)
                     .all(|(pattern, value)| match_pattern(host, value, pattern))
         }
-        Pattern::Typed { pat, ty, .. } => {
-            value.matches_type(ty) && match_pattern(host, value, pat)
-        }
+        Pattern::Typed { pat, ty, .. } => value.matches_type(ty) && match_pattern(host, value, pat),
     }
 }
 
@@ -192,8 +192,9 @@ fn match_struct_field(
 ) -> bool {
     match pattern {
         PatternField::Shorthand { field, .. } => find_struct_field(fields, field).is_some(),
-        PatternField::Assign { field, pat, .. } => find_struct_field(fields, field)
-            .is_some_and(|value| match_pattern(host, value, pat)),
+        PatternField::Assign { field, pat, .. } => {
+            find_struct_field(fields, field).is_some_and(|value| match_pattern(host, value, pat))
+        }
         PatternField::Rest(_) => true,
     }
 }

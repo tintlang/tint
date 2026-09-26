@@ -8,6 +8,7 @@ pub type UiNodeId = usize;
 pub struct UiElement {
     pub id: UiNodeId,
     pub tag: String,
+    pub tint_source: String,
     pub children: Vec<UiNodeId>,
     /// Resolved from this node's `key::value` modifiers (background,
     /// padding, radius, ...) -- see ui/style.rs.
@@ -44,6 +45,10 @@ pub struct UiElement {
     /// the markup comes straight from the .tint source, nothing invented
     /// on the sandbox side.
     pub svg: Option<String>,
+
+    /// Internal route target from `route||"/path"`. Renderers expose this
+    /// as a normal browser link instead of inventing navigation in the host.
+    pub route: Option<String>,
 }
 
 impl UiElement {
@@ -51,6 +56,7 @@ impl UiElement {
         Self {
             id,
             tag,
+            tint_source: String::new(),
             children: Vec::new(),
             style: Vec::new(),
             hover_style: Vec::new(),
@@ -60,6 +66,7 @@ impl UiElement {
             on_hover_enter: None,
             on_hover_leave: None,
             svg: None,
+            route: None,
         }
     }
 }
@@ -82,10 +89,19 @@ impl UiTree {
 
     /// Same as `create_node`, but also resolves `modifiers` (via
     /// ui/style.rs) into the new node's `style`/`hover_style`.
-    pub fn create_styled_node(&mut self, tag: String, modifiers: &[tint_ast::UiModifier]) -> UiNodeId {
+    pub fn create_styled_node(
+        &mut self,
+        tag: String,
+        modifiers: &[tint_ast::UiModifier],
+    ) -> UiNodeId {
         let id = self.create_node(tag);
         let (style, hover_style, breakpoints) = super::style::resolve_style(modifiers);
         let node = &mut self.nodes[id];
+        node.tint_source = format!(
+            "{} {{ {} }}",
+            node.tag,
+            super::style::format_modifier_source(modifiers)
+        );
         node.style = style;
         node.hover_style = hover_style;
         node.breakpoints = breakpoints;
@@ -116,6 +132,12 @@ impl UiTree {
     pub fn set_svg(&mut self, id: UiNodeId, svg: Option<String>) {
         if let Some(node) = self.nodes.get_mut(id) {
             node.svg = svg;
+        }
+    }
+
+    pub fn set_route(&mut self, id: UiNodeId, route: Option<String>) {
+        if let Some(node) = self.nodes.get_mut(id) {
+            node.route = route;
         }
     }
 

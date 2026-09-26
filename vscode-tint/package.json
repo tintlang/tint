@@ -7,7 +7,7 @@
   "icon": "icon.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/marekbender/tintlang"
+    "url": "https://github.com/tintlang/tint"
   },
   "engines": {
     "vscode": "^1.80.0"
@@ -39,6 +39,13 @@
         "language": "tint",
         "scopeName": "source.tint",
         "path": "./syntaxes/tint.tmLanguage.json"
+      }
+    ],
+    "iconThemes": [
+      {
+        "id": "tint-icons",
+        "label": "Tint Icons (Seti + Tint)",
+        "path": "./icons/tint-icon-theme.json"
       }
     ],
     "commands": [

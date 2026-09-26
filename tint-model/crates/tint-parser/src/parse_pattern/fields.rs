@@ -1,7 +1,11 @@
 use super::*;
 
 impl Parser {
-    pub(crate) fn parse_struct_field_pattern(&mut self, field: String, start: Span) -> PResult<PatternField> {
+    pub(crate) fn parse_struct_field_pattern(
+        &mut self,
+        field: String,
+        start: Span,
+    ) -> PResult<PatternField> {
         self.stream.expect(TokenKind::LBrace)?;
 
         let mut fields = Vec::new();
@@ -10,7 +14,10 @@ impl Parser {
         if self.stream.consume_if(TokenKind::RBrace) {
             return Ok(PatternField::Assign {
                 field,
-                pat: Pattern::Group { fields, span: start },
+                pat: Pattern::Group {
+                    fields,
+                    span: start,
+                },
                 span: start,
             });
         }
@@ -69,10 +76,7 @@ impl Parser {
                 })
             }
 
-            _ => Ok(PatternField::Shorthand {
-                field,
-                span: start,
-            }),
+            _ => Ok(PatternField::Shorthand { field, span: start }),
         }
-}
+    }
 }

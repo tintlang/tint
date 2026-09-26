@@ -1,62 +1,41 @@
-# `<Block>` — the Logic Layer
+# UI control flow
 
-`<Block>` is a logic container: it never renders anything, it just controls
-structure inside the UI tree.
+Tint UI control flow is written directly inside named nodes. There is no separate
+wrapper element for control flow.
 
-## If
+## Conditions
 
-```
-<Block if=isVisible>
-    <Text> "Visible" </Text>
-</Block>
-```
-
-## Else
-
-```
-<Block if=ready>
-    <Text>"OK"</Text>
-</Block>
-<Block else>
-    <Text>"Loading..."</Text>
-</Block>
+```tn
+Panel {
+    if{is_visible}
+    Text { "Visible" }
+}
 ```
 
-Only one `<Else>` is allowed, and only right after a `<Block if>`.
+## Loops
 
-## For
-
-```
-<Block for{item in items}>
-    <Panel> "{item.name}" </Panel>
-</Block>
-```
-
-## Match
-
-```
-<Block match=status>
-    <case ready> <Text>"Ready"</Text> </case>
-    <case error> <Text>"Error"</Text> </case>
-</Block>
+```tn
+Column {
+    for{item in items}
+    Text { "{item.name}" }
+}
 ```
 
-Conditions can be arbitrary logic expressions:
+The iterable is evaluated by the UI runtime and the child tree is built once
+per item.
 
-```
-<Block if{x + y > deep_mix(a, logic.sum())}>
-```
+## Responsive branches
 
-## Notes
+For layout changes based on viewport width, use the host-provided
+`viewport_width` value:
 
-`<Block>` creates no visual elements, may contain nested `<Panel>` and other UI
-nodes, can nest inside itself, and is the natural tool for dynamic UI:
-
-```
-<Block if=user != null>
-    <Panel> "{user.name}" </Panel>
-</Block>
+```tn
+Nav {
+    if{viewport_width >= 768}
+    Text { "Wide navigation" }
+}
 ```
 
-`<Block>` is control flow for the UI tree — see `03-language-reference.md` §4 for
-the Logic-Mode equivalents (`if`, `for`, `match`) it mirrors.
+Style-only responsive changes use `mobile::{...}`, `tablet::{...}`,
+`laptop::{...}`, and `desktop::{...}`. `match{...}` is parsed but is not yet
+evaluated in the UI tree.

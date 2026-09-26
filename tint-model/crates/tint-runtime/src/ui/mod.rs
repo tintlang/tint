@@ -1,18 +1,18 @@
 // ui/runtime.rs
 
-pub mod tree;
 pub mod builder;
-pub mod reconciler;
 pub mod events;
 pub mod layout;
+pub mod reconciler;
 pub mod render;
 pub mod style;
+pub mod tree;
 
-use crate::vm::TintVM;
-use tint_ast::*;
-use crate::ui::tree::{UiNodeId, UiTree};
 use crate::ui::builder::UiBuilder;
 use crate::ui::events::UiEventSystem;
+use crate::ui::tree::{UiNodeId, UiTree};
+use crate::vm::TintVM;
+use tint_ast::*;
 use tint_evaluator::EvalHost;
 
 /// Runtime for the new Tint UI system (multi-root, XML or BLOCK mode)

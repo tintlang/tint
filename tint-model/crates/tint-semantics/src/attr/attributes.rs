@@ -1,12 +1,6 @@
-use tint_ast::{FnDecl, AttributeList};
+use tint_ast::{AttributeList, FnDecl};
 
-static KNOWN_ATTRIBUTES: &[&str] = &[
-    "strict",
-    "speed",
-    "core",
-    "inline",
-    "noinline",
-];
+static KNOWN_ATTRIBUTES: &[&str] = &["strict", "speed", "core", "inline", "noinline"];
 
 pub fn validate_attributes(attrs: &AttributeList) -> Result<(), String> {
     for a in &attrs.items {

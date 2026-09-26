@@ -1,8 +1,8 @@
-use crate::Parser;
 use crate::error::PResult;
+use crate::Parser;
 use tint_ast::Item;
-use tint_lexer::TokenKind;
 use tint_ast::Span;
+use tint_lexer::TokenKind;
 
 impl Parser {
     pub(crate) fn parse_export_item(&mut self) -> PResult<Item> {
@@ -22,7 +22,9 @@ impl Parser {
                 let e = self.parse_enum()?;
                 Ok(Item::ExportEnum(e))
             }
-            _ => self.stream.error_here("Expected fn/struct/enum after `export`"),
+            _ => self
+                .stream
+                .error_here("Expected fn/struct/enum after `export`"),
         }
     }
 }

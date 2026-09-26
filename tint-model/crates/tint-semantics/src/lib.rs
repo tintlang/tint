@@ -1,9 +1,9 @@
+pub mod attr;
 pub mod checker;
-pub mod scope;
-pub mod type_table;
 pub mod errors;
 pub mod prelude;
-pub mod attr;
+pub mod scope;
+pub mod type_table;
 
 // convenient export
 pub use checker::SemanticChecker;

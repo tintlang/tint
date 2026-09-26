@@ -1,5 +1,5 @@
-use crate::{Parser, error::*};
-use tint_ast::{File, Span, attr::AttributeList};
+use crate::{error::*, Parser};
+use tint_ast::{attr::AttributeList, File, Span};
 use tint_lexer::TokenKind;
 
 impl Parser {
@@ -25,6 +25,10 @@ impl Parser {
         let end_span = self.stream.last_span();
         let span = Span::merge(start_span, end_span);
 
-        Ok(File { globals, items, span })
+        Ok(File {
+            globals,
+            items,
+            span,
+        })
     }
 }

@@ -61,7 +61,9 @@ impl Env {
     }
 
     pub fn define(&mut self, name: &str, val: Value) {
-        self.frames.last_mut().unwrap()
+        self.frames
+            .last_mut()
+            .unwrap()
             .insert(name.to_string(), val);
     }
 
@@ -112,7 +114,13 @@ impl Env {
     }
 
     pub fn define_struct(&mut self, name: &str, fields: Vec<String>) {
-        self.structs.insert(name.to_string(), StructInfo { name: name.into(), fields });
+        self.structs.insert(
+            name.to_string(),
+            StructInfo {
+                name: name.into(),
+                fields,
+            },
+        );
     }
 
     pub fn get_struct(&self, name: &str) -> Option<StructInfo> {
@@ -120,11 +128,20 @@ impl Env {
     }
 
     pub fn define_enum(&mut self, name: &str, variants: Vec<String>) {
-        self.enums.insert(name.to_string(), EnumInfo { name: name.into(), variants });
+        self.enums.insert(
+            name.to_string(),
+            EnumInfo {
+                name: name.into(),
+                variants,
+            },
+        );
     }
 
     pub fn define_alias(&mut self, alias: &str, value: Value) {
-        self.frames.last_mut().unwrap().insert(alias.to_string(), value);
+        self.frames
+            .last_mut()
+            .unwrap()
+            .insert(alias.to_string(), value);
     }
 
     pub fn get_enum(&self, name: &str) -> Option<EnumInfo> {

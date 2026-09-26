@@ -19,11 +19,7 @@ impl Lexer<'_> {
             }
         }
 
-        Token::new(
-            TokenKind::String,
-            Span::new(start, self.position()),
-            value,
-        )
+        Token::new(TokenKind::String, Span::new(start, self.position()), value)
     }
 
     pub(super) fn lex_number(&mut self, start: Position) -> Token {
@@ -41,11 +37,7 @@ impl Lexer<'_> {
             }
         }
 
-        Token::new(
-            TokenKind::Number,
-            Span::new(start, self.position()),
-            value,
-        )
+        Token::new(TokenKind::Number, Span::new(start, self.position()), value)
     }
 
     // `#RGB` / `#RRGGBB` / `#RRGGBBAA` hex colors (e.g. `background::#6c5ce7`).
@@ -127,6 +119,7 @@ fn keyword_kind(value: &str) -> Option<TokenKind> {
         "module" | "mod" => TokenKind::Module,
         "export" => TokenKind::Export,
         "use" => TokenKind::Use,
+        "import" => TokenKind::Import,
         _ => return None,
     })
 }

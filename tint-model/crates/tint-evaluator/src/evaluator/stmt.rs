@@ -1,15 +1,16 @@
-use crate::{value::Value, EvalHost};
 use crate::eval_host::Flow;
+use crate::{value::Value, EvalHost};
 use tint_ast::*;
 
 /// Evaluate a single statement
 pub fn eval_stmt<H: EvalHost>(host: &mut H, stmt: &Stmt) -> Flow {
     match stmt {
-
-       Stmt::Let { pattern, ty, init, .. } => {
+        Stmt::Let {
+            pattern, ty, init, ..
+        } => {
             let value = match init {
                 LetInit::Assign(expr) => host.eval_expr(expr),
-                LetInit::Tint(expr)   => host.eval_expr(expr),
+                LetInit::Tint(expr) => host.eval_expr(expr),
             };
             // Type validation is reserved for the typed evaluator pass.
             if let Some(_expected_ty) = ty {
@@ -32,7 +33,7 @@ pub fn eval_stmt<H: EvalHost>(host: &mut H, stmt: &Stmt) -> Flow {
         }
 
         Stmt::CompoundAssign { name, op, expr, .. } => {
-            let left  = host.load_var(name, expr.span());
+            let left = host.load_var(name, expr.span());
             let right = host.eval_expr(expr);
 
             let new = host.apply_compound(&left, op.as_str(), &right);
@@ -49,7 +50,9 @@ pub fn eval_stmt<H: EvalHost>(host: &mut H, stmt: &Stmt) -> Flow {
         Stmt::Break(_) => Flow::Break,
         Stmt::Continue(_) => Flow::Continue,
 
-        Stmt::If { cond, then, else_, .. } => {
+        Stmt::If {
+            cond, then, else_, ..
+        } => {
             let c = host.eval_expr(cond).force_bool();
 
             if c {
@@ -73,8 +76,8 @@ pub fn eval_stmt<H: EvalHost>(host: &mut H, stmt: &Stmt) -> Flow {
 
                 match flow {
                     Flow::Continue => continue,
-                    Flow::Break    => break,
-                    Flow::Return(v)=> return Flow::Return(v),
+                    Flow::Break => break,
+                    Flow::Return(v) => return Flow::Return(v),
                     Flow::Value(_) => {}
                 }
             }
@@ -90,8 +93,8 @@ pub fn eval_stmt<H: EvalHost>(host: &mut H, stmt: &Stmt) -> Flow {
 
                 match flow {
                     Flow::Continue => continue,
-                    Flow::Break    => break,
-                    Flow::Return(v)=> return Flow::Return(v),
+                    Flow::Break => break,
+                    Flow::Return(v) => return Flow::Return(v),
                     Flow::Value(_) => {}
                 }
             }
@@ -99,7 +102,13 @@ pub fn eval_stmt<H: EvalHost>(host: &mut H, stmt: &Stmt) -> Flow {
             Flow::Value(Value::Unit)
         }
 
-        Stmt::For { var, start, end, body, .. } => {
+        Stmt::For {
+            var,
+            start,
+            end,
+            body,
+            ..
+        } => {
             let s = host.eval_expr(start).as_int();
             let e = host.eval_expr(end).as_int();
 
@@ -112,8 +121,8 @@ pub fn eval_stmt<H: EvalHost>(host: &mut H, stmt: &Stmt) -> Flow {
 
                 match flow {
                     Flow::Continue => continue,
-                    Flow::Break    => break,
-                    Flow::Return(v)=> return Flow::Return(v),
+                    Flow::Break => break,
+                    Flow::Return(v) => return Flow::Return(v),
                     Flow::Value(_) => {}
                 }
             }

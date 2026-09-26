@@ -1,5 +1,5 @@
-use crate::Span;
 use super::{UiAttribute, UiModifier, UiText};
+use crate::Span;
 
 #[derive(Debug, Clone)]
 pub enum UiNode {
@@ -35,6 +35,13 @@ pub enum UiNode {
         modifiers: Vec<UiModifier>,
         span: Span,
     },
+
+    /// A theme-scoped UI fragment: `theme::dark { ... }`.
+    Theme {
+        name: String,
+        children: Vec<UiNodeOrExpr>,
+        span: Span,
+    },
 }
 
 impl UiNode {
@@ -44,6 +51,7 @@ impl UiNode {
             UiNode::BlockElement { span, .. } => *span,
             UiNode::SelfClosing { span, .. } => *span,
             UiNode::BlockSelfClosing { span, .. } => *span,
+            UiNode::Theme { span, .. } => *span,
         }
     }
 }

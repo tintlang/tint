@@ -1,6 +1,6 @@
-use crate::Span;
 use super::modifier::UiModifier;
 use super::modifier::UiModifierValue;
+use crate::Span;
 
 #[derive(Debug, Clone)]
 pub struct UiModifierBlock {

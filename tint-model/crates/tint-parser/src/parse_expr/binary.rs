@@ -1,4 +1,4 @@
-use crate::{Parser, error::*};
+use crate::{error::*, Parser};
 use tint_ast::{Expr, Span};
 use tint_lexer::TokenKind;
 
@@ -11,17 +11,16 @@ impl Parser {
 
             // --- STOP TOKENS ---
             match tok.kind {
-                TokenKind::RParen |
-                TokenKind::RBracket |
-                TokenKind::RBrace |
-                TokenKind::Comma => {
+                TokenKind::RParen | TokenKind::RBracket | TokenKind::RBrace | TokenKind::Comma => {
                     break;
                 }
                 _ => {}
             }
 
             let prec = tok.kind.binary_precedence();
-            if prec == 0 || prec < min_prec { break; }
+            if prec == 0 || prec < min_prec {
+                break;
+            }
 
             let op = self.stream.next();
             let right = self.parse_binary_expr(prec + 1)?;

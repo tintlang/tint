@@ -105,7 +105,9 @@ impl DomSession {
             Ok(tree) => tree,
             Err(e) => return Some(e),
         };
-        mount_tree(&tree, &shared).err().map(|e| js_error_to_string(&e))
+        mount_tree(&tree, &shared)
+            .err()
+            .map(|e| js_error_to_string(&e))
     }
 
     /// Runs `handler` against this session's persistent state (same
@@ -121,7 +123,44 @@ impl DomSession {
             Ok(tree) => tree,
             Err(e) => return Some(e),
         };
-        mount_tree(&tree, &shared).err().map(|e| js_error_to_string(&e))
+        mount_tree(&tree, &shared)
+            .err()
+            .map(|e| js_error_to_string(&e))
+    }
+
+    /// Points this SAME `DomSession` at different source -- re-parsing
+    /// `source` as `ui_fn_name` into a brand-new inner session and
+    /// rendering it, in place of the one built at construction time.
+    /// `dispatch` above replays a click/hover against the program that's
+    /// already there; this is for when the program ITSELF changed (a
+    /// live source editor, one debounced edit at a time).
+    ///
+    /// Reuses this `DomSession`'s existing `Shared` -- and therefore its
+    /// one `bind_resize_listener` closure from construction -- instead of
+    /// the caller constructing a new `DomSession` per edit. That distinction
+    /// matters here specifically because this module's listeners are never
+    /// cleaned up (see the module doc comment: "fine for a session that
+    /// lives as long as the page, ONE LISTENER TOTAL per DomSession") --
+    /// a fresh `DomSession` per keystroke would leak one more `window`
+    /// resize listener per edit, `reload` keeps it at the documented
+    /// one-per-session baseline no matter how many edits happen.
+    pub fn reload(&mut self, source: &str, ui_fn_name: &str) -> Option<String> {
+        let shared = match &self.shared {
+            Some(s) => s.clone(),
+            None => return self.init_error.clone(),
+        };
+        match InnerSession::new(source, ui_fn_name) {
+            Ok(session) => *shared.session.borrow_mut() = session,
+            Err(e) => return Some(e),
+        }
+        sync_viewport_width(&shared);
+        let tree = match shared.session.borrow_mut().render() {
+            Ok(tree) => tree,
+            Err(e) => return Some(e),
+        };
+        mount_tree(&tree, &shared)
+            .err()
+            .map(|e| js_error_to_string(&e))
     }
 }
 
@@ -331,10 +370,15 @@ fn build_node(
     // Mirrors UiPreviewNode.svelte's own tag choice: a real <button> for
     // Button/MenuItem or anything with a click handler (so it gets free
     // keyboard/focus/AT behavior), a plain <div> otherwise.
-    let is_button = node.tag == "Button" || node.tag == "MenuItem" || node.on_click.is_some();
-    let tag_name = if is_button { "button" } else { "div" };
+    let is_link = node.route.is_some();
+    let is_button = !is_link && (node.tag == "Button" || node.tag == "MenuItem" || node.on_click.is_some());
+    let tag_name = if is_link { "a" } else if is_button { "button" } else { "div" };
     let el = document.create_element(tag_name)?;
     el.set_attribute("data-tag", &node.tag)?;
+    el.set_attribute("data-tint-source", &node.tint_source)?;
+    if let Some(route) = &node.route {
+        el.set_attribute("href", route)?;
+    }
 
     if let Some(svg) = &node.svg {
         el.set_inner_html(svg);
@@ -349,7 +393,11 @@ fn build_node(
     // `node.style` would bring the browser's button chrome right back.
     let mut base_props: Vec<(String, String)> = Vec::new();
     if is_button {
-        base_props.extend(BUTTON_RESET.iter().map(|(k, v)| (k.to_string(), v.to_string())));
+        base_props.extend(
+            BUTTON_RESET
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string())),
+        );
     }
     base_props.extend(node.style.iter().cloned());
 
@@ -400,6 +448,7 @@ fn build_node(
 
     Ok(el)
 }
+
 
 /// Wires `event_name` on `el` to run `handler` against the session and
 /// rebuild the DOM -- the same dispatch-then-rerender loop

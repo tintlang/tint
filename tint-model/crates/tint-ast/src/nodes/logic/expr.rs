@@ -1,19 +1,27 @@
-use crate::Span;
 use super::stmt::Block;
-use crate::MatchArm;
 use crate::BorrowKind;
+use crate::MatchArm;
+use crate::Span;
 
 #[derive(Debug, Clone)]
 pub enum StructInitField {
-    Assign { name: String, expr: Expr, span: Span }, // name: expr
-    Tint { name: String, expr: Expr, span: Span },   // name{expr}
+    Assign {
+        name: String,
+        expr: Expr,
+        span: Span,
+    }, // name: expr
+    Tint {
+        name: String,
+        expr: Expr,
+        span: Span,
+    }, // name{expr}
 }
 
 impl StructInitField {
     pub fn span(&self) -> Span {
         match self {
             StructInitField::Assign { span, .. } => *span,
-            StructInitField::Tint   { span, .. } => *span,
+            StructInitField::Tint { span, .. } => *span,
         }
     }
 }
@@ -35,8 +43,8 @@ pub enum StringPart {
 pub enum Expr {
     Number(String, Span),
     String(String, Span), // raw literal (no interpolation)
-    Bool(bool, Span),  
-    Unit(Span),   
+    Bool(bool, Span),
+    Unit(Span),
     Ident(String, Span),
     SelfKw(Span),
 
@@ -58,8 +66,8 @@ pub enum Expr {
     },
 
     Array {
-    items: Vec<Expr>,
-    span: Span,
+        items: Vec<Expr>,
+        span: Span,
     },
 
     Namespace {
@@ -126,7 +134,7 @@ pub enum Expr {
         items: Vec<Expr>,
         span: Span,
     },
-    
+
     TupleIndex {
         target: Box<Expr>,
         index: usize,
@@ -145,14 +153,13 @@ pub enum Expr {
         span: Span,
     },
 
-       Borrow {
+    Borrow {
         kind: BorrowKind,
         target: Box<Expr>,
         // Some borrow forms may own a scoped block: `borrow(x) { ... }`.
         block: Option<Block>,
         span: Span,
     },
-
 }
 
 impl Expr {

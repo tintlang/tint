@@ -1,4 +1,4 @@
-use crate::{Parser, error::*};
+use crate::{error::*, Parser};
 use tint_ast::{Expr, Span};
 use tint_lexer::TokenKind;
 

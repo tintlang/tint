@@ -102,6 +102,12 @@ impl UiSession {
             }
 
             vm.define_var(VIEWPORT_WIDTH_VAR, EvalValue::Number(1440.0));
+            // `theme::dark { ... }` / `theme::light { ... }` selects from
+            // this ordinary state value. Applications can change it from a
+            // click handler just like any other state variable.
+            if matches!(vm.load_var("theme", Span::dummy()), EvalValue::Unit) {
+                vm.define_var("theme", EvalValue::String("dark".to_string()));
+            }
 
             vm
         }));
@@ -122,7 +128,8 @@ impl UiSession {
     /// width, same convention as setting a `state` var before reading
     /// it back out of the rebuilt tree.
     pub fn set_viewport_width(&mut self, width: f64) {
-        self.vm.define_var(VIEWPORT_WIDTH_VAR, EvalValue::Number(width));
+        self.vm
+            .define_var(VIEWPORT_WIDTH_VAR, EvalValue::Number(width));
     }
 
     /// Builds and returns the session's current tree.

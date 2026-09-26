@@ -1,4 +1,4 @@
-use crate::{Parser, error::*};
+use crate::{error::*, Parser};
 use tint_ast::{Expr, Span};
 use tint_lexer::TokenKind;
 
@@ -7,7 +7,10 @@ impl Parser {
         let start = self.stream.next().span; // '['
 
         if self.stream.consume_if(TokenKind::RBracket) {
-            return Ok(Expr::Array { items: vec![], span: start });
+            return Ok(Expr::Array {
+                items: vec![],
+                span: start,
+            });
         }
 
         let mut items = Vec::new();
@@ -27,6 +30,9 @@ impl Parser {
         self.stream.expect(TokenKind::RBracket)?;
         let end = self.stream.last_span();
 
-        Ok(Expr::Array { items, span: Span::merge(start, end) })
+        Ok(Expr::Array {
+            items,
+            span: Span::merge(start, end),
+        })
     }
 }

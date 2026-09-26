@@ -17,7 +17,11 @@ impl Parser {
         }
 
         let next = self.stream.peek_kind();
-        let is_upper = name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false);
+        let is_upper = name
+            .chars()
+            .next()
+            .map(|c| c.is_uppercase())
+            .unwrap_or(false);
 
         match next {
             TokenKind::LBrace if is_upper => self.parse_struct_pattern(name, span),
@@ -54,7 +58,11 @@ impl Parser {
         let mut fields = Vec::new();
 
         if self.stream.consume_if(TokenKind::RBrace) {
-            return Ok(Pattern::Struct { name, fields, span: start });
+            return Ok(Pattern::Struct {
+                name,
+                fields,
+                span: start,
+            });
         }
 
         loop {
@@ -71,16 +79,22 @@ impl Parser {
 
         self.stream.expect(TokenKind::RBrace)?;
 
-        Ok(Pattern::Struct { name, fields, span: start })
+        Ok(Pattern::Struct {
+            name,
+            fields,
+            span: start,
+        })
     }
-
 
     pub(crate) fn parse_pattern_group(&mut self) -> PResult<Pattern> {
         let start = self.stream.last_span();
         let mut fields = Vec::new();
 
         if self.stream.peek_kind() == TokenKind::RBrace {
-            return Ok(Pattern::Group { fields, span: start });
+            return Ok(Pattern::Group {
+                fields,
+                span: start,
+            });
         }
 
         loop {

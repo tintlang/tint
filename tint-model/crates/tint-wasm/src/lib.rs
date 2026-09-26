@@ -326,4 +326,3 @@ impl UiSession {
         serde_wasm_bindgen::to_value(&result).unwrap_or(JsValue::NULL)
     }
 }
-

@@ -17,13 +17,12 @@ impl Parser {
         }
 
         loop {
-
             match self.stream.peek_kind() {
-                TokenKind::Comma |
-                TokenKind::RParen |
-                TokenKind::RBracket |
-                TokenKind::RBrace |
-                TokenKind::Semicolon => {
+                TokenKind::Comma
+                | TokenKind::RParen
+                | TokenKind::RBracket
+                | TokenKind::RBrace
+                | TokenKind::Semicolon => {
                     return Ok(expr);
                 }
                 _ => {}
@@ -67,10 +66,9 @@ impl Parser {
                     // Otherwise the brace belongs to struct initialization, not a postfix call.
                     break;
                 }
-                 _ => break,
-                }
+                _ => break,
             }
+        }
         Ok(expr)
     }
-
 }

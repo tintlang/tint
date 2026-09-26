@@ -191,10 +191,10 @@ export auto
 --- ui/panel.tn ---
 module ui.panel
 
-ui fn Panel(children: UIChildren) {
-    <PanelContainer padding{12}>
-        <Children />
-    </PanelContainer>
+ui fn Panel() {
+    PanelContainer {
+        padding::12
+    }
 }
 
 export ui fn Panel
@@ -204,9 +204,9 @@ module ui.app
 use ui::panel::Panel
 
 ui fn App() {
-    <Panel>
-        <Text>"Hello Tint"</Text>
-    </Panel>
+    Panel {
+        Text { "Hello Tint" }
+    }
 }
 
 export ui fn App

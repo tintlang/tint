@@ -1,11 +1,11 @@
-pub mod text;
-pub mod node;
 pub mod attribute;
-pub mod modifier;
 pub mod block;
+pub mod modifier;
+pub mod node;
+pub mod text;
 
-pub use text::*;
-pub use node::*;
 pub use attribute::*;
-pub use modifier::*;
 pub use block::*;
+pub use modifier::*;
+pub use node::*;
+pub use text::*;

@@ -10,7 +10,9 @@ pub struct RuntimeScopeStack {
 
 impl RuntimeScopeStack {
     pub fn new() -> Self {
-        Self { frames: vec![HashMap::new()] }
+        Self {
+            frames: vec![HashMap::new()],
+        }
     }
 
     pub fn set(&mut self, name: &str, value: RuntimeValue) {

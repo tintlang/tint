@@ -20,7 +20,7 @@ pub struct Value {
 #[derive(Debug, Clone)]
 pub enum ValueKind {
     ConstInt(i64),
-    Temp,         // temporary SSA value
+    Temp, // temporary SSA value
     Undefined,
 }
 
@@ -38,12 +38,20 @@ impl Instr {
     pub fn replace_value(&mut self, old: u32, new: u32) {
         match self {
             Instr::Binary { lhs, rhs, .. } => {
-                if *lhs == old { *lhs = new }
-                if *rhs == old { *rhs = new }
+                if *lhs == old {
+                    *lhs = new
+                }
+                if *rhs == old {
+                    *rhs = new
+                }
             }
             Instr::Copy { dst, src } => {
-                if *dst == old { *dst = new }
-                if *src == old { *src = new }
+                if *dst == old {
+                    *dst = new
+                }
+                if *src == old {
+                    *src = new
+                }
             }
         }
     }

@@ -1,5 +1,5 @@
-use tint_ast::*;
 use crate::value::Value;
+use tint_ast::*;
 
 pub fn match_pattern(pat: &Pattern, val: &Value) -> bool {
     match pat {
@@ -19,12 +19,10 @@ pub fn match_pattern(pat: &Pattern, val: &Value) -> bool {
             Value::Tuple(vals) if vals.len() == pats.len() => {
                 pats.iter().zip(vals).all(|(p, v)| match_pattern(p, v))
             }
-            _ => false
+            _ => false,
         },
 
-        Pattern::Mut { inner, .. } => {
-            match_pattern(inner, val)
-        }
+        Pattern::Mut { inner, .. } => match_pattern(inner, val),
 
         Pattern::Group { fields, .. } => match val {
             Value::Map(map) => {
@@ -35,16 +33,14 @@ pub fn match_pattern(pat: &Pattern, val: &Value) -> bool {
                                 return false;
                             }
                         }
-                        PatternField::Assign { field, pat, .. } => {
-                            match map.get(field) {
-                                Some(v) => {
-                                    if !match_pattern(pat, v) {
-                                        return false;
-                                    }
+                        PatternField::Assign { field, pat, .. } => match map.get(field) {
+                            Some(v) => {
+                                if !match_pattern(pat, v) {
+                                    return false;
                                 }
-                                None => return false,
                             }
-                        }
+                            None => return false,
+                        },
                         PatternField::Rest(_) => { /* ignore */ }
                     }
                 }
@@ -55,7 +51,10 @@ pub fn match_pattern(pat: &Pattern, val: &Value) -> bool {
         },
 
         Pattern::Struct { name, fields, .. } => match val {
-            Value::StructInstance { name: inst, fields: inst_fields } if name == inst => {
+            Value::StructInstance {
+                name: inst,
+                fields: inst_fields,
+            } if name == inst => {
                 for f in fields {
                     match f {
                         PatternField::Shorthand { field, .. } => {
@@ -80,7 +79,7 @@ pub fn match_pattern(pat: &Pattern, val: &Value) -> bool {
                 }
                 true
             }
-            _ => false
+            _ => false,
         },
 
         Pattern::Map { fields, .. } => match val {
@@ -92,16 +91,14 @@ pub fn match_pattern(pat: &Pattern, val: &Value) -> bool {
                                 return false;
                             }
                         }
-                        PatternField::Assign { field, pat, .. } => {
-                            match map.get(field) {
-                                Some(v) => {
-                                    if !match_pattern(pat, v) {
-                                        return false;
-                                    }
+                        PatternField::Assign { field, pat, .. } => match map.get(field) {
+                            Some(v) => {
+                                if !match_pattern(pat, v) {
+                                    return false;
                                 }
-                                None => return false,
                             }
-                        }
+                            None => return false,
+                        },
                         PatternField::Rest(_) => { /* ignore */ }
                     }
                 }
@@ -113,9 +110,11 @@ pub fn match_pattern(pat: &Pattern, val: &Value) -> bool {
         },
 
         Pattern::Variant { name, args, .. } => match val {
-            Value::EnumInstance { enum_name, variant, args: inst_args }
-                if variant == name => {
-
+            Value::EnumInstance {
+                enum_name,
+                variant,
+                args: inst_args,
+            } if variant == name => {
                 if args.len() != inst_args.len() {
                     return false;
                 }

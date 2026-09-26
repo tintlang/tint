@@ -1,22 +1,22 @@
-mod number;
+mod array_lit;
 mod bool_lit;
 mod ident_or_struct;
 mod lambda;
-mod array_lit;
-mod paren_or_tuple;
-mod unary;
-mod string;
 mod map_literal;
+mod number;
+mod paren_or_tuple;
+mod string;
+mod unary;
 
-use tint_ast::Span;
-use crate::{Parser, error::*};
+use crate::{error::*, Parser};
 use tint_ast::Expr;
+use tint_ast::Span;
+use tint_ast::StructInitField;
 use tint_lexer::TokenKind;
+use tint_lexer::TokenKind::Colon;
+use tint_lexer::TokenKind::Comma;
 use tint_lexer::TokenKind::LBrace;
 use tint_lexer::TokenKind::RBrace;
-use tint_ast::StructInitField;
-use tint_lexer::TokenKind::Comma;
-use tint_lexer::TokenKind::Colon;
 
 impl Parser {
     /// Parse `{ a{1}, b{2}, c: 3 }`
@@ -82,10 +82,9 @@ impl Parser {
         }
 
         match tok.kind {
-            TokenKind::Number     => self.parse_number(),
-            TokenKind::String     => self.parse_string_or_interpolated(),
-            TokenKind::True
-            | TokenKind::False    => self.parse_bool(),
+            TokenKind::Number => self.parse_number(),
+            TokenKind::String => self.parse_string_or_interpolated(),
+            TokenKind::True | TokenKind::False => self.parse_bool(),
             // ENUM VARIANT INIT:  EnumName::Variant { ... } ---
             TokenKind::Ident => {
                 // peek next: Ident '::'
@@ -121,25 +120,23 @@ impl Parser {
                     };
 
                     return self.parse_postfix_with(expr);
-
                 }
 
                 // normal identifier
                 self.parse_ident_or_struct()
             }
 
-            TokenKind::Match      => self.parse_match_expression(),
+            TokenKind::Match => self.parse_match_expression(),
             TokenKind::Pipe => self.parse_lambda(),
 
-            TokenKind::LBracket   => self.parse_array_literal(),
-            TokenKind::LParen     => self.parse_paren_or_tuple(),
+            TokenKind::LBracket => self.parse_array_literal(),
+            TokenKind::LParen => self.parse_paren_or_tuple(),
 
             TokenKind::MapLit => self.parse_map_literal(),
 
-            TokenKind::Bang
-            | TokenKind::Minus    => self.parse_unary(),
+            TokenKind::Bang | TokenKind::Minus => self.parse_unary(),
 
-           TokenKind::LBrace => {
+            TokenKind::LBrace => {
                 let block = self.parse_block()?;
                 let span = block.span; // block already contains its full span
                 return Ok(Expr::Block(block, span));

@@ -75,34 +75,14 @@ work all parse, alongside `space` blocks for grouping kernels/impls/functions.
 - Move-checking beyond the basic resource model in
   `guide/resources-and-borrowing.md` (e.g. `let t = s; print(s)` as a hard error for
   ordinary values, not just resources).
-- The full UI DSL: `ui fn`, UI nodes, modifiers, `animate{}`, events. The UI syntax
-  documented in `ui/` describes the target design; the parser doesn't yet accept all
-  of it.
+- The remaining UI work is limited to broader component semantics and additional
+  runtime behavior. The implemented core is `ui fn`, named block nodes, `::`
+  modifiers, `layout`/`paint`/`motion` groups, themes, responsive blocks, grid,
+  internal `route||"/path"` links, and named events.
+- The browser sandbox is Tint-rendered. `npm run dev:all` watches nested `.tn`
+  imports and rebuilds Rust/WASM changes automatically.
 
-## Open syntax questions (still being explored)
-
-A few areas have more than one candidate syntax still in play, not yet converged on
-one form:
-
-- **Parameter binding in UI-ish calls:** `checked: item.done` vs `checked{item.done}`,
-  `onClick: || onToggle(id)` vs `onClick{|| onToggle(id)}`.
-- **UI function parameter typing:** `ui App(count: i32)` vs `ui App(count{i32})`.
-- **Attribute style tags** like `mod [@(style)]`, `fn [@classic]`, `ui [@(opt.speed)]`
-  — an experiment in marking declarations as using the "classic" (Rust-like,
-  `field: Type`) vs "Tint-style" (`field{Type}`) convention, or requesting a compiler
-  optimization hint. Not settled.
-- **Component-style declaration blocks** — `component`, `system`, `server`, `view`
-  keywords appear in exploratory snippets (an ECS-flavored component/system model, a
-  server/interval-driven background task, a projection/"view" of a struct's fields)
-  but aren't part of the current spec.
-- **Shader block variants** — a `shader compute Name(...) { ... }` form and a
-  `shader Name { input{} output{} wgsl { ... } }` form (embedding raw WGSL) have both
-  been sketched, alongside the `kernel` form documented in `guide/gpu-kernels.md`.
-
-None of the above should be treated as settled syntax — they're recorded here so the
-exploration isn't lost, not as something to build against.
-
-## Roadmap (suggested order)
+## Roadmap
 
 1. Booleans + the unit literal
 2. Tuples
@@ -112,7 +92,7 @@ exploration isn't lost, not as something to build against.
 6. Pattern matching
 7. Map literals + `Option`/`Result`
 8. Modules
-9. The UI DSL
+9. Broader UI component semantics
 
 Later, lower priority: async/await with a minimal state machine, guard patterns in
 `match` (already partly working), built-in error types, confirming `match` behaves

@@ -45,19 +45,11 @@ pub(super) fn call_user_fn(
     Ok(eval_fn::eval_user_fn(host, &function, args, span))
 }
 
-pub(super) fn call_value(
-    host: &mut HostVM,
-    value: Value,
-    args: &[Value],
-    span: Span,
-) -> Value {
+pub(super) fn call_value(host: &mut HostVM, value: Value, args: &[Value], span: Span) -> Value {
     match value {
         Value::HostFunction(function) => function(args.to_vec()),
         Value::Function {
-            params,
-            body,
-            env,
-            ..
+            params, body, env, ..
         } => {
             host.push_scope();
             host.env.extend_from(&env);

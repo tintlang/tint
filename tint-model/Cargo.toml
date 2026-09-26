@@ -8,6 +8,7 @@ members = [
     "crates/tint-semantics",
     "crates/tint-evaluator",
     "crates/tint-wasm",
+    "crates/tint-cli",
 ]
 
 resolver = "2"

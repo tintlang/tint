@@ -1,11 +1,9 @@
-
-use crate::{Parser, error::*};
+use crate::{error::*, Parser};
 use tint_lexer::TokenKind;
 
 impl Parser {
-
     // generics <T,U>
-   pub(crate) fn parse_optional_generics(&mut self) -> PResult<Vec<String>> {
+    pub(crate) fn parse_optional_generics(&mut self) -> PResult<Vec<String>> {
         let mut out = Vec::new();
 
         if !self.stream.consume_if(TokenKind::LAngle) {

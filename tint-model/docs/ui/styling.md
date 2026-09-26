@@ -1,167 +1,64 @@
-# TintStyle & TintColor
+# Styling reference
 
-A type-safe, GPU-first styling system. Every visual parameter goes through a `{}`
-modifier — there is no CSS and no `=` form for visual properties.
+Tint styling is a small declarative layer resolved by the UI runtime. Only the
+modifiers listed here are currently implemented.
 
-```
-✔ all visual parameters → {}
-✔ all logical parameters → =
-✔ no visual props via =
-✔ effects are ordinary modifiers, no separate `effect=` syntax
-```
-
-## Colors — TintColor
-
-```
-color{#fff}
-color{#112233}
-color{#fff{40%}}          // hex + opacity
-
-color{blue-400}            // palette token
-color{gray-700}
-color{gray-400{50%}}       // palette token + opacity
-color{white-900{80%}}
-```
-
-## Text style
-
-```
-text{xl}
-text{24px, bold}
-text{lg, italic}
-text{5xl, bold, tracking-tight}
-```
-
-## Radius
-
-```
-radius{12px}
-radius{full}
-radius{4px 8px 8px 4px}
-```
-
-## Common visual modifiers
-
-```
-opacity{80%}
-rotate{15deg}
-scale{1.1}
-size{48px}
-size{24px 64px}
-spacing{12}
-padding{16}
-margin{auto}
-align{center}
-gap{20}
-width{100%}
-height{240px}
-```
-
-## GPU effects
-
-**Single effects:**
-
-```
-shadow{4px 8px 20px black{30%}}
-inner{0px 0px 12px blue-400{40%}}
-blur{20px}
-glow{blue-500{60%}}
-```
-
-**Combo effects (chained with `+`):**
-
-```
-shadow+inner{0px 2px 8px black{20%}}
-shadow+glow{10px blue-400{40%}}
-shadow+inner+glow{6px black{25%}}
-```
-
-```
-combo_effect  = effect_chain "{" args "}"
-effect_chain  = identifier ("+" identifier)*
-identifier    = shadow | inner | glow | blur | opacity
-```
-
-### How arguments are distributed across a combo
-
-The group of arguments inside `{}` is divided among the chained effects, left to
-right:
-
-```
-shadow+inner{A}              → shadow{A}, inner{A}                # one arg group → applies to all
-shadow+inner{A B}             → shadow{A}, inner{B}                 # one group per effect
-shadow+inner+glow{A B C}       → shadow{A}, inner{B}, glow{C}
-shadow+inner+glow{A}            → shadow{A}, inner{A}, glow{A}       # fewer groups → last one repeats
-shadow{A B C}                    → error: shadow only takes 1 argument group
-```
-
-Examples:
-
-```
-shadow+inner{0px 2px 12px black{18%}}
-→ shadow{0px 2px 12px black{18%}}
-→ inner{0px 2px 12px black{18%}}
-
-shadow+inner{
-    4px 8px 24px black{25%}
-    0px 2px 12px black{18%}
+```tn
+Card {
+    paint::{ background::#6c5ce7, radius::20, border::{1, #8b7cf0} }
+    motion::{ hover::{ scale::1.03 } }
 }
+```
 
-shadow+inner+glow{
-    0px 2px 8px black{20%}
-    0px 0px 6px black{15%}
-    8px purple-300{40%}
+## Supported paint modifiers
+
+| Tint modifier | Result |
+|---|---|
+| `background::color` | `background-color` |
+| `gradient::{...}` | linear `background-image` |
+| `color::color` | text color |
+| `font-family::"..."` | font family |
+| `border::{width, color}` | solid border |
+| `radius::number` | border radius in pixels |
+| `radius::full` | pill/circle radius |
+| `opacity::number` | opacity |
+| `shadow::string` | box shadow |
+| `blur::number` | element blur |
+| `backdrop-blur::number` | backdrop blur |
+
+## Supported layout modifiers
+
+`direction`, `grid`, `align`, `justify`, `gap`, `grow`, `position`, `top`,
+`right`, `bottom`, `left`, `z`, `padding`, `padding.x/y/t/b/l/r`, `margin`,
+`min-width`, `min-height`, `overflow`, and `size`.
+
+`grid::{ columns::2 }` creates equal columns. A string track list such as
+`"minmax(0, 2fr) minmax(0, 1fr)"` gives explicit proportions.
+
+Side and axis aliases work for spacing and borders: `margin.x/y/t/b/l/r` and
+`border.x/y/t/b/l/r` (with full names such as `border.top` also accepted).
+
+## Text
+
+`text::{size, weight, color}` resolves the first number to `font-size`, a known
+weight keyword to `font-weight`, and a color to `color`. Font selection is a
+regular Tint style and inherits through the UI tree:
+
+```tn
+Text { text::{18, bold, #ffffff} "Tint" }
+Logo { font-family::"ui-rounded, -apple-system, BlinkMacSystemFont, sans-serif" "tint" }
+```
+
+## Motion
+
+```tn
+Button {
+    motion::{
+        transition::"transform .2s ease",
+        hover::{ scale::1.06, shadow::"0 8px 20px rgba(0,0,0,.25)" }
+    }
 }
-
-shadow+inner{soft strong}        // semantic tokens work too
-→ shadow{soft}
-→ inner{strong}
 ```
 
-```
-<Panel
-    shadow+inner{
-        4px 8px 24px black{25%}
-        0px 2px 12px black{18%}
-    },
-    glow{blue-400{40%}}
->
-    <Text> "Tint 2.0 UI Effects" </Text>
-</Panel>
-```
-
-This gives compact, readable, strictly-parseable effect chains — combinations that
-plain CSS/Tailwind can't express declaratively.
-
-## Combining with animation
-
-```
-animate{opacity: 0 -> 1}
-onHover{scale: 1 -> 1.05}
-onLeave{blur{20px}}
-
-onHover{shadow+inner{0px 4px 12px black{30%}}, scale: 1 -> 1.1}   // combined transition
-```
-
-Full animation syntax: `ui/animations.md`.
-
-## Example: a styled panel
-
-```
-<Panel
-    padding{20}
-    radius{12px}
-    color{gray-900{20%}}
-    shadow{0px 2px 8px black{20%}}
->
-    <Text text{20, bold}>
-        "Card"
-    </Text>
-</Panel>
-```
-
-## Principles
-
-Everything visual goes through `{}`; nothing visual goes through `=`; effects are a
-plain visual DSL; the system composes cleanly with `TintAnimations` and `Tint2D`;
-there is no CSS or HTML underneath any of it.
+The language currently supports transitions and hover style resolution through
+`transition::...` and `hover::{...}`.

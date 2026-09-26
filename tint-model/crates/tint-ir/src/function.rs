@@ -9,7 +9,7 @@ pub enum IRValue {
     Unit,
 
     // Для будущего:
-    FunctionRef(String),   // имя функции
+    FunctionRef(String), // имя функции
     Struct(Vec<(String, IRValue)>),
     Array(Vec<IRValue>),
 }
@@ -18,9 +18,9 @@ pub enum IRValue {
 pub struct IRFunction {
     pub name: String,
 
-    pub locals: Vec<String>,       // var names → registers/stack slots
-    pub constants: Vec<IRValue>,   // constant pool
-    pub code: Vec<Opcode>,         // emitted bytecode
+    pub locals: Vec<String>,     // var names → registers/stack slots
+    pub constants: Vec<IRValue>, // constant pool
+    pub code: Vec<Opcode>,       // emitted bytecode
 }
 
 impl IRFunction {

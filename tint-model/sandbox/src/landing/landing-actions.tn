@@ -1,0 +1,4 @@
+fn set_dark() { theme = "dark" }
+fn set_light() { theme = "light" }
+fn open_sandbox() {}
+fn open_github() {}

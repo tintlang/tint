@@ -1,6 +1,6 @@
-use tint_lexer::{Token, TokenKind};
 use crate::{error::*, symbols::Symbols, token_stream::TokenStream};
 use tint_ast::*;
+use tint_lexer::{Token, TokenKind};
 
 pub struct Parser {
     pub(crate) stream: TokenStream,
@@ -9,7 +9,7 @@ pub struct Parser {
 }
 
 impl Parser {
-   pub fn new(tokens: Vec<Token>) -> Self {
+    pub fn new(tokens: Vec<Token>) -> Self {
         Self {
             stream: TokenStream::new(tokens),
             symbols: Symbols::default(),
@@ -80,7 +80,6 @@ impl Parser {
 
     pub fn parse_item(&mut self) -> PResult<Item> {
         match self.stream.peek_kind() {
-
             TokenKind::Space => {
                 let s = self.parse_space()?;
                 return Ok(Item::Space(s));
@@ -126,6 +125,8 @@ impl Parser {
                 return Ok(Item::Use(u));
             }
 
+            TokenKind::Import => return self.parse_import(),
+
             TokenKind::Let => {
                 let start = self.stream.next().span;
                 let stmt = self.parse_let_stmt(start)?;
@@ -140,39 +141,56 @@ impl Parser {
     }
 
     pub(crate) fn parse_use(&mut self) -> PResult<UseDecl> {
-    let start = self.stream.expect(TokenKind::Use)?.span;
+        let start = self.stream.expect(TokenKind::Use)?.span;
 
-    let mut path = Vec::new();
-    let first = self.parse_ident()?;
-    path.push(first);
+        let mut path = Vec::new();
+        let first = self.parse_ident()?;
+        path.push(first);
 
-    while self.stream.consume_if(TokenKind::PathSep) {
-        let seg = self.parse_ident()?;
-        path.push(seg);
+        while self.stream.consume_if(TokenKind::PathSep) {
+            let seg = self.parse_ident()?;
+            path.push(seg);
+        }
+
+        self.stream.expect(TokenKind::Semicolon)?;
+
+        let end = self.stream.last_span();
+        Ok(UseDecl {
+            path,
+            span: Span::merge(start, end),
+        })
     }
 
-    self.stream.expect(TokenKind::Semicolon)?;
-
-    let end = self.stream.last_span();
-    Ok(UseDecl { path, span: Span::merge(start, end) })
-}
-
-pub(crate) fn parse_mod(&mut self) -> PResult<ModDecl> {
-    let start = self.stream.expect(TokenKind::Module)?.span;
-
-    let name = self.parse_ident()?;
-
-    self.stream.expect(TokenKind::LBrace)?;
-
-    let mut items = Vec::new();
-    while !self.stream.consume_if(TokenKind::RBrace) {
-        items.push(self.parse_item()?);
+    pub(crate) fn parse_import(&mut self) -> PResult<Item> {
+        let start = self.stream.expect(TokenKind::Import)?.span;
+        let path = self.stream.expect(TokenKind::String)?;
+        self.stream.expect(TokenKind::Semicolon)?;
+        let span = Span::merge(start, self.stream.last_span());
+        Ok(Item::Import(ImportDecl {
+            path: path.lexeme,
+            span,
+        }))
     }
 
-    let end = self.stream.last_span();
-    Ok(ModDecl { name, items, span: Span::merge(start, end) })
-}
+    pub(crate) fn parse_mod(&mut self) -> PResult<ModDecl> {
+        let start = self.stream.expect(TokenKind::Module)?.span;
 
+        let name = self.parse_ident()?;
+
+        self.stream.expect(TokenKind::LBrace)?;
+
+        let mut items = Vec::new();
+        while !self.stream.consume_if(TokenKind::RBrace) {
+            items.push(self.parse_item()?);
+        }
+
+        let end = self.stream.last_span();
+        Ok(ModDecl {
+            name,
+            items,
+            span: Span::merge(start, end),
+        })
+    }
 
     pub fn new_expr_only(expr_src: String, _span: Span) -> Self {
         use tint_lexer::Lexer;
@@ -184,7 +202,7 @@ pub(crate) fn parse_mod(&mut self) -> PResult<ModDecl> {
     }
 
     /// Parses function parameters, including destructuring patterns and brace defaults.
-   pub(crate) fn parse_params(&mut self) -> PResult<Vec<Param>> {
+    pub(crate) fn parse_params(&mut self) -> PResult<Vec<Param>> {
         let mut params = Vec::new();
 
         // empty params: ()
@@ -214,7 +232,11 @@ pub(crate) fn parse_mod(&mut self) -> PResult<ModDecl> {
                 None
             };
 
-            params.push(Param { pattern, ty, default });
+            params.push(Param {
+                pattern,
+                ty,
+                default,
+            });
 
             if !self.stream.consume_if(TokenKind::Comma) {
                 break;

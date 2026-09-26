@@ -4,11 +4,17 @@ use super::Value;
 
 impl Value {
     pub fn as_number(&self) -> Option<f64> {
-        match self { Value::Number(n) => Some(*n), _ => None }
+        match self {
+            Value::Number(n) => Some(*n),
+            _ => None,
+        }
     }
 
     pub fn as_bool(&self) -> Option<bool> {
-        match self { Value::Bool(b) => Some(*b), _ => None }
+        match self {
+            Value::Bool(b) => Some(*b),
+            _ => None,
+        }
     }
 
     /// Set struct field: obj.field = value
@@ -28,7 +34,10 @@ impl Value {
                 map.insert(field.to_string(), new_value);
             }
 
-            _ => panic!("Cannot assign field '{}' on non-struct value {:?}", field, self),
+            _ => panic!(
+                "Cannot assign field '{}' on non-struct value {:?}",
+                field, self
+            ),
         }
     }
 
@@ -58,19 +67,27 @@ impl Value {
     pub fn force_bool(&self) -> bool {
         self.as_bool().unwrap_or(false)
     }
-        pub fn as_int(&self) -> i64 {
+    pub fn as_int(&self) -> i64 {
         match self {
             Value::Number(n) => *n as i64,
-            Value::Bool(b) => if *b { 1 } else { 0 },
+            Value::Bool(b) => {
+                if *b {
+                    1
+                } else {
+                    0
+                }
+            }
             _ => 0,
         }
     }
 
     pub fn matches_type(&self, ty: &Type) -> bool {
         match (self, ty) {
-                        (Value::Number(_), Type::Simple(t))
-                    if t == "i32" || t == "f32" || t == "f64" || t == "number"
-                    => true,
+            (Value::Number(_), Type::Simple(t))
+                if t == "i32" || t == "f32" || t == "f64" || t == "number" =>
+            {
+                true
+            }
 
             (Value::Bool(_), Type::Simple(t)) if t == "bool" => true,
 
@@ -78,11 +95,9 @@ impl Value {
 
             (Value::Unit, Type::Unit) => true,
 
-                        (Value::StructInstance { name, .. }, Type::Simple(t))
-                if name == t => true,
+            (Value::StructInstance { name, .. }, Type::Simple(t)) if name == t => true,
 
-                        (Value::EnumInstance { enum_name, .. }, Type::Simple(t))
-                if enum_name == t => true,
+            (Value::EnumInstance { enum_name, .. }, Type::Simple(t)) if enum_name == t => true,
 
             // Tuple matching can be added once the AST exposes Type::Tuple.
             // (Value::Tuple(vals), Type::Tuple(types))

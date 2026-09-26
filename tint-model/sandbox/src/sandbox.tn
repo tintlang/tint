@@ -1,0 +1,77 @@
+import "./landing/landing-actions.tn";
+
+fn check_code() {}
+fn run_code() {}
+
+ui fn Sandbox() {
+    state theme = "dark"
+
+    theme::dark {
+        Page {
+            layout::{ direction::column }
+            paint::{ background::#0a0a0a, color::#d0d0d0 }
+            import "./landing/topbar.tn";
+
+            Workspace {
+                layout::{ grid::{ columns::"minmax(0, 2fr) minmax(0, 1fr)", gap::0 }, grow::1, min-width::0 }
+                mobile::{ grid::{ columns::"1fr" } }
+                CodeColumn {
+                    layout::{ direction::column, grow::1, min-width::0, overflow::hidden }
+                    CodeHeader {
+                        layout::{ direction::row, align::center, gap::10, padding.x::18, padding.y::12 }
+                        paint::{ background::#161616 }
+                        FileName { text::{12, #8c93a6} "examples/ui-demo.tn" }
+                        CheckBtn { click||check_code text::{11, #d5d9e4} "Check" }
+                        RunBtn { click||run_code text::{11, white} "Run" }
+                    }
+                    CodePanel { layout::{ grow::1, padding::14, min-width::0, overflow::hidden } paint::{ background::#141414 } }
+                    OutputPanel {
+                        layout::{ direction::column, padding::14 }
+                        paint::{ background::#161616 }
+                        OutputText { text::{11, #8c93a6} "Ready — edit Tint and run it with ⌘/Ctrl Enter." }
+                    }
+                }
+                PreviewPanel {
+                    layout::{ direction::column, min-width::0, overflow::hidden }
+                    paint::{ background::#20232d }
+                    PreviewMount { layout::{ grow::1 } }
+                }
+            }
+        }
+    }
+
+    theme::light {
+        Page {
+            layout::{ direction::column }
+            paint::{ background::#ffffff, color::#353535 }
+            import "./landing/topbar.tn";
+
+            Workspace {
+                layout::{ grid::{ columns::"minmax(0, 2fr) minmax(0, 1fr)", gap::0 }, grow::1, min-width::0 }
+                mobile::{ grid::{ columns::"1fr" } }
+                CodeColumn {
+                    layout::{ direction::column, grow::1, min-width::0, overflow::hidden }
+                    CodeHeader {
+                        layout::{ direction::row, align::center, gap::10, padding.x::18, padding.y::12 }
+                        paint::{ background::#f5f5f5 }
+                        FileName { text::{12, #6b7285} "examples/ui-demo.tn" }
+                        Language { text::{10, #6b7285} "Tint" }
+                        CheckBtn { click||check_code text::{11, #353849} "Check" }
+                        RunBtn { click||run_code text::{11, white} "Run" }
+                    }
+                    CodePanel { layout::{ grow::1, padding::14, min-width::0, overflow::hidden } paint::{ background::#f5f5f5 } }
+                    OutputPanel {
+                        layout::{ direction::column, padding::14 }
+                        paint::{ background::#f5f5f5 }
+                        OutputText { text::{11, #6b7285} "Ready — edit Tint and run it with ⌘/Ctrl Enter." }
+                    }
+                }
+                PreviewPanel {
+                    layout::{ direction::column, min-width::0, overflow::hidden }
+                    paint::{ background::#ffffff }
+                    PreviewMount { layout::{ grow::1 } }
+                }
+            }
+        }
+    }
+}

@@ -1,7 +1,10 @@
 // ui/builder.rs
 
-use super::tree::{UiTree, UiNodeId};
-use tint_ast::{Expr, UiAttrValue, UiAttribute, UiModifier, UiModifierValue, UiNode, UiNodeOrExpr, UiText, UiTextPart};
+use super::tree::{UiNodeId, UiTree};
+use tint_ast::{
+    Expr, Span, UiAttrValue, UiAttribute, UiModifier, UiModifierValue, UiNode, UiNodeOrExpr,
+    UiText, UiTextPart,
+};
 use tint_evaluator::{EvalHost, Value as EvalValue};
 
 pub struct UiBuilder {
@@ -10,7 +13,9 @@ pub struct UiBuilder {
 
 impl UiBuilder {
     pub fn new() -> Self {
-        Self { tree: UiTree::empty() }
+        Self {
+            tree: UiTree::empty(),
+        }
     }
 
     /// Create synthetic ROOT (id=0..n)
@@ -24,9 +29,7 @@ impl UiBuilder {
         let root = self.tree.create_node("Root".into());
 
         for n in nodes {
-            if let Some(child) = self.build(n, host) {
-                self.tree.add_child(root, child);
-            }
+            self.build_into(root, n, host);
         }
 
         root
@@ -37,22 +40,39 @@ impl UiBuilder {
     /// everything under it) simply isn't added to its parent.
     pub fn build<H: EvalHost>(&mut self, node: &UiNode, host: &mut H) -> Option<UiNodeId> {
         match node {
-            UiNode::Element { name, attributes, modifiers, children, .. } => {
-                self.build_container(name, attributes, modifiers, children, host)
-            }
-            UiNode::BlockElement { name, attributes, modifiers, children, .. } => {
-                self.build_container(name, attributes, modifiers, children, host)
-            }
-            UiNode::SelfClosing { name, attributes, modifiers, .. } => {
+            UiNode::Theme { .. } => None,
+            UiNode::Element {
+                name,
+                attributes,
+                modifiers,
+                children,
+                ..
+            } => self.build_container(name, attributes, modifiers, children, host),
+            UiNode::BlockElement {
+                name,
+                attributes,
+                modifiers,
+                children,
+                ..
+            } => self.build_container(name, attributes, modifiers, children, host),
+            UiNode::SelfClosing {
+                name,
+                attributes,
+                modifiers,
+                ..
+            } => {
                 if !check_if(modifiers, host) {
                     return None;
                 }
                 let id = self.tree.create_styled_node(name.clone(), modifiers);
                 apply_events(&mut self.tree, id, attributes);
                 apply_svg(&mut self.tree, id, attributes);
+                apply_route(&mut self.tree, id, attributes);
                 Some(id)
             }
-            UiNode::BlockSelfClosing { name, modifiers, .. } => {
+            UiNode::BlockSelfClosing {
+                name, modifiers, ..
+            } => {
                 // Block-mode self-closing nodes (`Tag {}`) carry no
                 // `attributes` in the AST at all (see tint_ast::UiNode) --
                 // only XML self-closing (`<Tag />`) does. Nothing to wire
@@ -62,6 +82,24 @@ impl UiBuilder {
                 }
                 Some(self.tree.create_styled_node(name.clone(), modifiers))
             }
+        }
+    }
+
+    fn build_into<H: EvalHost>(&mut self, parent: UiNodeId, node: &UiNode, host: &mut H) {
+        if let UiNode::Theme { name, children, .. } = node {
+            if theme_matches(name, host) {
+                for child in children {
+                    match child {
+                        UiNodeOrExpr::Node(child) => self.build_into(parent, child, host),
+                        UiNodeOrExpr::Text(text) => {
+                            let id = self.tree.create_text_node(render_ui_text(text, host));
+                            self.tree.add_child(parent, id);
+                        }
+                    }
+                }
+            }
+        } else if let Some(id) = self.build(node, host) {
+            self.tree.add_child(parent, id);
         }
     }
 
@@ -80,6 +118,7 @@ impl UiBuilder {
         let id = self.tree.create_styled_node(name.to_string(), modifiers);
         apply_events(&mut self.tree, id, attributes);
         apply_svg(&mut self.tree, id, attributes);
+        apply_route(&mut self.tree, id, attributes);
 
         match find_for(modifiers) {
             // `for{var in iterable}` on this node: build `children` once
@@ -118,9 +157,7 @@ impl UiBuilder {
         for child in children {
             match child {
                 UiNodeOrExpr::Node(n) => {
-                    if let Some(cid) = self.build(n, host) {
-                        self.tree.add_child(parent, cid);
-                    }
+                    self.build_into(parent, n, host);
                 }
                 UiNodeOrExpr::Text(text) => {
                     let tid = self.tree.create_text_node(render_ui_text(text, host));
@@ -132,6 +169,13 @@ impl UiBuilder {
 
     pub fn finish(self) -> UiTree {
         self.tree
+    }
+}
+
+fn theme_matches(name: &str, host: &mut impl EvalHost) -> bool {
+    match host.load_var("theme", Span::dummy()) {
+        EvalValue::String(active) => active == name,
+        _ => false,
     }
 }
 
@@ -186,6 +230,7 @@ fn apply_events(tree: &mut UiTree, id: UiNodeId, attributes: &[UiAttribute]) {
     );
 }
 
+
 fn find_handler(attributes: &[UiAttribute], name: &str) -> Option<String> {
     attributes.iter().find_map(|a| {
         if a.name != name {
@@ -204,6 +249,13 @@ fn find_handler(attributes: &[UiAttribute], name: &str) -> Option<String> {
 /// renderer can show exactly the SVG the .tint source wrote, verbatim.
 fn apply_svg(tree: &mut UiTree, id: UiNodeId, attributes: &[UiAttribute]) {
     tree.set_svg(id, find_literal(attributes, "svg"));
+}
+
+/// Reads `route||"/path"` and leaves navigation as a renderer concern.
+/// Keeping this as a first-class field makes the syntax portable to DOM,
+/// native, and future renderers without treating the route as CSS.
+fn apply_route(tree: &mut UiTree, id: UiNodeId, attributes: &[UiAttribute]) {
+    tree.set_route(id, find_literal(attributes, "route"));
 }
 
 fn find_literal(attributes: &[UiAttribute], name: &str) -> Option<String> {

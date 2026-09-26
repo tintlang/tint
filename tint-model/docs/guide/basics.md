@@ -68,7 +68,7 @@ log{"message"}        // wrong — log is a VM/debug helper, not a modifier here
 increment{5}           // wrong — a logic function call always uses (): increment(5)
 let p = vec2{1,2};      // wrong — constructors use (): vec2(1,2)
 let value = shadow{4px}; // wrong — shadow{} is a UI modifier, not a logic value
-radius(12px)             // wrong — radius{} is a UI modifier, not a function call
+radius(12)               // wrong — radius::12 is a UI modifier, not a function call
 ```
 
 The rule that makes all of this consistent: `{}` is for UI modifiers, VM helpers,

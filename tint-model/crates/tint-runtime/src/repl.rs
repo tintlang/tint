@@ -60,9 +60,11 @@ impl ReplSession {
     /// Evaluates one entry against everything defined earlier in this
     /// session (see this module's doc comment for how "against" works).
     pub fn eval(&mut self, line: &str) -> ReplOutcome {
-        let looks_like_item = ["fn ", "struct ", "enum ", "ui fn", "space ", "impl ", "use "]
-            .iter()
-            .any(|kw| line.trim_start().starts_with(kw));
+        let looks_like_item = [
+            "fn ", "struct ", "enum ", "ui fn", "space ", "impl ", "use ",
+        ]
+        .iter()
+        .any(|kw| line.trim_start().starts_with(kw));
 
         if looks_like_item {
             // A definition: try it appended to the session; only keep it

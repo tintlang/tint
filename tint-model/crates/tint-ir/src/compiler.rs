@@ -2,14 +2,14 @@
 // tint-ir/src/compiler.rs — AST → SSA IR
 // ============================================
 
-use crate::ir::*;
 use crate::builder::IrBuilder;
+use crate::ir::*;
 
-use tint_ast::{Program, Item, Expr, Stmt, FnBody, Pattern};
+use std::collections::HashMap;
 use tint_ast::PatternField;
 use tint_ast::StringPart;
-use std::collections::HashMap;
 use tint_ast::StructInitField;
+use tint_ast::{Expr, FnBody, Item, Pattern, Program, Stmt};
 
 pub struct SsaCompiler {
     builder: IrBuilder,
@@ -39,7 +39,8 @@ impl SsaCompiler {
             // obj.field = v
             Expr::Field { target, field, .. } => {
                 let base = self.lower_expr(target, block, locals);
-                self.builder.emit_field_store(block, base, field.clone(), value);
+                self.builder
+                    .emit_field_store(block, base, field.clone(), value);
             }
 
             // arr[i] = v
@@ -53,7 +54,7 @@ impl SsaCompiler {
             _ => {
                 panic!("Invalid assignment LHS: {:?}", lhs);
             }
-         }
+        }
     }
     pub fn compile_program(&mut self, prog: &Program) -> ProgramIR {
         let mut out = ProgramIR::new();
@@ -90,7 +91,7 @@ impl SsaCompiler {
             locals,
         }
     }
-    
+
     // LOWERING STATEMENT
     fn lower_stmt(
         &mut self,
@@ -103,7 +104,7 @@ impl SsaCompiler {
             Stmt::Let { pattern, init, .. } => {
                 let expr = match init {
                     tint_ast::LetInit::Assign(e) => e,
-                    tint_ast::LetInit::Tint(e)   => e,
+                    tint_ast::LetInit::Tint(e) => e,
                 };
 
                 let v = self.lower_expr(expr, block, locals);
@@ -124,7 +125,6 @@ impl SsaCompiler {
                 self.lower_expr(expr, block, locals);
             }
 
-
             other => {
                 println!("WARNING: stmt not lowered in SSA: {:?}", other);
             }
@@ -140,7 +140,6 @@ impl SsaCompiler {
         block: &mut Block,
     ) {
         match pat {
-
             // x
             Pattern::Ident(name, _) => {
                 locals.insert(name.clone(), value);
@@ -149,7 +148,7 @@ impl SsaCompiler {
             // _
             Pattern::Wildcard(_) => {}
 
-              Pattern::Mut { inner, .. } => {
+            Pattern::Mut { inner, .. } => {
                 self.bind_pattern(inner, value, locals, block);
             }
 
@@ -190,15 +189,13 @@ impl SsaCompiler {
                     match f {
                         // shorthand: { a }
                         PatternField::Shorthand { field, .. } => {
-                            let elem =
-                                self.builder.emit_map_access(block, value, field.clone());
+                            let elem = self.builder.emit_map_access(block, value, field.clone());
                             locals.insert(field.clone(), elem);
                         }
 
                         // assign: { a: pat }
                         PatternField::Assign { field, pat, .. } => {
-                            let elem =
-                                self.builder.emit_map_access(block, value, field.clone());
+                            let elem = self.builder.emit_map_access(block, value, field.clone());
                             self.bind_pattern(pat, elem, locals, block);
                         }
 
@@ -207,22 +204,19 @@ impl SsaCompiler {
                 }
             }
 
-
             // map { x, y: pat, .. }
             Pattern::Map { fields, .. } => {
                 for f in fields {
                     match f {
                         // shorthand: map { x }
                         PatternField::Shorthand { field, .. } => {
-                            let elem =
-                                self.builder.emit_map_access(block, value, field.clone());
+                            let elem = self.builder.emit_map_access(block, value, field.clone());
                             locals.insert(field.clone(), elem);
                         }
 
                         // field: pat
                         PatternField::Assign { field, pat, .. } => {
-                            let elem =
-                                self.builder.emit_map_access(block, value, field.clone());
+                            let elem = self.builder.emit_map_access(block, value, field.clone());
                             self.bind_pattern(pat, elem, locals, block);
                         }
 
@@ -245,25 +239,23 @@ impl SsaCompiler {
         }
     }
 
- // LOWERING EXPRESSION
- fn lower_expr(
+    // LOWERING EXPRESSION
+    fn lower_expr(
         &mut self,
         e: &Expr,
         block: &mut Block,
         locals: &mut std::collections::HashMap<String, ValueId>,
     ) -> ValueId {
         match e {
-            Expr::Number(n, _) =>
-                self.builder.emit_const(block, Value::Number(n.parse().unwrap())),
+            Expr::Number(n, _) => self
+                .builder
+                .emit_const(block, Value::Number(n.parse().unwrap())),
 
-            Expr::String(s, _) =>
-                self.builder.emit_const(block, Value::String(s.clone())),
+            Expr::String(s, _) => self.builder.emit_const(block, Value::String(s.clone())),
 
-            Expr::Bool(v, _) =>
-                self.builder.emit_const(block, Value::Bool(*v)),
+            Expr::Bool(v, _) => self.builder.emit_const(block, Value::Bool(*v)),
 
-            Expr::Unit(_) =>
-                self.builder.emit_const(block, Value::Unit),
+            Expr::Unit(_) => self.builder.emit_const(block, Value::Unit),
 
             Expr::Borrow { target, .. } => {
                 // lowering: borrow(x) просто становится значением x
@@ -299,19 +291,17 @@ impl SsaCompiler {
                 last
             }
 
-
             // INTERPOLATED STRING → sequence of concat ops
-
             Expr::InterpolatedString { parts, .. } => {
                 let mut acc = self.builder.emit_const(block, Value::String(String::new()));
 
                 for part in parts {
                     let next = match part {
-                        StringPart::Text(t) =>
-                            self.builder.emit_const(block, Value::String(t.clone())),
+                        StringPart::Text(t) => {
+                            self.builder.emit_const(block, Value::String(t.clone()))
+                        }
 
-                        StringPart::Expr(e2) => 
-                            self.lower_expr(e2, block, locals),
+                        StringPart::Expr(e2) => self.lower_expr(e2, block, locals),
                     };
 
                     acc = self.builder.emit_binary(block, "+".into(), acc, next);
@@ -320,8 +310,9 @@ impl SsaCompiler {
                 acc
             }
 
-
-            Expr::Binary { left, op, right, .. } => {
+            Expr::Binary {
+                left, op, right, ..
+            } => {
                 let lv = self.lower_expr(left, block, locals);
                 let rv = self.lower_expr(right, block, locals);
                 self.builder.emit_binary(block, op.clone(), lv, rv)
@@ -332,9 +323,7 @@ impl SsaCompiler {
                 self.builder.emit_unary(block, op.clone(), v)
             }
 
-            Expr::Paren(expr, _) =>
-                self.lower_expr(expr, block, locals),
-
+            Expr::Paren(expr, _) => self.lower_expr(expr, block, locals),
 
             // CALL: foo(a,b)
             Expr::Call { target, args, .. } => {
@@ -356,7 +345,8 @@ impl SsaCompiler {
             // MODULE::ITEM
             Expr::Namespace { base, item, .. } => {
                 let mod_val = self.lower_expr(base, block, locals);
-                self.builder.emit_namespace_access(block, mod_val, item.clone())
+                self.builder
+                    .emit_namespace_access(block, mod_val, item.clone())
             }
 
             // INDEX: arr[i]
@@ -366,22 +356,27 @@ impl SsaCompiler {
                 self.builder.emit_index(block, arr, idx)
             }
 
-            Expr::VariantInit { enum_name, variant, fields, .. } => {
+            Expr::VariantInit {
+                enum_name,
+                variant,
+                fields,
+                ..
+            } => {
                 // 1) Lower each field expression to SSA ValueId
                 let mut lowered_fields = Vec::new();
 
                 for f in fields {
                     let val = match f {
-                        StructInitField::Assign { expr, .. } =>
-                            self.lower_expr(expr, block, locals),
+                        StructInitField::Assign { expr, .. } => {
+                            self.lower_expr(expr, block, locals)
+                        }
 
-                        StructInitField::Tint { expr, .. } =>
-                            self.lower_expr(expr, block, locals),
+                        StructInitField::Tint { expr, .. } => self.lower_expr(expr, block, locals),
                     };
 
                     let name = match f {
                         StructInitField::Assign { name, .. } => name.clone(),
-                        StructInitField::Tint   { name, .. } => name.clone(),
+                        StructInitField::Tint { name, .. } => name.clone(),
                     };
 
                     lowered_fields.push((name, val));
@@ -396,7 +391,9 @@ impl SsaCompiler {
                 )
             }
 
-            Expr::Match { scrutinee, arms, .. } => {
+            Expr::Match {
+                scrutinee, arms, ..
+            } => {
                 let scr = self.lower_expr(scrutinee, block, locals);
 
                 let mut lowered_arms = Vec::new();
@@ -439,7 +436,6 @@ impl SsaCompiler {
 
                 self.builder.emit_struct_init(block, name.clone(), fv)
             }
-
 
             // STRUCT UPDATE: base { f = 10, y{expr} }
             Expr::StructUpdate { base, updates, .. } => {
@@ -497,10 +493,7 @@ impl SsaCompiler {
             }
 
             // NAMED ARG — just lower the value, name is semantic
-            Expr::NamedArg { value, .. } => {
-                self.lower_expr(value, block, locals)
-            }
-
+            Expr::NamedArg { value, .. } => self.lower_expr(value, block, locals),
 
             // TODO λ
             Expr::Lambda { .. } => {

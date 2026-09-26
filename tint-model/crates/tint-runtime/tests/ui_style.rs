@@ -48,6 +48,36 @@ ui fn App() {
         }
     }
 }
+
+#[test]
+fn semantic_style_groups_resolve_without_whitespace_rules() {
+    let code = r#"
+ui fn App() {
+    Card {
+        layout::{ padding::24, direction::column, gap::12 }
+        paint::{ gradient::{ angle::135, from::#6c5ce7, to::#8b7cf0 }, radius::20, border::{1, #8b7cf0} }
+        motion::{ transition::"transform .2s ease", hover::{ scale::1.03, shadow::"0 16px 40px rgba(0,0,0,.35)" } }
+        "Card"
+    }
+}
+"#;
+
+    let ui_fn = parse_ui_fn(code, "App");
+    let mut builder = UiBuilder::new();
+    let mut vm = TintVM::new();
+    builder.build_root(&ui_fn.body, &mut vm);
+    let tree = builder.finish();
+    let card = tree.nodes.iter().find(|n| n.tag == "Card").unwrap();
+
+    assert!(card.style.contains(&("padding".to_string(), "24px".to_string())));
+    assert!(card.style.contains(&("display".to_string(), "flex".to_string())));
+    assert!(card.style.contains(&("flex-direction".to_string(), "column".to_string())));
+    assert!(card.style.contains(&("background-image".to_string(), "linear-gradient(135deg, #6c5ce7, #8b7cf0)".to_string())));
+    assert!(card.style.contains(&("border-radius".to_string(), "20px".to_string())));
+    assert!(card.style.contains(&("transition".to_string(), "transform .2s ease".to_string())));
+    assert!(card.hover_style.contains(&("transform".to_string(), "scale(1.03)".to_string())));
+    assert!(card.hover_style.contains(&("box-shadow".to_string(), "0 16px 40px rgba(0,0,0,.35)".to_string())));
+}
 "#;
 
     let ui_fn = parse_ui_fn(code, "App");
@@ -260,6 +290,49 @@ ui fn App() {
         radius.top::10
         "Open"
     }
+}
+
+#[test]
+fn padding_xy_expands_to_the_four_css_sides() {
+    let code = r#"
+ui fn App() {
+    Button { padding.x::18 padding.y::10 "Open" }
+}
+"#;
+    let ui_fn = parse_ui_fn(code, "App");
+    let mut builder = UiBuilder::new();
+    let mut vm = TintVM::new();
+    builder.build_root(&ui_fn.body, &mut vm);
+    let tree = builder.finish();
+    let button = tree.nodes.iter().find(|n| n.tag == "Button").unwrap();
+
+    for (side, value) in [
+        ("padding-left", "18px"),
+        ("padding-right", "18px"),
+        ("padding-top", "10px"),
+        ("padding-bottom", "10px"),
+    ] {
+        assert!(button.style.contains(&(side.to_string(), value.to_string())));
+    }
+}
+
+#[test]
+fn theme_tag_builds_only_the_active_fragment() {
+    let code = r#"
+ui fn App() {
+    theme::dark { Dark { "dark" } }
+    theme::light { Light { "light" } }
+}
+"#;
+    let ui_fn = parse_ui_fn(code, "App");
+    let mut builder = UiBuilder::new();
+    let mut vm = TintVM::new();
+    vm.define_var("theme", tint_evaluator::Value::String("light".into()));
+    builder.build_root(&ui_fn.body, &mut vm);
+    let tree = builder.finish();
+
+    assert!(tree.nodes.iter().any(|n| n.tag == "Light"));
+    assert!(!tree.nodes.iter().any(|n| n.tag == "Dark"));
 }
 "#;
 
