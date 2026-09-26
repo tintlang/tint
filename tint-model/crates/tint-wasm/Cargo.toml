@@ -30,3 +30,19 @@ web-sys = { version = "0.3", features = [
 
 [profile.release]
 opt-level = "s"
+
+# wasm-pack's own wasm-opt post-processing step needs a specific binaryen
+# release (117 as of this writing) that matches the wasm-bindgen version
+# above; when that exact binary can't be downloaded (blocked network,
+# offline build) wasm-pack falls back to whatever `wasm-opt` is on PATH,
+# which can be a much older binaryen build (e.g. a Linux distro package)
+# that doesn't understand the newer reference-types/externref encoding
+# wasm-bindgen 0.2.129 emits. That combination doesn't error at build
+# time -- it silently produces a corrupted .wasm that crashes at runtime
+# with "WebAssembly.Table.grow(): failed to grow table by N" the moment
+# the JS glue tries to set up the externref table. Disabling wasm-opt
+# here avoids that trap entirely; the cost is a somewhat larger .wasm
+# (no dead-code/size optimization pass), which is a fine trade for a
+# build that actually runs.
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
