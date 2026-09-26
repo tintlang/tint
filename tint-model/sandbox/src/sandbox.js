@@ -6,55 +6,101 @@ import initWasm, {
   UiSession,
   DomSession,
 } from "../pkg-web/tint_wasm.js";
-import shellSource from "./sandbox/index.tn";
+import shellSource from "./sandbox.tn";
 import demoSource from "../../examples/ui_app.tn";
 
 import { Compartment, EditorState } from "@codemirror/state";
 import { EditorView, keymap, lineNumbers, highlightActiveLine } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
-import { bracketMatching, indentOnInput, syntaxHighlighting, HighlightStyle } from "@codemirror/language";
+import { bracketMatching, indentOnInput, syntaxHighlighting } from "@codemirror/language";
 import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
-import { tags } from "@lezer/highlight";
 import { tintLanguage } from "./lib/tintLanguage.js";
+import { darkHighlightColors, lightHighlightColors } from "./lib/tintHighlight.js";
+import { loadStoredTheme, storeTheme } from "./lib/themeStorage.js";
 
 const root = document.querySelector("#root");
 let shellSession;
 let previewSession;
 let editorView;
 let lastCodePanel;
+let lastPreviewMount;
 let updateTimer;
 let shellTheme = "dark";
 
-const darkColors = HighlightStyle.define([
-  { tag: [tags.keyword, tags.operatorKeyword], color: "#a29bfe" },
-  { tag: tags.string, color: "#8fd19e" },
-  { tag: [tags.number, tags.atom, tags.bool], color: "#f5a623" },
-  { tag: tags.typeName, color: "#7db8ff" },
-  { tag: tags.function(tags.variableName), color: "#7db8ff" },
-  { tag: tags.comment, color: "#7a7a7a", fontStyle: "italic" },
-  { tag: [tags.operator, tags.punctuation], color: "#9a9a9a" },
-]);
+const CODE_STORAGE_KEY = "tint-sandbox-code";
 
-const lightColors = HighlightStyle.define([
-  { tag: [tags.keyword, tags.operatorKeyword], color: "#6c5ce7" },
-  { tag: tags.string, color: "#218739" },
-  { tag: [tags.number, tags.atom, tags.bool], color: "#b45309" },
-  { tag: tags.typeName, color: "#1769aa" },
-  { tag: tags.function(tags.variableName), color: "#1769aa" },
-  { tag: tags.comment, color: "#777777", fontStyle: "italic" },
-  { tag: [tags.operator, tags.punctuation], color: "#777777" },
-]);
+function loadStoredCode() {
+  try {
+    return localStorage.getItem(CODE_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function storeCode(code) {
+  try {
+    localStorage.setItem(CODE_STORAGE_KEY, code);
+  } catch {}
+}
+
+const PREVIEW_MIN_PCT = 25;
+const PREVIEW_MAX_PCT = 50;
+
+function currentPreviewPct(workspace, panel) {
+  const workspaceWidth = workspace.getBoundingClientRect().width;
+  if (!workspaceWidth) return null;
+  return (panel.getBoundingClientRect().width / workspaceWidth) * 100;
+}
+
+function setPreviewPct(pct) {
+  const clamped = Math.min(PREVIEW_MAX_PCT, Math.max(PREVIEW_MIN_PCT, pct));
+  document.documentElement.style.setProperty("--preview-w", `${clamped}%`);
+}
+
+function bindResizer(resizer, workspace, panel) {
+  resizer.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    const workspaceWidth = workspace.getBoundingClientRect().width;
+    const startPct = currentPreviewPct(workspace, panel);
+    if (!workspaceWidth || startPct == null) return;
+    const startX = event.clientX;
+    resizer.setPointerCapture(event.pointerId);
+    document.body.classList.add("tint-resizing");
+
+    const onMove = (moveEvent) => {
+      const deltaPct = ((startX - moveEvent.clientX) / workspaceWidth) * 100;
+      setPreviewPct(startPct + deltaPct);
+    };
+    const onUp = () => {
+      resizer.removeEventListener("pointermove", onMove);
+      document.body.classList.remove("tint-resizing");
+    };
+    resizer.addEventListener("pointermove", onMove);
+    resizer.addEventListener("pointerup", onUp, { once: true });
+  });
+}
 
 const editorTheme = EditorView.theme({
-  "&": { height: "100%", backgroundColor: "transparent", color: "var(--text)" },
-  ".cm-content": { fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace", fontSize: "13px", lineHeight: "1.7", padding: "0", caretColor: "var(--text)" },
-  ".cm-gutters": { backgroundColor: "var(--editor-bg)", color: "var(--dim)", border: "none" },
-  ".cm-activeLine": { backgroundColor: "rgba(128,128,128,.08)" },
+  "&": { height: "100%", backgroundColor: "transparent", color: "inherit" },
+  ".cm-content": { fontFamily: "inherit", fontSize: "inherit", lineHeight: "1.7", padding: "0" },
+  ".cm-gutters": { backgroundColor: "#141414", color: "inherit", border: "none" },
+  ".cm-activeLine": { backgroundColor: "rgba(255,255,255,0.04)" },
   ".cm-activeLineGutter": { backgroundColor: "transparent" },
   "&.cm-focused": { outline: "none" },
   ".cm-scroller": { overflow: "auto" },
-  ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": { backgroundColor: "var(--selection)" },
+  ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": { backgroundColor: "rgba(108,92,231,0.35)" },
 }, { dark: true });
+
+const editorLightTheme = EditorView.theme({
+  "&": { height: "100%", backgroundColor: "transparent", color: "inherit" },
+  ".cm-content": { fontFamily: "inherit", fontSize: "inherit", lineHeight: "1.7", padding: "0" },
+  ".cm-gutters": { backgroundColor: "#f5f5f5", color: "inherit", border: "none" },
+  ".cm-activeLine": { backgroundColor: "rgba(0,0,0,0.04)" },
+  ".cm-activeLineGutter": { backgroundColor: "transparent" },
+  "&.cm-focused": { outline: "none" },
+  ".cm-scroller": { overflow: "auto" },
+  ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": { backgroundColor: "rgba(108,92,231,0.18)" },
+}, { dark: false });
 
 const themeCompartment = new Compartment();
 const syntaxCompartment = new Compartment();
@@ -67,8 +113,8 @@ function setEditorTheme() {
   if (!editorView) return;
   const dark = isDark();
   editorView.dispatch({ effects: [
-    themeCompartment.reconfigure(editorTheme),
-    syntaxCompartment.reconfigure(syntaxHighlighting(dark ? darkColors : lightColors)),
+    themeCompartment.reconfigure(dark ? editorTheme : editorLightTheme),
+    syntaxCompartment.reconfigure(syntaxHighlighting(dark ? darkHighlightColors : lightHighlightColors)),
   ] });
 }
 
@@ -144,20 +190,7 @@ function renderPreview(tree) {
 
 function logEvent(message) {
   const output = root.querySelector('[data-tag="OutputText"]');
-  if (output) {
-    output.textContent = message;
-    return;
-  }
-
-  // A shell parse/render error happens before OutputPanel exists. Keep the
-  // failure visible instead of leaving the app on a blank white page.
-  let errorPanel = root.querySelector(".sandbox-bootstrap-error");
-  if (!errorPanel) {
-    errorPanel = document.createElement("pre");
-    errorPanel.className = "sandbox-bootstrap-error";
-    root.replaceChildren(errorPanel);
-  }
-  errorPanel.textContent = message || "Tint sandbox failed to render";
+  if (output) output.textContent = message;
 }
 
 function dispatchPreview(handler) {
@@ -170,12 +203,12 @@ function dispatchPreview(handler) {
 function updatePreview(source) {
   if (!previewSession) return;
   // The editor holds a full program (plain `fn`s plus a `ui fn App()`),
-  // exactly like demoSource / what check()/run() already compile -- not
-  // a bare UI-node snippet, so it must be reloaded as-is with "App" as
-  // the entry point, the same way `new UiSession(demoSource, "App")`
+  // exactly like demoSource / what check()/run() already compile as-is --
+  // not a bare UI-node snippet, so it must be reloaded as-is with "App"
+  // as the entry point, the same way `new UiSession(demoSource, "App")`
   // constructed this session in the first place. Wrapping it in a second
-  // `ui fn Preview() { ... }` (the old behavior here) nested those `fn`/
-  // `ui fn` declarations inside a UI body, which never parses, and
+  // `ui fn Preview() { ... }` (the old behavior here) nested those fn/
+  // ui fn declarations inside a UI body, which never parses, and
   // `UiSession` had no `reload` method at all until now -- so every edit
   // silently threw before ever reaching this line, leaving the preview
   // stuck on whatever last rendered.
@@ -188,16 +221,20 @@ function mountEditor(panel) {
   if (!editorView) {
     editorView = new EditorView({
       state: EditorState.create({
-        doc: demoSource,
+        doc: loadStoredCode() ?? demoSource,
         extensions: [
           lineNumbers(), history(), highlightActiveLine(), bracketMatching(), closeBrackets(),
-          indentOnInput(), tintLanguage(), syntaxHighlighting(darkColors),
-          themeCompartment.of(editorTheme), syntaxCompartment.of(syntaxHighlighting(darkColors)),
+          indentOnInput(), tintLanguage(),
+          themeCompartment.of(editorTheme), syntaxCompartment.of(syntaxHighlighting(darkHighlightColors)),
           keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, indentWithTab]),
           EditorView.updateListener.of((update) => {
             if (!update.docChanged) return;
             clearTimeout(updateTimer);
-            updateTimer = setTimeout(() => updatePreview(update.state.doc.toString()), 300);
+            updateTimer = setTimeout(() => {
+              const source = update.state.doc.toString();
+              storeCode(source);
+              updatePreview(source);
+            }, 300);
           }),
         ],
       }),
@@ -236,6 +273,7 @@ function runCode() {
 function renderShellTheme(theme) {
   shellTheme = theme;
   document.documentElement.dataset.theme = theme;
+  storeTheme(theme);
   const source = shellSource.replace('state theme = "dark"', `state theme = "${theme}"`);
   shellSession?.free();
   shellSession = new DomSession(source, "Sandbox", "root");
@@ -256,10 +294,28 @@ function remount() {
   const runButton = root.querySelector('[data-tag="RunBtn"]');
   if (checkButton) checkButton.onclick = checkCode;
   if (runButton) runButton.onclick = runCode;
+  const workspace = root.querySelector('[data-tag="Workspace"]');
+  const resizer = root.querySelector('[data-tag="Resizer"]');
+  const previewPanel = root.querySelector('[data-tag="PreviewPanel"]');
+  if (workspace && resizer && previewPanel && !resizer.dataset.resizeBound) {
+    resizer.dataset.resizeBound = "true";
+    bindResizer(resizer, workspace, previewPanel);
+  }
+  // CheckBtn/RunBtn also carry a click||check_code / click||run_code
+  // binding in the .tn shell source (see sandbox.tn) so DomSession treats
+  // them as a real dispatch and rebuilds the clicked subtree -- even
+  // though check_code/run_code are no-op Tint fns and the actual
+  // check/run work happens in checkCode()/runCode() above. That rebuild
+  // can recreate PreviewPanel/PreviewMount as fresh, empty DOM nodes,
+  // orphaning whatever renderPreview() had appended into the old ones
+  // (renderShellTheme() already re-renders the preview after ITS OWN
+  // intentional rebuild; this covers the same case for an implicit one).
+  const previewMount = root.querySelector('[data-tag="PreviewMount"]');
+  if (previewMount && previewMount !== lastPreviewMount) {
+    lastPreviewMount = previewMount;
+    if (previewSession) renderPreview(previewSession.tree()?.tree || []);
+  }
   setEditorTheme();
-  // Theme/file events can replace the shell subtree. Keep the UiSession
-  // alive and paint its current tree into the newly-created mount.
-  if (previewSession) renderPreview(previewSession.tree()?.tree || []);
 }
 
 // Capture before DomSession's own event handler rebuilds the subtree. The
@@ -284,7 +340,13 @@ document.title = `Tint Sandbox · ${tint_version()}`;
 if (new URLSearchParams(window.location.search).get("route") === "/sandbox") {
   window.history.replaceState({}, "", "/sandbox");
 }
-shellSession = new DomSession(shellSource, "Sandbox", "root");
+const initialTheme = loadStoredTheme();
+shellTheme = initialTheme;
+document.documentElement.dataset.theme = initialTheme;
+const initialShellSource = initialTheme === "dark"
+  ? shellSource
+  : shellSource.replace('state theme = "dark"', `state theme = "${initialTheme}"`);
+shellSession = new DomSession(initialShellSource, "Sandbox", "root");
 const shellError = shellSession.rerender();
 if (shellError) logEvent(shellError);
 previewSession = new UiSession(demoSource, "App");

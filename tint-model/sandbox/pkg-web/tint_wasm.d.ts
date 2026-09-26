@@ -168,8 +168,8 @@ export interface InitOutput {
     readonly uisession_new: (a: number, b: number, c: number, d: number) => number;
     readonly uisession_reload: (a: number, b: number, c: number, d: number, e: number) => any;
     readonly uisession_tree: (a: number) => any;
-    readonly wasm_bindgen__convert__closures_____invoke__h456c09ea4e080302: (a: number, b: number, c: any) => void;
-    readonly wasm_bindgen__convert__closures_____invoke__h406344741b5d5b6a: (a: number, b: number) => void;
+    readonly wasm_bindgen_277f91586ca95781___convert__closures_____invoke___web_sys_f9f876d40c4e3ed___features__gen_Event__Event______true_: (a: number, b: number, c: any) => void;
+    readonly wasm_bindgen_277f91586ca95781___convert__closures_____invoke_______true_: (a: number, b: number) => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_exn_store: (a: number) => void;
