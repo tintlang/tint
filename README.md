@@ -114,13 +114,15 @@ tint/
 ✅ Hover effects & animations
 ✅ Grid layout and internal route links
 ✅ Automatic `.tn` reload and Rust/WASM rebuild with `npm run dev:all`
+✅ A native fn called from *inside* a plain `fn`'s own body, invoked the normal top-level way through the IR VM -- `IrVM` now falls back to a native-lookup callback (`set_native_call`) when no IR-compiled function matches the callee name, backed by `TintVM::native_fns` (see `tint-runtime/tests/native_fn.rs`)
 
 ## Known Gaps
 
 ❌ Multiple independent component instances (state is one flat scope per `UiSession`)
 ❌ `match{}` in UI trees (parsed, not evaluated)
 ✅ Compile-time `.tn` imports in the Vite sandbox source pipeline
-❌ A native fn (or any function) called from *inside* a plain `fn`'s own body, when that `fn` runs the normal top-level way -- the IR VM's `Call` instruction is still a stub (see `ir_vm.rs`). Native fns ARE reachable from click/hover handlers, UI fn bodies, and any other tree-walked call site today (see `tint-runtime/tests/native_fn.rs`)
+❌ Namespace access (`Ns::item`) and lambda expressions are unimplemented specifically in the IR VM path (both already work through the tree-walking path used for UI handlers)
+❌ Tuple-style enum variants (`enum E { A(T) }`) -- rejected at the semantic-check stage; only named-field variants (`enum E { A { x } }`) are supported
 ❌ Type annotations (inference-only)
 ❌ Generics
 ❌ Async/await

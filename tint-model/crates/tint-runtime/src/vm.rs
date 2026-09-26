@@ -1,11 +1,10 @@
 // TintVM v3: Dual Runtime (IR VM + EvalHost)
 
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 
-use crate::{
-    async_rt::Scheduler, borrow::BorrowManager, resources::ResourceTable, scope::RuntimeScopeStack,
-    state::StateStore, ui::UiRuntime, value::RuntimeValue,
-};
+use crate::{scope::RuntimeScopeStack, ui::UiRuntime, value::RuntimeValue};
 
 use tint_evaluator::eval_pattern::bind_pattern;
 use tint_ir::{ir::Value as IrValue, optimize, IrVM, ProgramIR, SsaCompiler};
@@ -26,12 +25,15 @@ pub struct TintVM {
     // `register_native`) -- direct Rust interop: no Rust parsing, no
     // borrow-checking of Tint code, just an ordinary Rust closure called
     // by name from `.tn` source.
-    pub native_fns: HashMap<String, Box<dyn Fn(&[EvalValue]) -> EvalResult<EvalValue>>>,
+    //
+    // `Rc<RefCell<..>>`, not a plain `HashMap`, so that `call_fn`'s IR
+    // branch (below) can hand a fresh `IrVM` a native-fn-lookup closure
+    // that owns a `'static` handle back into this same table (`tint-ir`
+    // has no dependency on this crate, so `IrVM` can't just borrow
+    // `&self` -- see `IrVM::set_native_call`'s doc comment) without that
+    // closure's lifetime getting tangled up in `self`'s.
+    pub native_fns: Rc<RefCell<HashMap<String, Box<dyn Fn(&[EvalValue]) -> EvalResult<EvalValue>>>>>,
 
-    pub resources: ResourceTable,
-    pub state: StateStore,
-    pub scheduler: Scheduler,
-    pub borrow: BorrowManager,
     pub ui: UiRuntime,
 
     // IR
@@ -45,12 +47,8 @@ impl TintVM {
             scopes: RuntimeScopeStack::new(),
             logic_functions: HashMap::new(),
             ui_functions: HashMap::new(),
-            native_fns: HashMap::new(),
+            native_fns: Rc::new(RefCell::new(HashMap::new())),
 
-            resources: ResourceTable::new(),
-            state: StateStore::new(),
-            scheduler: Scheduler::new(),
-            borrow: BorrowManager::new(),
             ui: UiRuntime::new(),
 
             ir_program: ProgramIR::new(),
@@ -80,7 +78,7 @@ impl TintVM {
     where
         F: Fn(&[EvalValue]) -> EvalResult<EvalValue> + 'static,
     {
-        self.native_fns.insert(name.into(), Box::new(f));
+        self.native_fns.borrow_mut().insert(name.into(), Box::new(f));
     }
 
     // PROGRAM ENTRY
@@ -306,7 +304,22 @@ impl TintVM {
             } => IrValue::EnumInstance {
                 enum_name,
                 variant,
-                args: args.into_iter().map(Self::eval_value_to_ir_value).collect(),
+                // `tint_evaluator::Value::EnumInstance` is still
+                // positional-only (`args: Vec<Value>`, no field names) --
+                // only the IR side's `Value::EnumInstance` was changed to
+                // carry names (see its doc comment in tint-ir/src/ir.rs),
+                // so there's no real name to carry across this boundary.
+                // Synthesizing a placeholder name would be worse than
+                // admitting there isn't one: it would look like a real
+                // field name to anything matching on it later. A
+                // brace-style variant pattern (`A { x } => ..`) can't
+                // match a value that arrived via this conversion either
+                // way, since the tree-walking evaluator that produced it
+                // never captured the name to begin with.
+                fields: args
+                    .into_iter()
+                    .map(|v| (String::new(), Self::eval_value_to_ir_value(v)))
+                    .collect(),
             },
             EvalValue::Map(map) => IrValue::Map(
                 map.into_iter()
@@ -350,11 +363,19 @@ impl TintVM {
             IrValue::EnumInstance {
                 enum_name,
                 variant,
-                args,
+                fields,
             } => EvalValue::EnumInstance {
                 enum_name,
                 variant,
-                args: args.into_iter().map(Self::ir_value_to_eval_value).collect(),
+                // The reverse of the conversion above: the target type
+                // here (`tint_evaluator::Value::EnumInstance`) is still
+                // positional-only, so the field names this IR value
+                // carries are dropped, not because they don't matter but
+                // because there's nowhere on the other side to put them.
+                args: fields
+                    .into_iter()
+                    .map(|(_, v)| Self::ir_value_to_eval_value(v))
+                    .collect(),
             },
             IrValue::Map(map) => EvalValue::Map(
                 map.into_iter()
@@ -504,7 +525,7 @@ impl EvalHost for TintVM {
         // 0) user-registered native Rust functions (see `register_native`) --
         // checked first so a native fn can shadow a builtin/UI/logic fn on
         // purpose.
-        if let Some(f) = self.native_fns.get(name) {
+        if let Some(f) = self.native_fns.borrow().get(name) {
             return f(args);
         }
 
@@ -533,6 +554,39 @@ impl EvalHost for TintVM {
                 .collect();
 
             let mut irvm = IrVM::new(self.ir_program.clone());
+
+            // Give the IR VM a way to reach a registered native fn from
+            // INSIDE a plain `fn`'s own body (`fn go() { shout("hi") }`,
+            // called the normal top-level way, so `Instr::Call` runs
+            // inside this very `IrVM`) -- previously unreachable, since
+            // `tint-ir` has no dependency on this crate's `native_fns`
+            // table at all (see `tint-runtime/tests/native_fn.rs` and
+            // `IrVM::set_native_call`'s doc comment). `Rc::clone` here is
+            // what lets this closure outlive `self`'s borrow: it owns its
+            // own handle to the SAME table, rather than borrowing `self`.
+            let native_fns = Rc::clone(&self.native_fns);
+            irvm.set_native_call(Box::new(move |name, ir_args| {
+                let eval_args: Vec<EvalValue> = ir_args
+                    .iter()
+                    .cloned()
+                    .map(Self::ir_value_to_eval_value)
+                    .collect();
+
+                let f = native_fns.borrow();
+                let f = f.get(name)?;
+                match f(&eval_args) {
+                    Ok(v) => Some(Self::eval_value_to_ir_value(v)),
+                    // A native fn CAN fail (e.g. bad args) -- that's a
+                    // real error, not "no such function", so this
+                    // doesn't silently fall back to Unit the way an
+                    // unresolved name does; it panics with the native's
+                    // own error message, same as any other unrecoverable
+                    // runtime error in this VM (`Instr::Index` out of
+                    // bounds, `Instr::LoadLocal` on an undefined name, …).
+                    Err(e) => panic!("native fn `{}` failed: {}", name, e),
+                }
+            }));
+
             let out = irvm.run_with_args(name, &params, &ir_args);
             return Ok(Self::ir_value_to_eval_value(out));
         }
@@ -550,7 +604,7 @@ impl EvalHost for TintVM {
         // Native Rust functions are reachable from this path too, so a
         // `click||`/`hover_in||` handler can be a real Rust closure, not
         // just a Tint `fn`.
-        if let Some(f) = self.native_fns.get(name) {
+        if let Some(f) = self.native_fns.borrow().get(name) {
             return f(args);
         }
 

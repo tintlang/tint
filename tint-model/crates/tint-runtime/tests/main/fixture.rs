@@ -1,17 +1,32 @@
-use tint_evaluator::EvalHost;
+// Shared fixture for the split-out `AllFeatures`/pattern-matching test
+// suite (see `tests/main.rs`, which just declares `mod` for the files in
+// this directory). This one giant Tint source string is the SAME text
+// that used to live inline inside the single `test_tint_capabilities`
+// function in `tests/main.rs` before the split -- copied verbatim, not
+// re-derived, so nothing here changes what source is actually exercised.
+//
+// It intentionally covers roughly eighty different, mostly-unrelated
+// language constructs in one blob: UI parsing, GPU kernels, borrow
+// blocks, generics, control flow, pattern matching, map literals, and
+// more. Most of that is PARSER/LOADER-acceptance coverage only -- a lot
+// of it (GPU kernels, borrow blocks, several of the generic-fn shapes)
+// isn't wired up to real runtime semantics yet, so there's nothing
+// meaningful to assert about what running those functions actually
+// computes. `parses_and_loads.rs` covers that half honestly, as a smoke
+// test: the whole source lexes, parses, and loads into a VM without
+// panicking. `pattern_matching.rs` is the other half -- the handful of
+// functions in here (`AllFeatures`, `TestMatchNumbers`, `TestMatchTuple`,
+// `TestMatchStruct`, `TestGuard`) that DO compute something checkable,
+// upgraded from a `println!` of whatever came out to a real `assert_eq!`
+// against a hand-verified expected value.
 
-#[test]
-fn test_tint_capabilities() {
-    use tint_lexer::{Lexer, collect_tokens};
-    use tint_parser::{Parser};
-    use tint_parser::error::ParserError;
-    use tint_runtime::vm::TintVM;
-    use tint_evaluator::value::Value;
-    use std::panic::{catch_unwind, AssertUnwindSafe};
+use tint_lexer::{collect_tokens, Lexer};
+use tint_parser::error::ParserError;
+use tint_parser::Parser;
+use tint_runtime::vm::TintVM;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 
-    println!("\n===================== TINT TEST START =====================\n");
-
-let code = r#"
+pub const SOURCE: &str = r#"
 [@(main.att)]
 
 ui fn TestXml() {
@@ -260,8 +275,6 @@ fn MonsterTestMaster() {
     AdvancedMonster(5)
 }
 
-
-// IMPL — simple
 impl Texture {
     fn reset() { 0 }
 }
@@ -534,18 +547,18 @@ fn normal() {
 }
 
 fn [@(strict)] gpu_process() {
-    borrow(frame) {          // становится core borrow
+    borrow(frame) {         
         sobel(frame)
     }
 
-    borrow@group(invert) {   // используется group borrow
+    borrow@group(invert) {  
         sort(invert)
     }
 }
 
 mod engine {
     fn blur() {
-        borrow(img) { sobel(img) } // strict по умолчанию
+        borrow(img) { sobel(img) }
     }
 }
 
@@ -1048,41 +1061,38 @@ fn TestRustResult() {
 }
 "#;
 
-    // 1) Lexing
-    println!("→ LEXING...");
-    let tokens = collect_tokens(&mut Lexer::new(code));
-    println!("✔ {} tokens", tokens.len());
+/// Lexes, parses, and loads `SOURCE` into a fresh `TintVM`, panicking with
+/// the same diagnostics the original single giant test printed (source
+/// span for a parser error; a plain message if the VM panics while
+/// loading). Every split-out test file calls this once to get its own VM
+/// -- `TintVM` isn't `Clone`, and there's no cross-test state to share by
+/// reusing one instance, so re-loading per test (cheap: this is a small
+/// in-memory source string, not I/O) is simpler than threading a shared
+/// instance through `OnceLock`/`Mutex` for no real benefit.
+pub fn load_vm() -> TintVM {
+    let tokens = collect_tokens(&mut Lexer::new(SOURCE));
 
-    // 2) Parsing
-    println!("→ PARSING...");
     let mut parser = Parser::new(tokens);
 
     let program = match parser.parse_program() {
-        Ok(p) => {
-            println!("✔ Parsing OK");
-            p
-        }
+        Ok(p) => p,
         Err(e) => {
-            println!("\n❌ PARSER FAILED: {:?}", e);
-
             if let Some(span) = match &e {
                 ParserError::Message { span, .. } => Some(span),
                 ParserError::Unexpected { span, .. } => Some(span),
             } {
-                println!(
-                    "At {}..{} → `{}`",
+                panic!(
+                    "parser failed at {}..{} -> `{}`: {:?}",
                     span.start.offset,
                     span.end.offset,
-                    &code[span.start.offset .. span.end.offset]
+                    &SOURCE[span.start.offset..span.end.offset],
+                    e
                 );
             }
-
-            panic!("parser failed");
+            panic!("parser failed: {:?}", e);
         }
     };
 
-    // 3) Load into VM
-    println!("→ LOADING VM...");
     let mut vm = TintVM::new();
 
     let load = catch_unwind(AssertUnwindSafe(|| {
@@ -1090,50 +1100,8 @@ fn TestRustResult() {
     }));
 
     if load.is_err() {
-        panic!("❌ VM panicked during load");
+        panic!("VM panicked while loading the shared fixture source");
     }
 
-    println!("✔ VM ready\n");
-
-    // 4) Run AllFeatures()
-    println!("→ CALL AllFeatures()");
-
-    let out = vm
-        .call_fn("AllFeatures", &[], tint_ast::Span::dummy())
-        .expect("call failed");
-
-    let num = match out {
-        Value::Number(n) => n as f64,
-        other => panic!("❌ Expected number, got {:?}", other),
-    };
-
-    println!("✔ AllFeatures result = {}", num);
-
-    // 5) Additional function tests
-    println!("\n→ EXTRA TESTS");
-
-    let t1 = vm.call_fn("TestMatchNumbers", &[Value::Number(0.0)], tint_ast::Span::dummy()).unwrap();
-    let t2 = vm.call_fn("TestMatchNumbers", &[Value::Number(5.0)], tint_ast::Span::dummy()).unwrap();
-    println!("TestMatchNumbers(0)  = {:?}", t1);
-    println!("TestMatchNumbers(5)  = {:?}", t2);
-
-    let tup = Value::Tuple(vec![Value::Number(3.0), Value::Number(4.0)]);
-    let t3 = vm.call_fn("TestMatchTuple", &[tup], tint_ast::Span::dummy()).unwrap();
-    println!("TestMatchTuple((3,4)) = {:?}", t3);
-
-    let user_struct = Value::StructInstance {
-        name: "User".into(),
-        fields: vec![
-            ("id".into(), Value::Number(7.0)),
-            ("name".into(), Value::String("A".into())),
-            ("age".into(), Value::Number(30.0)),
-        ],
-    };
-    let t4 = vm.call_fn("TestMatchStruct", &[user_struct], tint_ast::Span::dummy()).unwrap();
-    println!("TestMatchStruct(User) = {:?}", t4);
-
-    let t5 = vm.call_fn("TestGuard", &[Value::Number(50.0)], tint_ast::Span::dummy()).unwrap();
-    println!("TestGuard(50) = {:?}", t5);
-
-    println!("\n===================== TINT TEST END =====================\n");
+    vm
 }

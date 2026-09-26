@@ -89,6 +89,7 @@ impl SsaCompiler {
             name: f.name.clone(),
             blocks: vec![block],
             locals,
+            params: f.params.iter().map(|p| p.pattern.clone()).collect(),
         }
     }
 
@@ -401,6 +402,43 @@ impl SsaCompiler {
                 for arm in arms {
                     let pat = arm.pattern.clone();
 
+                    // A match arm introduces its own bindings (`A { x }`,
+                    // `(1, b, 3)`, `x: i32`, ...) that only exist at
+                    // RUNTIME -- `Instr::Match` (ir_vm.rs) inserts them by
+                    // name into `self.locals` for whichever arm actually
+                    // matches, right before computing that arm's result.
+                    // There is no per-arm scope at COMPILE time though:
+                    // this whole function lowers into one flat
+                    // instruction list, and `locals` here is a single
+                    // shared name -> ValueId cache used by `Expr::Ident`
+                    // lowering (see above) to reuse an already-computed
+                    // value instead of emitting a fresh `LoadLocal`.
+                    //
+                    // If a pattern's bound name happens to already be in
+                    // that cache (e.g. `x` re-bound by `x: i32 => x * 2`
+                    // when an OUTER `x` is already in scope), lowering the
+                    // arm body resolved straight to the OUTER value's
+                    // ValueId and never emitted a `LoadLocal` at all -- so
+                    // the runtime binding above was computed and then
+                    // never read, and the arm silently used the outer
+                    // variable's (possibly stale) value instead. Shadow
+                    // every name this pattern (re)binds out of the cache
+                    // before lowering the body, so a reference to it is
+                    // forced through `emit_load` and actually reads back
+                    // the runtime binding `Instr::Match` just installed.
+                    // Names are restored after the arm so sibling arms and
+                    // code following the match keep seeing the outer
+                    // binding.
+                    let mut bound_names = Vec::new();
+                    collect_pattern_names(&pat, &mut bound_names);
+
+                    let mut shadowed = Vec::new();
+                    for name in &bound_names {
+                        if let Some(id) = locals.remove(name) {
+                            shadowed.push((name.clone(), id));
+                        }
+                    }
+
                     // Lower the guard, if present
                     let guard_val = if let Some(ref guard_expr) = arm.guard {
                         Some(self.lower_expr(guard_expr, block, locals))
@@ -410,6 +448,10 @@ impl SsaCompiler {
 
                     // Lower the body expression
                     let body_val = self.lower_expr(&arm.expr, block, locals);
+
+                    for (name, id) in shadowed {
+                        locals.insert(name, id);
+                    }
 
                     lowered_arms.push((pat, guard_val, body_val));
                 }
@@ -501,5 +543,40 @@ impl SsaCompiler {
                 self.builder.emit_const(block, Value::Unit)
             }
         }
+    }
+}
+
+// Every name a pattern would bind if it matched -- used only to know which
+// entries to shadow out of the compile-time `locals` cache before lowering
+// a match arm's body (see the comment at `Expr::Match` above). This is
+// deliberately just name collection, not real binding: unlike
+// `SsaCompiler::bind_pattern` (used for `let` destructuring), it emits no
+// instructions, since a match arm's actual extraction happens at runtime
+// in `Instr::Match` (ir_vm.rs), keyed by these same names.
+fn collect_pattern_names(pat: &Pattern, out: &mut Vec<String>) {
+    match pat {
+        Pattern::Ident(name, _) => out.push(name.clone()),
+        Pattern::Wildcard(_) | Pattern::Number(_, _) | Pattern::String(_, _) => {}
+        Pattern::Mut { inner, .. } => collect_pattern_names(inner, out),
+        Pattern::Tuple(items, _) => {
+            for p in items {
+                collect_pattern_names(p, out);
+            }
+        }
+        Pattern::Struct { fields, .. } | Pattern::Group { fields, .. } | Pattern::Map { fields, .. } => {
+            for f in fields {
+                match f {
+                    PatternField::Shorthand { field, .. } => out.push(field.clone()),
+                    PatternField::Assign { pat, .. } => collect_pattern_names(pat, out),
+                    PatternField::Rest(_) => {}
+                }
+            }
+        }
+        Pattern::Variant { args, .. } => {
+            for p in args {
+                collect_pattern_names(p, out);
+            }
+        }
+        Pattern::Typed { pat, .. } => collect_pattern_names(pat, out),
     }
 }

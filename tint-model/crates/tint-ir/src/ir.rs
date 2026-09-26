@@ -24,7 +24,19 @@ pub enum Value {
     EnumInstance {
         enum_name: String,
         variant: String,
-        args: Vec<Value>,
+        // Named, not positional (unlike this used to be) -- so that a
+        // struct-style variant (`enum E { A { x } }`, constructed as
+        // `E::A { x { 50 } }`) can be pattern-matched by field NAME
+        // (`A { x } => ...`), the same way `StructInstance`'s `fields`
+        // already works. See `ir_vm.rs`'s `Pattern::Struct` match arm,
+        // which now accepts this variant too. `Instr::VariantInit`
+        // already carried these names at compile time (`fields: Vec<(String,
+        // ValueId)>`) -- only this runtime value was throwing them away.
+        // A purely positional variant pattern (`A(x) => ...`,
+        // `Pattern::Variant`) still works fine against this: it just
+        // zips against `fields` in declaration order and ignores the
+        // names.
+        fields: Vec<(String, Value)>,
     },
 
     Map(std::collections::HashMap<String, Value>),
@@ -159,6 +171,13 @@ pub struct FunctionIR {
     pub name: String,
     pub blocks: Vec<Block>,
     pub locals: std::collections::HashMap<String, ValueId>,
+    // The function's parameter patterns, in declaration order. Needed so
+    // `Instr::Call` (see ir_vm.rs) can bind a callee's arguments by
+    // itself when one IR-compiled function calls another -- previously
+    // only the top-level entry point had its params supplied externally
+    // (by `TintVM::call_fn`, which reads them off the original `FnDecl`),
+    // so a nested call had no way to bind them at all.
+    pub params: Vec<Pattern>,
 }
 
 #[derive(Debug, Clone)]

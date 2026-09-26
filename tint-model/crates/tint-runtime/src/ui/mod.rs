@@ -1,17 +1,13 @@
 // ui/runtime.rs
 
 pub mod builder;
-pub mod events;
 pub mod layout;
-pub mod reconciler;
 pub mod render;
 pub mod style;
 pub mod tree;
 
 use crate::ui::builder::UiBuilder;
-use crate::ui::events::UiEventSystem;
 use crate::ui::tree::{UiNodeId, UiTree};
-use crate::vm::TintVM;
 use tint_ast::*;
 use tint_evaluator::EvalHost;
 
@@ -23,7 +19,6 @@ pub struct UiRuntime {
     /// Actual UI tree after build / reconcile
     pub tree: UiTree,
 
-    pub events: UiEventSystem,
     pub dirty: bool,
 }
 
@@ -38,7 +33,6 @@ impl UiRuntime {
         Self {
             root: None,
             tree: UiTree::empty(),
-            events: UiEventSystem::new(),
             dirty: true,
         }
     }
@@ -65,12 +59,6 @@ impl UiRuntime {
         self.tree = builder.finish();
 
         self.dirty = true;
-    }
-
-    /// Handle input events + triggers dirty flag if needed
-    pub fn process_events(&mut self, vm: &mut TintVM) -> bool {
-        self.events.dispatch(&mut self.tree, vm);
-        self.dirty
     }
 
     pub fn needs_redraw(&self) -> bool {

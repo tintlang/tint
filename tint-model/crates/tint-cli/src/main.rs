@@ -149,7 +149,7 @@ fn cmd_run(path: &str, fn_name: &str) {
     register_natives(&mut vm);
     vm.run_program(&program);
 
-    if !has_fn(&program, fn_name) && !vm.native_fns.contains_key(fn_name) {
+    if !has_fn(&program, fn_name) && !vm.native_fns.borrow().contains_key(fn_name) {
         println!(
             "compiled OK ({} item(s)), no `fn {}` to run",
             program.items.len(),

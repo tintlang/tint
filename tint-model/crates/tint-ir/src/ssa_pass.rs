@@ -105,6 +105,24 @@ fn dead_code_elimination(func: &mut FunctionIR) -> bool {
                 live.insert(*id);
             }
         }
+
+        // A block with no explicit `Return` at all (e.g. `fn square(x) {
+        // x * x }`, a bare trailing expression) falls back to its LAST
+        // instruction's value as an implicit return -- see ir_vm.rs's
+        // `run_function`, which does exactly this when nothing returned
+        // explicitly. Without this, a function like that has zero
+        // liveness roots (no `Return` anywhere references anything), so
+        // the retain pass below stripped its trailing `Binary`/`Unary`/
+        // `Const` outright: `square`'s body compiled down to just its
+        // two `LoadLocal`s, and the actual multiplication -- the only
+        // thing the function was for -- never ran. `produced_dst` here
+        // mirrors `ir_vm.rs`'s private helper of the same name; keep the
+        // two in sync if either ever adds a new `Instr` variant.
+        if let Some(last) = block.instrs.last() {
+            if let Some(dst) = produced_dst(last) {
+                live.insert(dst);
+            }
+        }
     }
 
     // propagate liveness backwards
@@ -145,6 +163,36 @@ fn dead_code_elimination(func: &mut FunctionIR) -> bool {
     }
 
     removed
+}
+
+// Which ValueId (if any) an instruction produces -- mirrors ir_vm.rs's
+// private `produced_dst` (same name, same shape, different crate module;
+// see the comment where this is called for why they must stay in sync).
+fn produced_dst(instr: &Instr) -> Option<u32> {
+    match instr {
+        Instr::Const { dst, .. }
+        | Instr::LoadLocal { dst, .. }
+        | Instr::Unary { dst, .. }
+        | Instr::Binary { dst, .. }
+        | Instr::Call { dst, .. }
+        | Instr::FieldAccess { dst, .. }
+        | Instr::NamespaceAccess { dst, .. }
+        | Instr::Index { dst, .. }
+        | Instr::Match { dst, .. }
+        | Instr::StructInit { dst, .. }
+        | Instr::StructUpdate { dst, .. }
+        | Instr::VariantInit { dst, .. }
+        | Instr::Array { dst, .. }
+        | Instr::Tuple { dst, .. }
+        | Instr::TupleExtract { dst, .. }
+        | Instr::MapInit { dst, .. }
+        | Instr::MapAccess { dst, .. } => Some(*dst),
+
+        Instr::StoreLocal { .. }
+        | Instr::FieldStore { .. }
+        | Instr::IndexStore { .. }
+        | Instr::Return(_) => None,
+    }
 }
 
 // collect used ValueIds from instruction
