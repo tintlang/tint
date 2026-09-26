@@ -42,7 +42,7 @@ body.tint-resizing * { user-select: none; }
 [data-tag="RunBtn"]:hover { background: #ffffff; }
 [data-theme="light"] [data-tag="RunBtn"] { background: #e2e2e2; color: #353849; }
 [data-theme="light"] [data-tag="RunBtn"]:hover { background: #cfcfd6; }
-[data-tag="OutputPanel"] { flex: 0 0 58px; }
+[data-tag="OutputPanel"] { display: none !important; }
 [data-tag="OutputText"] { flex: 1 1 auto; min-width: 0; }
 [data-tag="CodePanel"] { min-height: 0; height: 0; flex: 1 1 0; overflow: hidden; }
 [data-tag="PreviewMount"] { min-height: 0; overflow: auto; }

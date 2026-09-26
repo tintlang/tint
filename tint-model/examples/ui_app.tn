@@ -64,7 +64,7 @@ ui fn App() {
                 Row {
                     direction::row
                     gap::12
-                    Text { text::{13, white} "Mark Bender" }
+                    Text { text::{13, white} "Name Surname" }
                     Text { text::{13, #d8d2f7} "12/29" }
                 }
             }
