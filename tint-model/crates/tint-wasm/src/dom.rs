@@ -249,19 +249,32 @@ fn mount_tree(tree: &[UiRenderNode], shared: &Rc<Shared>) -> Result<(), JsValue>
         .get_element_by_id(&shared.container_id)
         .ok_or_else(|| JsValue::from_str("container element not found"))?;
 
-    while let Some(child) = container.first_child() {
-        container.remove_child(&child)?;
-    }
-
     // Read the viewport once per rebuild (not once per node) so a whole
     // tree is consistent even if the resolution race between reading
     // innerWidth and finishing the rebuild -- not realistic, but cheap
     // to make free.
     let breakpoint = current_breakpoint();
+
+    // Build the whole new subtree off-DOM first, into a fragment nothing
+    // renders, instead of clearing the live container and then building
+    // node-by-node into it. A slower device (mobile, in particular) can
+    // take a visible number of milliseconds to build/style/attach
+    // listeners for a whole tree -- doing that while the container is
+    // already empty risks a real blank flash; building it here means the
+    // container only ever goes from "old tree" to "new tree" in the two
+    // tight calls below, with no empty state in between for the browser
+    // to ever paint.
+    let fragment = document.create_document_fragment();
     for node in tree {
         let el = build_node(&document, node, shared, &breakpoint)?;
-        container.append_child(&el)?;
+        fragment.append_child(&el)?;
     }
+
+    while let Some(child) = container.first_child() {
+        container.remove_child(&child)?;
+    }
+    container.append_child(&fragment)?;
+
     Ok(())
 }
 
