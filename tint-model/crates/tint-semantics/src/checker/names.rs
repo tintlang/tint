@@ -30,7 +30,8 @@ impl SemanticChecker {
             .define_with_mutability("theme", Type::Simple("string".into()), true);
 
         for builtin in [
-            "print", "dbg", "sqrt", "vec2", "clamp", "min", "max", "abs", "sign",
+            "print", "log", "dbg", "debug", "error", "sqrt", "vec2", "clamp", "min", "max",
+            "abs", "sign",
         ] {
             self.known_fns.insert(builtin.to_string());
         }

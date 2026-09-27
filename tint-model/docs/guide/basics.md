@@ -64,7 +64,7 @@ let pos = vec2(10, 20);      // constructors use ()
 These are no longer valid, now that Logic Mode and UI Mode are strictly separated:
 
 ```
-log{"message"}        // wrong — log is a VM/debug helper, not a modifier here: log("message")
+log{"message"}        // wrong — log (an alias for print) is an ordinary function call: log("message")
 increment{5}           // wrong — a logic function call always uses (): increment(5)
 let p = vec2{1,2};      // wrong — constructors use (): vec2(1,2)
 let value = shadow{4px}; // wrong — shadow{} is a UI modifier, not a logic value

@@ -26,17 +26,23 @@ match state {
 
 match result {
     Ok(value) => handle(value),
-    Err(e)    => log{e},
+    Err(e)    => log(e),
 }
 ```
 
 ## For
 
 ```
-for i in 0..10 { print{i}; }                       // range
-for user in users { log{user.name}; }               // collection
-for item in items where item.isActive { process(item); }  // filtered
+for i in 0..10 { print(i); }                       // range
 ```
+
+Logic Mode's `for` only accepts a numeric range (`start..end`); it does not
+support iterating an arbitrary collection or a `where` filter clause yet
+(`for user in users { ... }` and `for item in items where ... { ... }` are
+future ideas, not current syntax -- see `parse_for_stmt` in
+`tint-parser/src/parse_stmt/control_flow.rs`). UI Mode's `for{item in
+items}` on a UI node is a separate mechanism and does iterate an arbitrary
+list already (see `ui/blocks.md`).
 
 ## While / loop
 
@@ -55,7 +61,7 @@ loop {
 for i in 0..100 {
     if i == 5 { break; }
     if i % 2 == 0 { continue; }
-    log{i};
+    log(i);
 }
 ```
 
@@ -64,25 +70,28 @@ for i in 0..100 {
 ```
 match fetch() {
     Ok(value) => process(value),
-    Err(err)  => log{err},
+    Err(err)  => log(err),
 }
 
 let res = fetch();
 if res.isErr() {
-    error{"Network failed"};
+    error("Network failed");
 }
 ```
 
 ## A note on `{}` vs `()` in this context
 
-Built-in VM/debug helpers like `log{}`, `print{}`, `debug{}`, `error{}` use `{}`;
-ordinary user-defined function calls use `()`. Mixing them up is the most common
-mistake here:
+There is no `{}`-based call syntax anywhere in Logic Mode. `log`, `print`,
+`debug`, `dbg`, and `error` are ordinary built-in functions, called exactly
+like any other function or constructor: with `()`. `log` is an alias for
+`print`; `debug` is an alias for `dbg` (a combined-args dump prefixed
+`DBG: `); `error` behaves like `print` but is also written to stderr
+natively and prefixed `ERROR: `.
 
 ```
-log("text")          // wrong — VM helpers use {}
-increment{5}           // wrong — logic functions use ()
-shadow(4px)             // wrong — that's a UI modifier, it uses ::
+log{"text"}             // wrong — every function call uses (): log("text")
+increment{5}            // wrong — a logic function call always uses (): increment(5)
+shadow(4px)              // wrong — that's a UI modifier, it uses ::
 ```
 
 ## Full example
@@ -93,7 +102,7 @@ fn renderItems() {
         if item.enabled {
             showItem(item);
         } else {
-            debug{"Skipped disabled item"};
+            debug("Skipped disabled item");
         }
     }
 }

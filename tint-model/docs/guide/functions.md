@@ -28,8 +28,11 @@ ui fn Counter() {
 }
 ```
 
-The runtime currently supports `click`, `hover_in`, and `hover_out` handler
-attributes. A UI node only references a handler by name.
+The runtime currently supports `click`, `pointer_down`, `hover_in`, and
+`hover_out` handler attributes, plus the game-facing `key_down`, `key_up`,
+and `frame` events on a `GameRoot` node. A UI node only references a
+handler by name. See `guide/events.md` for the full list and the
+`GameRoot` example.
 
 ## Methods and draft generics
 

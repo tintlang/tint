@@ -25,16 +25,16 @@ For time-independent sprite/UI animation, Tint also forwards CSS animation
 properties through the same motion/style resolver:
 
 ```tn
-Pacman {
-    key::"pacman"
+Sprite {
+    key::"player"
     motion::{
-        animation::"pacman-waka 120ms steps(3) infinite",
+        animation::"walk-cycle 120ms steps(3) infinite",
         animation-play-state::running
     }
 }
 ```
 
-The keyframes are authored by the renderer stylesheet (or a future Tint
-keyframe block). `key::...` is significant: the DOM renderer keeps that node
-alive across rerenders, so the browser does not restart its animation every
-time game state changes.
+The keyframes are authored by the renderer stylesheet -- there is no Tint
+keyframe block yet; that remains a future idea, not current syntax. `key::...`
+is significant: the DOM renderer keeps that node alive across rerenders, so
+the browser does not restart its animation every time game state changes.
