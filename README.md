@@ -1,7 +1,7 @@
 # Tint
 
-Tint is a small declarative UI DSL for Rust/WASM applications — without React or
-Svelte.
+Tint is a small declarative UI DSL for Rust/WASM applications, with a direct
+Rust-to-DOM rendering path.
 
 ```tint
 ui fn App() {
@@ -22,7 +22,7 @@ ui fn App() {
 ## Features
 
 - **Compiler pipeline**: Lexer → Parser → AST → Semantic Checker → SSA IR → Optimizer → WASM
-- **UI as first-class citizen**: No HTML/CSS/JS split—UI is the language
+- **UI as a first-class value**: Tint owns the UI tree and rendering semantics, while CSS and JavaScript remain available for styling and host/browser integration
 - **Semantic modifier groups**: `layout::{...}`, `paint::{...}`, and `motion::{...}`; flat modifiers remain accepted for compatibility
 - **Control flow**: `if/else`, `for` loops, functions with persistence, full comparison operators (`< > <= >= == !=`) alongside `&& ||`
 - **Real state + events**: `state`, `click||`, `hover_in||`/`hover_out||` drive a persistent, re-rendering session
