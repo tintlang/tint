@@ -42,6 +42,52 @@ pub(super) fn find_for(modifiers: &[UiModifier]) -> Option<(String, &Expr)> {
     })
 }
 
+/// Finds this node's `match{scrutinee}` modifier, if any. Same shape as
+/// `find_for`, minus the extra loop-variable name -- `match{}` parses to a
+/// plain `UiModifierValue::Expr` (see tint-parser/src/ui/xml.rs), unlike
+/// `for{}`'s `MiniMod`.
+pub(super) fn find_match(modifiers: &[UiModifier]) -> Option<&Expr> {
+    modifiers.iter().find_map(|m| {
+        if m.path.len() != 1 || m.path[0] != "match" {
+            return None;
+        }
+        if let UiModifierValue::Expr(e) = &m.value {
+            return Some(e);
+        }
+        None
+    })
+}
+
+/// Reads a `case`-tagged child's label -- the identifier captured by the
+/// parser's `<case ready>` handling (see tint-parser/src/ui/xml.rs; a bare
+/// trailing identifier with no `||`/`::` after it is recorded as a
+/// synthetic `case` attribute rather than discarded). `_` is the wildcard
+/// arm, matched by `case_label_matches` below regardless of the scrutinee.
+pub(super) fn find_case_label(attributes: &[UiAttribute]) -> Option<String> {
+    attributes.iter().find_map(|a| {
+        if a.name != "case" {
+            return None;
+        }
+        match &a.value {
+            UiAttrValue::Ident(label) => Some(label.clone()),
+            _ => None,
+        }
+    })
+}
+
+/// A case arm matches when its label is the wildcard `_`, or when it's
+/// exactly equal to the scrutinee's own display text -- the same
+/// stringification `render_ui_text` already uses for interpolations, so
+/// `match{status}` against a `status = "ready"` string and a `<case
+/// ready>` label compare the same way a `"{status}"` interpolation would
+/// display it. Deliberately simple (whole-value string equality, no
+/// pattern destructuring) -- matches this project's existing "narrow but
+/// real" scope for UI-tree control flow (`if{}`/`for{}}` are similarly
+/// plain, non-destructuring evaluations).
+pub(super) fn case_label_matches(label: &str, scrutinee: &EvalValue) -> bool {
+    label == "_" || label == scrutinee.to_string()
+}
+
 /// Reads this node's `click||`/`hover_in||`/`hover_out||` attributes (a
 /// bare `handler_name`, i.e. `UiAttrValue::Ident`) and records them on
 /// the tree node, so the render tree carries real handler names instead

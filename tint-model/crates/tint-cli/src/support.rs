@@ -63,27 +63,21 @@ pub(crate) fn report_semantic_error(source: &str, error: &SemanticError) {
 }
 
 pub(crate) fn has_fn(program: &Program, name: &str) -> bool {
-    program
-        .items
-        .iter()
-        .any(|item| matches!(item, Item::Fn(function) if function.name == name))
+    program.items.iter().any(|item| match item {
+        Item::Fn(function) | Item::ExportFn(function, _) => function.name == name,
+        _ => false,
+    })
 }
 
 pub(crate) fn check_command(path: Option<&String>) {
     let path = require_arg(path, "tint check <file.tn>");
-    let source = read_file(path);
-    let program = match parse_source(&source) {
-        Ok(program) => program,
-        Err(error) => {
-            report_parse_error(&source, &error);
-            std::process::exit(1);
-        }
-    };
+    let loaded = crate::module_loader::load(path);
+    let program = loaded.program;
 
     let errors = semantic_check(&program);
     if !errors.is_empty() {
         for error in &errors {
-            report_semantic_error(&source, error);
+            report_semantic_error(&loaded.entry_source, error);
         }
         eprintln!(
             "{} semantic error(s) ({} top-level item(s) parsed)",

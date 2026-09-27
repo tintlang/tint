@@ -1,7 +1,8 @@
 use std::fs;
 use std::path::Path;
 
-use crate::support::{parse_source, read_file, report_parse_error, require_arg};
+use crate::module_loader;
+use crate::support::{require_arg, semantic_check};
 
 const TINT_WASM_JS: &str = include_str!("../embedded/tint_wasm.js");
 const TINT_WASM_BG: &[u8] = include_bytes!("../embedded/tint_wasm_bg.wasm");
@@ -31,11 +32,16 @@ fn parse_options(args: &[String]) -> (String, Option<String>) {
 }
 
 fn build_file(path: &str, entry: &str, output: Option<&str>) {
-    let source = read_file(path);
-    if let Err(error) = parse_source(&source) {
-        report_parse_error(&source, &error);
-        std::process::exit(1);
+    // Loading (not just parsing) validates `mod`/`use` the same way `run`/
+    // `check` do, and gives us every reachable file's raw source to embed
+    // -- see `standalone_html`'s doc comment on why plain concatenation of
+    // those texts is enough, with no unparser needed.
+    let loaded = module_loader::load(path);
+    for error in &semantic_check(&loaded.program) {
+        eprintln!("warning: semantic:");
+        crate::support::report_semantic_error(&loaded.entry_source, error);
     }
+    let combined_source = loaded.all_sources.join("\n\n");
 
     let output = output.map(str::to_owned).unwrap_or_else(|| {
         let stem = Path::new(path)
@@ -45,7 +51,7 @@ fn build_file(path: &str, entry: &str, output: Option<&str>) {
         format!("{}.html", stem)
     });
 
-    if let Err(error) = fs::write(&output, standalone_html(&source, entry)) {
+    if let Err(error) = fs::write(&output, standalone_html(&combined_source, entry)) {
         eprintln!("error writing '{}': {}", output, error);
         std::process::exit(1);
     }
@@ -53,6 +59,16 @@ fn build_file(path: &str, entry: &str, output: Option<&str>) {
     println!("built: {} (entry: `ui fn {}`)", output, entry);
 }
 
+/// `source` here is every reachable file's raw text concatenated together
+/// (see `Loaded::all_sources`), not just the entry file's. This works with
+/// zero extra handling on the browser side: `DomSession`'s wasm-side parser
+/// has no filesystem and no module loader at all, so `mod name;`/`use
+/// a::b;` lines just parse into `Item::Mod`/`Item::Use` nodes that nothing
+/// downstream (`register_functions`, the IR compiler, the checker) ever
+/// acts on -- harmless no-ops -- while the actual functions/structs/enums
+/// from every module are already present verbatim in the blob, directly
+/// callable by their bare name, exactly as the CLI-side loader's own
+/// flattening already relies on the VM being one flat namespace.
 fn standalone_html(source: &str, entry: &str) -> String {
     let source = source
         .replace('\\', "\\\\")

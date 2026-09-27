@@ -20,8 +20,8 @@ single struct can't mix the two styles. Initialization mirrors this: `User { id:
 name: "Marek" }` or `User { id{10}, name{"Marek"} }`. Struct update syntax also
 works: `User { ..old, score{40} }`.
 
-**Enums:** unit variants (`Ready`), tuple variants (`Error(string)`), and struct-like
-variants (`BadInput { msg: string, code: i32 }`).
+**Enums:** unit and struct-like variants are usable in the current runtime.
+Tuple-style variants are parser-level only and are not supported end to end.
 
 **Arrays:** `[1, 2, 3]`, nested (`[[1,2], [3,4]]`).
 
@@ -30,7 +30,7 @@ and the short expression form `fn add(a: i32, b: i32) = a + b`. Default paramete
 (`fn greet(name: string, prefix: string{"Hello"})`) and named-argument-style calls
 (`login { user{"Marek"}, password{"123"} }`) both parse.
 
-**Lambdas:** `|x| x + 1`, `|a,b| a*b`.
+**Lambdas:** the syntax parses, but lambda lowering is not complete in the IR VM.
 
 **Control flow:** `if/else`, `while`, `loop`, `for x in 0..10`, `return`, `break`,
 `continue`.
@@ -50,50 +50,47 @@ match user {
 }
 ```
 
-**Tuples:** `(10, 20)`, destructuring (`let (x, y) = p`), as return types
-(`fn dims() -> (i32, i32) { (1920, 1080) }`), and in `match`.
+**Tuples:** the syntax parses and is covered by parts of the tree-walking runtime;
+the full IR/runtime path is still being completed.
 
-**Modules:** `use X::Y`, `mod`, `export` parse (see `guide/modules.md` for the
-settled design).
+**Modules:** `use X::Y`, `mod`, and `export` work end to end via a
+`tint-cli`-side loader (not a VM-level concept): `mod name;` resolves to
+`name.tn` or `name/mod.tn` (the `mod.rs` convention), `use` paths are
+absolute and single-name only (no `{a, b}` groups, `as` aliasing, or `*`
+wildcards), and only `fn`/`struct`/`enum` are exportable/importable. See
+`examples/modules/`. Note: this is a different, simpler design than the
+`run.tn`-based one sketched in `guide/modules.md` — that doc describes a
+future direction, not what's built.
 
 **Map literals:** `map { a{1}, b{2} }`.
 
-**Generics:** `Option<T>` / `Result<T, E>` as tagged unions with struct-like
-variants (`Some { value }` / `None {}`, `Ok { value }` / `Err { error }`), plus
-user-defined generic structs (`Pair<T, U>`).
+**Generics:** generic syntax parses in several positions, but generic runtime
+semantics are not a supported end-to-end feature.
 
 **Union type sugar:** `type Number = union(i32 | f32 | f64)`.
 
-**Kits and GPU kernels:** `@kit.*` struct composition (see `guide/kits.md`) and
-`kernel` declarations with `global_id()`, `.gpu()` calls, and `borrow`-gated GPU
-work all parse, alongside `space` blocks for grouping kernels/impls/functions.
+**Kits and GPU kernels:** syntax experiments exist in the parser, but there is
+no supported GPU/WebGPU runtime for them.
 
-## Not yet implemented
+## Not yet implemented or not supported end to end
 
 - A settled `Option`/`Result` DSL (`throw`, `try`, `catch`) — several shapes have
   been prototyped but none is final.
-- Move-checking beyond the basic resource model in
-  `guide/resources-and-borrowing.md` (e.g. `let t = s; print(s)` as a hard error for
-  ordinary values, not just resources).
-- The remaining UI work is limited to broader component semantics and additional
-  runtime behavior. The implemented core is `ui fn`, named block nodes, `::`
-  modifiers, `layout`/`paint`/`motion` groups, themes, responsive blocks, grid,
-  internal `route||"/path"` links, and named events.
-- The browser sandbox is Tint-rendered. `npm run dev:all` watches nested `.tn`
-  imports and rebuilds Rust/WASM changes automatically.
+- Move-checking beyond the basic runtime model, including ordinary-value moves.
+- Broader component semantics and additional runtime behavior remain future work.
+- GPU/WebGPU, Tint2D, tensors, async execution, resource borrowing, and kits
+  are intentionally outside the current supported scope. The module system
+  has a basic working version (see above); grouped/aliased imports and a
+  richer `run.tn`-style design remain future work.
+- The browser sandbox is a working prototype. `npm run dev:all` watches nested
+  `.tn` imports and rebuilds Rust/WASM changes automatically.
 
 ## Roadmap
 
-1. Booleans + the unit literal
-2. Tuples
-3. Default parameters
-4. Named-argument call syntax
-5. Struct update syntax
-6. Pattern matching
-7. Map literals + `Option`/`Result`
-8. Modules
-9. Broader UI component semantics
-
-Later, lower priority: async/await with a minimal state machine, guard patterns in
-`match` (already partly working), built-in error types, confirming `match` behaves
-as an expression everywhere (it mostly already does).
+A basic end-to-end semantic checker, a real standalone build that embeds
+the WASM runtime, and `match{}` evaluation in UI trees (XML-mode `<case
+label>`/`<case _>` children only -- see `tint-runtime/tests/render_ui.rs`)
+have all landed. The next useful milestones are a stable language
+reference, a block-mode equivalent for `match{}`/`case`, and broader UI
+component semantics. GPU/WebGPU and async features remain future
+experiments.

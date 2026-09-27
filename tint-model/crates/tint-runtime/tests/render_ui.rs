@@ -159,3 +159,111 @@ ui fn Widget() {
     );
     assert_eq!(nodes[0].children[0].text, Some("Shown".to_string()));
 }
+
+// `match{scrutinee}` + XML-mode `<case label>...</case>` children used to
+// parse into completely inert AST -- worse, the parser silently discarded
+// each `<case>`'s own label token (`ready`/`error`/...), so two different
+// cases parsed into byte-identical nodes with no way to tell them apart
+// even if something HAD tried to evaluate them (see
+// tint-parser/src/ui/xml.rs's `parse_modifier_list_xml`). Proves the label
+// now survives parsing and only the matching arm's children are built --
+// the `<case>` wrapper itself never shows up in the render tree.
+#[test]
+fn match_modifier_builds_only_the_matching_case_arm() {
+    let code = r#"
+ui fn TestMatch(status) {
+    <Block match{status}>
+        <case ready>   <Text>"OK"</Text> </case>
+        <case error>   <Text>"ERR"</Text> </case>
+        <case loading> <Text>"LOAD"</Text> </case>
+    </Block>
+}
+"#;
+
+    let tokens = collect_tokens(&mut Lexer::new(code));
+    let mut parser = Parser::new(tokens);
+    let program = parser.parse_program().expect("parse failed");
+
+    let mut vm = TintVM::new();
+    vm.run_program(&program);
+
+    let nodes = vm
+        .render_ui_fn("TestMatch", &[tint_evaluator::value::Value::String("error".into())])
+        .expect("render_ui_fn failed");
+
+    assert_eq!(nodes.len(), 1, "one top-level node (Block)");
+    let block = &nodes[0];
+    assert_eq!(
+        block.children.len(),
+        1,
+        "only the matching <case error> arm's children were built, not all three cases' worth"
+    );
+    assert_eq!(block.children[0].tag, "Text");
+    assert_eq!(block.children[0].children[0].text, Some("ERR".to_string()));
+}
+
+#[test]
+fn match_modifier_falls_back_to_the_wildcard_case() {
+    let code = r#"
+ui fn TestMatch(status) {
+    <Block match{status}>
+        <case ready> <Text>"OK"</Text> </case>
+        <case _>     <Text>"UNKNOWN"</Text> </case>
+    </Block>
+}
+"#;
+
+    let tokens = collect_tokens(&mut Lexer::new(code));
+    let mut parser = Parser::new(tokens);
+    let program = parser.parse_program().expect("parse failed");
+
+    let mut vm = TintVM::new();
+    vm.run_program(&program);
+
+    let nodes = vm
+        .render_ui_fn(
+            "TestMatch",
+            &[tint_evaluator::value::Value::String("something_else".into())],
+        )
+        .expect("render_ui_fn failed");
+
+    let block = &nodes[0];
+    assert_eq!(block.children.len(), 1, "the wildcard `_` case matched");
+    assert_eq!(
+        block.children[0].children[0].text,
+        Some("UNKNOWN".to_string())
+    );
+}
+
+#[test]
+fn match_modifier_with_no_matching_case_and_no_wildcard_renders_nothing() {
+    let code = r#"
+ui fn TestMatch(status) {
+    <Block match{status}>
+        <case ready> <Text>"OK"</Text> </case>
+        <case error> <Text>"ERR"</Text> </case>
+    </Block>
+}
+"#;
+
+    let tokens = collect_tokens(&mut Lexer::new(code));
+    let mut parser = Parser::new(tokens);
+    let program = parser.parse_program().expect("parse failed");
+
+    let mut vm = TintVM::new();
+    vm.run_program(&program);
+
+    let nodes = vm
+        .render_ui_fn(
+            "TestMatch",
+            &[tint_evaluator::value::Value::String("loading".into())],
+        )
+        .expect("render_ui_fn failed");
+
+    let block = &nodes[0];
+    assert_eq!(
+        block.children.len(),
+        0,
+        "no case matched and there's no wildcard -- the Block stays empty, not a crash"
+    );
+}

@@ -1,0 +1,7 @@
+export fn circle_area(radius) {
+    radius * radius * 3.14159
+}
+
+fn debug_note() {
+    "internal only -- never `use`d, so it never leaves this module"
+}

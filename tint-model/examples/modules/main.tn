@@ -1,0 +1,7 @@
+mod shapes;
+
+use shapes::circle_area;
+
+fn main() {
+    circle_area(3)
+}

@@ -75,7 +75,7 @@ impl TintVM {
         );
         for item in &program.items {
             match item {
-                Item::Fn(f) => {
+                Item::Fn(f) | Item::ExportFn(f, _) => {
                     eprintln!(
                         "DEBUG register_functions: registering logic function: {}",
                         f.name

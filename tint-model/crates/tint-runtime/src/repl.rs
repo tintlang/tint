@@ -133,10 +133,10 @@ fn run_source(source: &str, entry: Option<&str>) -> Result<(Option<String>, Stri
     };
 
     let has_entry = entry.is_some_and(|name| {
-        program
-            .items
-            .iter()
-            .any(|item| matches!(item, Item::Fn(f) if f.name == name))
+        program.items.iter().any(|item| match item {
+            Item::Fn(f) | Item::ExportFn(f, _) => f.name == name,
+            _ => false,
+        })
     });
 
     let outcome = catch_unwind(AssertUnwindSafe(|| {

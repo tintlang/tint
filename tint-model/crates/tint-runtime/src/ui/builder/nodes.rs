@@ -62,9 +62,49 @@ impl UiBuilder {
                     host.pop_scope();
                 }
             }
-            None => {
-                self.build_children(id, children, host);
-            }
+            None => match find_match(modifiers) {
+                // `match{scrutinee}` on this node: only the first
+                // `case`-tagged child whose label matches (or `_`) gets
+                // built, spliced straight into `id` -- the `<case ...>`
+                // wrapper itself never appears in the render tree, only
+                // its own children do. A child that isn't `case`-tagged
+                // (rare, but not forbidden) always builds, same as if
+                // there were no `match{}` at all.
+                Some(scrutinee_expr) => {
+                    let scrutinee = host.eval_expr(scrutinee_expr);
+                    let mut matched = false;
+
+                    for child in children {
+                        let UiNodeOrExpr::Node(node) = child else {
+                            self.build_children(id, std::slice::from_ref(child), host);
+                            continue;
+                        };
+                        let (case_children, case_attrs) = match node {
+                            UiNode::Element {
+                                children,
+                                attributes,
+                                ..
+                            } => (Some(children), Some(attributes)),
+                            _ => (None, None),
+                        };
+                        let Some(label) = case_attrs.and_then(|a| find_case_label(a)) else {
+                            // Not a `case`-tagged child at all -- build it
+                            // unconditionally, same as a plain sibling.
+                            self.build_into(id, node, host);
+                            continue;
+                        };
+                        if !matched && case_label_matches(&label, &scrutinee) {
+                            matched = true;
+                            if let Some(case_children) = case_children {
+                                self.build_children(id, case_children, host);
+                            }
+                        }
+                    }
+                }
+                None => {
+                    self.build_children(id, children, host);
+                }
+            },
         }
 
         Some(id)

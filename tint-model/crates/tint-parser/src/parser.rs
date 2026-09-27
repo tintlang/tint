@@ -177,6 +177,20 @@ impl Parser {
 
         let name = self.parse_ident()?;
 
+        // `mod name;` -- file-backed submodule. No body here; the CLI's
+        // module loader resolves and parses `name.tn`/`name/mod.tn` and
+        // fills `items` in afterwards (see `ModDecl::external`'s doc
+        // comment). The parser stays filesystem-free.
+        if self.stream.consume_if(TokenKind::Semicolon) {
+            let end = self.stream.last_span();
+            return Ok(ModDecl {
+                name,
+                items: Vec::new(),
+                external: true,
+                span: Span::merge(start, end),
+            });
+        }
+
         self.stream.expect(TokenKind::LBrace)?;
 
         let mut items = Vec::new();
@@ -188,6 +202,7 @@ impl Parser {
         Ok(ModDecl {
             name,
             items,
+            external: false,
             span: Span::merge(start, end),
         })
     }

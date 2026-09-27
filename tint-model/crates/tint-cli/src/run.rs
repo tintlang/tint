@@ -5,10 +5,8 @@ use tint_evaluator::value::Value;
 use tint_evaluator::EvalHost;
 use tint_runtime::vm::TintVM;
 
-use crate::support::{
-    has_fn, parse_source, read_file, report_parse_error, report_semantic_error, require_arg,
-    semantic_check,
-};
+use crate::module_loader;
+use crate::support::{has_fn, report_semantic_error, require_arg, semantic_check};
 
 pub(crate) fn command(path: Option<&String>, function: Option<&str>) {
     let path = require_arg(path, "tint run <file.tn> [fn_name]");
@@ -16,18 +14,12 @@ pub(crate) fn command(path: Option<&String>, function: Option<&str>) {
 }
 
 fn run_file(path: &str, function: &str) {
-    let source = read_file(path);
-    let program = match parse_source(&source) {
-        Ok(program) => program,
-        Err(error) => {
-            report_parse_error(&source, &error);
-            std::process::exit(1);
-        }
-    };
+    let loaded = module_loader::load(path);
+    let program = loaded.program;
 
     for error in &semantic_check(&program) {
         eprintln!("warning: semantic:");
-        report_semantic_error(&source, error);
+        report_semantic_error(&loaded.entry_source, error);
     }
 
     let mut vm = TintVM::new();

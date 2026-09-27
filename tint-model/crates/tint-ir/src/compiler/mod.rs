@@ -21,8 +21,11 @@ impl SsaCompiler {
         let mut out = ProgramIR::new();
 
         for item in &prog.items {
-            if let Item::Fn(f) = item {
-                out.functions.push(self.compile_fn(f));
+            match item {
+                Item::Fn(f) | Item::ExportFn(f, _) => {
+                    out.functions.push(self.compile_fn(f));
+                }
+                _ => {}
             }
         }
 

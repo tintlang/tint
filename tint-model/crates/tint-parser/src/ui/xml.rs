@@ -69,6 +69,20 @@ impl Parser {
         let mut attrs = Vec::new();
         let mut mods = Vec::new();
 
+        // `<case _>` -- the wildcard `match{}` arm. `_` lexes as its own
+        // `TokenKind::Underscore`, not `Ident` (same token the `match`
+        // expression's wildcard pattern uses in Logic Mode), so it needs
+        // its own check up front rather than falling through the bare-ident
+        // capture below.
+        if self.stream.peek().kind == TokenKind::Underscore {
+            let tok = self.stream.next();
+            attrs.push(UiAttribute {
+                name: "case".to_string(),
+                value: UiAttrValue::Ident("_".to_string()),
+                span: tok.span,
+            });
+        }
+
         while self.stream.peek().kind == TokenKind::Ident {
             let tok = self.stream.next();
             let name = tok.lexeme.clone();
@@ -101,7 +115,19 @@ impl Parser {
                 continue;
             }
 
-            // Stop when the identifier is neither an attribute nor a modifier.
+            // A bare trailing identifier with neither `||` nor `::` after
+            // it -- e.g. `ready` in `<case ready>` -- isn't an attribute or
+            // a modifier, but it isn't meaningless either: it's a `match{}`
+            // case label (see tint-runtime/src/ui/builder/helpers.rs's
+            // `find_case_label`). Record it as a synthetic `case` attribute
+            // rather than silently dropping it (the previous behavior --
+            // `<case ready>` and `<case error>` used to parse into
+            // byte-identical AST nodes, with no way to tell them apart).
+            attrs.push(UiAttribute {
+                name: "case".to_string(),
+                value: UiAttrValue::Ident(path.join(".")),
+                span,
+            });
             break;
         }
         // Control-flow modifiers are parsed after regular attributes and modifiers.

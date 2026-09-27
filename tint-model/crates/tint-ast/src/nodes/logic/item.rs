@@ -21,7 +21,14 @@ pub struct ImportDecl {
 #[derive(Debug, Clone)]
 pub struct ModDecl {
     pub name: String,
+    /// `mod name { ... }` (inline): populated directly by the parser.
+    /// `mod name;` (file-backed, `external == true`): empty right after
+    /// parsing -- `tint-cli`'s module loader resolves `name.tn` (or
+    /// `name/mod.tn`) relative to the declaring file and fills this in
+    /// before the program is checked/run/built. The parser never touches
+    /// the filesystem itself.
     pub items: Vec<Item>,
+    pub external: bool,
     pub span: Span,
 }
 

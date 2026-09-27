@@ -1,6 +1,7 @@
 # Tint
 
-A UI programming language that compiles to WebAssembly and runs in the browser.
+Tint is a small declarative UI DSL for Rust/WASM applications — without React or
+Svelte.
 
 ```tint
 ui fn App() {
@@ -24,9 +25,10 @@ ui fn App() {
 - **Layout primitives**: flex direction and a typed `grid::{ columns, rows, gap }` modifier with `minmax(0, 1fr)`-friendly tracks
 - **Internal routing**: `route||"/path"` renders as a normal browser link, including `/` and `/sandbox`
 - **Direct DOM rendering**: `DomSession` renders Tint through Rust/`web-sys`, without a UI framework
-- **Interactive sandbox**: Edit, compile, and preview in the browser with Tint, CodeMirror 6, and WASM (the sandbox UI itself is currently mid-rework and will land as a deliberately simple workbench, not a full IDE -- see `sandbox/README.md` for status)
-- **CLI tools**: Check syntax, run, build to HTML
+- **Interactive sandbox**: Edit, compile, and preview in the browser with Tint, CodeMirror 6, and WASM
+- **CLI tools**: Check syntax, run, and generate a prototype HTML shell
 - **Native Rust interop**: `TintVM::register_native("name", |args| ...)` registers a real Rust closure that `.tn` source calls directly by name -- no Rust syntax inside the language, no reimplementing rustc's borrow checker, just an ordinary Rust function called across the boundary (see `tint run <file> now_ms`, a demo native in `tint-cli`)
+- **Multi-file modules**: `mod name;` resolves to `name.tn` or `name/mod.tn` (the `mod.rs` convention); `use path::to::item;` + `export` control what crosses file boundaries (see `examples/modules/`)
 - **VSCode extension**: Syntax highlighting + build commands
 
 ## Quick Start
@@ -34,16 +36,16 @@ ui fn App() {
 ### CLI
 
 ```bash
-# Install
-cd tint/tint-model
+# Build the CLI
+cd tint-model
 cargo build -p tint-cli --release
 export PATH="$PWD/target/release:$PATH"
 
 # Check syntax
 tint check app.tn
 
-# Build to HTML
-tint build app.tn -o app.html
+# Build a standalone HTML file (real embedded WASM, works offline from disk)
+tint build app.tn [ui_fn] -o app.html
 
 # Run in REPL
 tint repl
@@ -71,12 +73,9 @@ npm run dev:all
 
 Open browser to `http://localhost:5173` and edit code live.
 
-> **Status:** the sandbox UI is currently being reworked -- migrating from a
-> single `sandbox.tn` file to a `src/sandbox/` directory of Tint files
-> (`workbench.tn`, `actions.tn`, `filesystem.tn`, `editor-pane.tn`,
-> `index.tn`). The sandbox will keep existing, just deliberately simple --
-> not a full IDE. It is not confirmed working end-to-end yet; see
-> `sandbox/README.md` for the current state before relying on it.
+> **Status:** the sandbox is a deliberately small workbench, not a full IDE.
+> It currently uses `sandbox/src/sandbox.tn`, CodeMirror, a live WASM preview,
+> and direct DOM rendering through `DomSession`.
 
 ## Project Structure
 
@@ -115,11 +114,12 @@ tint/
 ✅ Grid layout and internal route links
 ✅ Automatic `.tn` reload and Rust/WASM rebuild with `npm run dev:all`
 ✅ A native fn called from *inside* a plain `fn`'s own body, invoked the normal top-level way through the IR VM -- `IrVM` now falls back to a native-lookup callback (`set_native_call`) when no IR-compiled function matches the callee name, backed by `TintVM::native_fns` (see `tint-runtime/tests/native_fn.rs`)
+✅ Multi-file modules (`mod`/`use`/`export`) via a `tint-cli`-side loader -- absolute, single-name `use` paths only; `fn`/`struct`/`enum` are exportable
 
 ## Known Gaps
 
 ❌ Multiple independent component instances (state is one flat scope per `UiSession`)
-❌ `match{}` in UI trees (parsed, not evaluated)
+✅ `match{}` in UI trees, XML-mode only: `<case label>...</case>` children (`<case _>` as the wildcard arm), matched by comparing the scrutinee's display text against each label -- see `tint-runtime/tests/render_ui.rs`
 ✅ Compile-time `.tn` imports in the Vite sandbox source pipeline
 ❌ Namespace access (`Ns::item`) and lambda expressions are unimplemented specifically in the IR VM path (both already work through the tree-walking path used for UI handlers)
 ❌ Tuple-style enum variants (`enum E { A(T) }`) -- rejected at the semantic-check stage; only named-field variants (`enum E { A { x } }`) are supported

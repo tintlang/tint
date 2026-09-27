@@ -1,4 +1,5 @@
 mod build;
+mod module_loader;
 mod repl;
 mod run;
 mod support;
