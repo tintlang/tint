@@ -55,12 +55,28 @@ the full IR/runtime path is still being completed.
 
 **Modules:** `use X::Y`, `mod`, and `export` work end to end via a
 `tint-cli`-side loader (not a VM-level concept): `mod name;` resolves to
-`name.tn` or `name/mod.tn` (the `mod.rs` convention), `use` paths are
-absolute and single-name only (no `{a, b}` groups, `as` aliasing, or `*`
-wildcards), and only `fn`/`struct`/`enum` are exportable/importable. See
-`examples/modules/`. Note: this is a different, simpler design than the
-`run.tn`-based one sketched in `guide/modules.md` — that doc describes a
-future direction, not what's built.
+`name.tn` or `name/mod.tn` (the `mod.rs` convention). `use` paths are always
+absolute from the entry file's own module tree (no `self::`/`super::`),
+but otherwise support grouped imports (`use a::{b, c}`, arbitrarily
+nested), `as` aliasing (`use a::b as c;`), and wildcard imports
+(`use a::*;`) alongside the plain single-item form, and only
+`fn`/`struct`/`enum` are exportable/importable. See `examples/modules/`
+and `tint-cli/src/module_loader.rs`'s own tests. Note: this is a
+different, simpler design than the `run.tn`-based one sketched in
+`guide/modules.md` — that doc describes a future direction, not what's
+built.
+
+**Semantic checker:** a basic pass (undefined-variable and
+duplicate-binding checks, not type checking -- `TypeMismatch` exists in
+`tint-semantics/src/errors.rs` for later, nothing constructs it yet) runs
+over `fn` bodies, `ui fn` bodies (modifiers, attributes, text
+interpolations, `if{}`/`for{}` control flow -- a `for{var in ...}`'s loop
+variable is correctly scoped to just that node's children), and `impl`
+method bodies (`self` binds like any other parameter). `tint check`
+reports its errors as fatal; `tint run` reports them as non-fatal
+warnings and still executes. Method calls (`x.foo()`), namespaced calls
+(`Type::foo()`), and declarations' own field/variant types are not
+checked -- those need a value's type, which this pass doesn't track.
 
 **Map literals:** `map { a{1}, b{2} }`.
 
@@ -80,17 +96,24 @@ no supported GPU/WebGPU runtime for them.
 - Broader component semantics and additional runtime behavior remain future work.
 - GPU/WebGPU, Tint2D, tensors, async execution, resource borrowing, and kits
   are intentionally outside the current supported scope. The module system
-  has a basic working version (see above); grouped/aliased imports and a
-  richer `run.tn`-style design remain future work.
+  has a basic working version (see above); a richer `run.tn`-style design
+  (relative paths, grouped-with-`as`-in-one-statement ergonomics beyond
+  what's already supported, a real external-package concept) remains
+  future work.
 - The browser sandbox is a working prototype. `npm run dev:all` watches nested
   `.tn` imports and rebuilds Rust/WASM changes automatically.
 
 ## Roadmap
 
-A basic end-to-end semantic checker, a real standalone build that embeds
-the WASM runtime, and `match{}` evaluation in UI trees (XML-mode `<case
-label>`/`<case _>` children only -- see `tint-runtime/tests/render_ui.rs`)
-have all landed. The next useful milestones are a stable language
-reference, a block-mode equivalent for `match{}`/`case`, and broader UI
-component semantics. GPU/WebGPU and async features remain future
-experiments.
+A basic end-to-end semantic checker (now covering `fn`, `ui fn`, and
+`impl` method bodies -- still existence/duplicate-binding checks only, no
+type checking), a real standalone build that embeds the WASM runtime, a
+module system with grouped/aliased/wildcard `use` imports, and `match{}`
+evaluation in UI trees (XML-mode `<case label>`/`<case _>` children only
+-- see `tint-runtime/tests/render_ui.rs`) have all landed. The next
+useful milestones are a stable language reference, a block-mode
+equivalent for `match{}`/`case`, lambda lowering to SSA IR (lambdas parse
+and run today only through the tree-walking evaluator, not the IR-compiled
+path -- see the "Lambdas" entry above and `tint-ir/src/compiler/expressions.rs`),
+and broader UI component semantics. GPU/WebGPU and async features remain
+future experiments.

@@ -9,6 +9,7 @@ tint-parser = { path = "../tint-parser" }
 tint-ir = { path = "../tint-ir" }
 tint-lexer = { path = "../tint-lexer" }
 tint-evaluator = { path = "../tint-evaluator" }
+tint-semantics = { path = "../tint-semantics" }
 
 thiserror = "1.0"
 async-trait = "0.1"

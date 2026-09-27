@@ -114,7 +114,8 @@ tint/
 ✅ Grid layout and internal route links
 ✅ Automatic `.tn` reload and Rust/WASM rebuild with `npm run dev:all`
 ✅ A native fn called from *inside* a plain `fn`'s own body, invoked the normal top-level way through the IR VM -- `IrVM` now falls back to a native-lookup callback (`set_native_call`) when no IR-compiled function matches the callee name, backed by `TintVM::native_fns` (see `tint-runtime/tests/native_fn.rs`)
-✅ Multi-file modules (`mod`/`use`/`export`) via a `tint-cli`-side loader -- absolute, single-name `use` paths only; `fn`/`struct`/`enum` are exportable
+✅ Multi-file modules (`mod`/`use`/`export`) via a `tint-cli`-side loader -- absolute paths only (no `self::`/`super::`), but grouped (`use a::{b, c}`), `as`-aliased, and wildcard (`use a::*`) imports all work alongside the plain form; `fn`/`struct`/`enum` are exportable
+✅ A basic semantic checker (undefined-variable/duplicate-binding checks, not type checking) over `fn`, `ui fn`, and `impl` method bodies -- `tint check` fails on errors, `tint run` warns and still executes
 
 ## Known Gaps
 

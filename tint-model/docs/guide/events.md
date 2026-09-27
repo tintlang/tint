@@ -11,9 +11,31 @@ ui fn Toolbar() {
 }
 ```
 
-The runtime currently recognizes `click`, `hover_in`, and `hover_out`. Event
+The runtime currently recognizes `click`, `pointer_down`, `hover_in`, and `hover_out`. Event
 handlers are names, not inline expressions, and they do not use the visual
 modifier groups.
+
+`pointer_down||handler` is the immediate press variant for controls and games.
+It is normalized to the same click handler slot as `click||handler`, while the
+browser renderer dispatches it on the pointer press.
+
+Game-facing input events are also supported by the browser renderer:
+
+```tn
+GameRoot {
+    key_down||on_key_down
+    key_up||on_key_up
+    frame||on_frame
+}
+
+fn on_key_down(key: string) { last_key = key }
+fn on_key_up(key: string) { last_key = key }
+fn on_frame(dt: f32) { elapsed = elapsed + dt }
+```
+
+`key_down` and `key_up` receive the browser key name as a string. `frame`
+receives elapsed seconds as `dt`. The host supplies the events and clock; the
+game state and simulation remain in Tint.
 
 ```tn
 Icon {

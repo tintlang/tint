@@ -5,6 +5,14 @@ body {
 
 #root { display: block; }
 
+/* The landing shell does not load app.css, so keep Nav's padding inside its
+   viewport width instead of letting width:100% + padding overflow sideways. */
+#root [data-tag="Nav"] {
+  width: 100%;
+  align-self: stretch;
+  box-sizing: border-box;
+}
+
 #root button {
   appearance: none;
   -webkit-appearance: none;

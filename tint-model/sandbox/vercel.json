@@ -1,5 +1,6 @@
 {
   "rewrites": [
-    { "source": "/sandbox", "destination": "/app.html?route=/sandbox" }
+    { "source": "/sandbox", "destination": "/app.html?route=/sandbox" },
+    { "source": "/pacman", "destination": "/pacman.html" }
   ]
 }

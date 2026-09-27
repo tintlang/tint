@@ -11,6 +11,7 @@ import { darkHighlightColors, lightHighlightColors } from "./lib/tintHighlight.j
 import { loadStoredTheme, storeTheme } from "./lib/themeStorage.js";
 
 if (window.location.pathname === "/sandbox") window.location.replace("/app.html?route=/sandbox");
+if (window.location.pathname === "/pong") window.location.replace("/pong.html");
 
 const root = document.getElementById("root");
 const PREVIEW_MOUNT_ID = "tint-landing-preview-mount";
@@ -108,14 +109,28 @@ function syncEditorAppearance() {
   editorView.dispatch({ effects: [editorThemeCompartment.reconfigure(editorIsDark ? editorTheme : editorLightTheme), editorSyntaxCompartment.reconfigure(syntaxHighlighting(editorIsDark ? darkHighlightColors : lightHighlightColors))] });
 }
 let lastCodePanel = null;
+let lastPreviewPanel = null;
 function remountDemoIfNeeded() {
   const codePanel = root.querySelector('[data-tag="CodePanel"]');
-  if (!codePanel || codePanel === lastCodePanel) return;
-  lastCodePanel = codePanel;
-  codePanel.appendChild(editorView.dom);
+  if (!codePanel) return;
+
+  // Tint owns the surrounding tree and may reconcile its children during a
+  // theme switch. CodeMirror is an external DOM island, so restore it even
+  // when Tint reuses the same CodePanel element instead of creating a new one.
+  if (codePanel !== lastCodePanel || !codePanel.contains(editorView.dom)) {
+    lastCodePanel = codePanel;
+    codePanel.appendChild(editorView.dom);
+  }
+
   const previewPanel = root.querySelector('[data-tag="PreviewPanel"]');
+  if (!previewPanel) return;
+
   latestPreviewSource = editorView.state.doc.toString();
-  if (previewPanel) startPreviewSession(previewPanel, latestPreviewSource);
+  const previewWasDetached = previewPanel !== lastPreviewPanel || previewPanel.childElementCount === 0;
+  lastPreviewPanel = previewPanel;
+  if (previewWasDetached || !previewSession) {
+    startPreviewSession(previewPanel, latestPreviewSource);
+  }
 }
 new MutationObserver(() => { remountDemoIfNeeded(); syncEditorAppearance(); }).observe(root, { childList: true, subtree: true });
 

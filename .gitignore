@@ -12,3 +12,6 @@
 /tint-model/docs/guide/modules.md
 /tint-model/docs/guide/resources-and-borrowing.md
 /tint-model/docs/guide/tensors.md
+
+# Design sketches for mechanics that are not wired into the runtime.
+/tint-model/docs/design/
