@@ -3,8 +3,8 @@ theme::dark {
         layout::{ direction::column, align::center, gap::22, padding.x::40, padding.y::100 }
         mobile::{ padding.y::40, gap::18 }
 
-        Headline { text::{54, bold, white} "This page is written in Tint" }
-        Sub { text::{18, #9a9a9a} "No React. No Svelte. No HTML. Open source, compiled to WebAssembly, rendered straight to the DOM." }
+        Headline { text::{54, bold, white} "This page is written in Tint." }
+        Sub { text::{18, #9a9a9a} "A small declarative UI DSL for Rust/WASM. No React or Svelte. Compiled to WebAssembly and rendered directly to the DOM." }
 
         CtaRow {
             layout::{ direction::row, gap::12 }
@@ -34,7 +34,7 @@ theme::light {
         mobile::{ padding.y::40, gap::18 }
 
         Headline { text::{54, bold, #0a0a0a} "This page is written in Tint." }
-        Sub { text::{18, #6a6a6a} "No React. No Svelte. No HTML. Open source, compiled to WebAssembly, rendered straight to the DOM." }
+        Sub { text::{18, #6a6a6a} "A small declarative UI DSL for Rust/WASM. No React or Svelte. Compiled to WebAssembly and rendered directly to the DOM." }
 
         CtaRow {
             layout::{ direction::row, gap::12 }

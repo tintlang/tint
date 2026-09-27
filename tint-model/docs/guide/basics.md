@@ -71,5 +71,5 @@ let value = shadow{4px}; // wrong — shadow{} is a UI modifier, not a logic val
 radius(12)               // wrong — radius::12 is a UI modifier, not a function call
 ```
 
-The rule that makes all of this consistent: `{}` is for UI modifiers, VM helpers,
-animations, and Tint2D; `()` is for logic function calls and constructors.
+The rule that makes all of this consistent: `{}` is for UI modifiers and
+interpolation blocks; `()` is for logic function calls and constructors.

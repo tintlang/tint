@@ -1,7 +1,5 @@
 /target
 **/target
-/dom-test-pkg
-**/dom-test-pkg
 *.bak
 node_modules
 .vite

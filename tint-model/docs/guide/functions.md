@@ -31,7 +31,7 @@ ui fn Counter() {
 The runtime currently supports `click`, `hover_in`, and `hover_out` handler
 attributes. A UI node only references a handler by name.
 
-## Methods and generics
+## Methods and draft generics
 
 ```tn
 struct User { id: i32, name: string }
@@ -43,5 +43,4 @@ impl User {
 fn identity<T>(value: T) -> T { value }
 ```
 
-Ownership and resource borrowing are described in
-`resources-and-borrowing.md`.
+Resource borrowing is not part of the current supported runtime.

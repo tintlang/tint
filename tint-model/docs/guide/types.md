@@ -1,7 +1,8 @@
 # TintLogic: Type System
 
-TintLang's type system is strict and minimal, inspired by Rust but adapted for
-WASM, GPU, and declarative UI. Types are predictable, stable, and fully static.
+TintLang's current type system is experimental and Rust-inspired. The stable
+surface today is the primitive/value syntax used by the parser and runtime;
+advanced resource and GPU types below are draft syntax only.
 
 ## Primitives
 
@@ -16,10 +17,10 @@ WASM, GPU, and declarative UI. Types are predictable, stable, and fully static.
 let p: vec2 = vec2(10, 20);
 ```
 
-## GPU-specific types
+## Draft resource/GPU types
 
-`Texture` (GPU texture, sample/read/write), `Image` (CPU image buffer), `Buffer`
-(GPU buffer) — used in `kernel` and Tint2D/GPU2D.
+`Texture`, `Image`, `Buffer`, and tensor types are reserved/draft syntax. There
+is no supported GPU/WebGPU runtime for them yet.
 
 ## Containers
 
@@ -68,7 +69,7 @@ enum State { Ready(image) }         // error
 let t: (buffer, i32)                // error
 ```
 
-The only valid form is a top-level declaration:
+The following top-level resource syntax is not currently supported end to end:
 
 ```
 buffer a
@@ -76,15 +77,11 @@ image frame
 tensor<f32> weights
 ```
 
-Resources represent system-level owned memory; embedding them in ordinary values
-would break ownership, borrow safety, async-safety, and lifetime determinism. See
-`guide/resources-and-borrowing.md`.
+Resource ownership and borrowing remain future work.
 
-## GPU-safe types
+## Draft GPU-safe types
 
-Inside `kernel`, only these are available: `i32 f32 vec2 vec3 vec4 Texture Buffer
-mat2 mat4`. Not available: `string`, `List<T>`, `Map<K,V>`, structs with dynamic
-fields.
+Kernel-specific type rules are not part of the current runtime.
 
 ## Tuples
 
@@ -95,15 +92,15 @@ let t: (i32, string) = (10, "ok")
 May contain primitives, structs, enums, `vec2`/`3`/`4`, or other tuples. Immutable,
 not usable in UI Mode, cannot contain resources.
 
-## Generic structs
+## Draft generic structs
 
 ```
 struct Box<T> { value: T }
 let i: Box<i32> = Box { value: 10 }
 ```
 
-Logic Mode only; a `struct<T>` cannot contain UI, `state`, `signal`, or `computed`,
-and generic structs can't be used as UI types.
+Generic syntax parses in some positions, but generic runtime semantics are not
+supported end to end.
 
 ## Unit type
 

@@ -25,3 +25,11 @@ body {
 #root [data-tag="PreviewPanel"] {
   min-height: 280px;
 }
+
+@media (max-width: 639px) {
+  #root [data-tag="Headline"],
+  #root [data-tag="Sub"] {
+    width: 100%;
+    text-align: center;
+  }
+}

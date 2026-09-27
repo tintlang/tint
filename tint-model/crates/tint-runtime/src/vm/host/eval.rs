@@ -13,7 +13,3 @@ impl TintVM {
         self.host_eval_block_flow(block)
     }
 }
-
-// -----------------------
-// FUNCTION CALL DISPATCH
-// -----------------------
