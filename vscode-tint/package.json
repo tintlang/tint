@@ -4,7 +4,7 @@
   "description": "Syntax highlighting and tools for the Tint UI programming language",
   "version": "0.1.0",
   "publisher": "tintlang",
-  "license": "Unlicense",
+  "license": "MIT",
   "icon": "icon.png",
   "repository": {
     "type": "git",

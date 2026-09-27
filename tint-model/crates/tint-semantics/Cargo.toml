@@ -3,7 +3,7 @@ name = "tint-semantics"
 version = "0.1.0"
 edition = "2021"
 description = "TintLang AST"
-license = "Unlicense"
+license = "MIT"
 
 [dependencies]
 tint-ast   = { path = "../tint-ast" }

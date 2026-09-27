@@ -3,6 +3,6 @@ name = "tint-ast"
 version = "0.1.0"
 edition = "2021"
 description = "TintLang AST"
-license = "Unlicense"
+license = "MIT"
 
 [dependencies]

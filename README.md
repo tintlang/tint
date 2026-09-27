@@ -235,7 +235,7 @@ No external DSL files—grammar is in code for easy modification.
 
 ## License
 
-Unlicense (public domain) - do whatever you want with it.
+MIT - see [LICENSE](LICENSE) for details.
 
 ## Author
 
