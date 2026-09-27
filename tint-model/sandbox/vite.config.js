@@ -69,15 +69,14 @@ export default defineConfig({
   // The generated browser WASM glue uses native top-level await.
   build: {
     target: "esnext",
-    // Three Tint-rendered pages: `index.html` (landing), `app.html`
-    // (the sandbox workbench), `pacman.html`, and `pong.html`.
-    // Without listing all three here, `vite build` only picks up
+    // Tint-rendered pages: `index.html` (landing), `app.html`
+    // (the sandbox workbench), and `pong.html`.
+    // Without listing all pages here, `vite build` only picks up
     // index.html and silently drops the others from dist/.
     rollupOptions: {
       input: {
         main: r("./index.html"),
         app: r("./app.html"),
-        pacman: r("./pacman.html"),
         pong: r("./pong.html"),
       },
     },
