@@ -241,4 +241,4 @@ Unlicense (public domain) - do whatever you want with it.
 
 Mark Bender ([@hawerz](https://github.com/hawerz))
 
-Feedback welcome—especially on syntax design, compiler architecture, or whether you'd use this for something real.
+Feedback welcome!

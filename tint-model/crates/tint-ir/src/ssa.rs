@@ -1,5 +1,3 @@
-// tint-ir/ssa.rs
-//
 // Core SSA IR types:
 // - FunctionIR
 // - Instr
@@ -8,9 +6,7 @@
 
 use std::collections::HashMap;
 
-// -------------------------------------------
 // SSA Values
-// -------------------------------------------
 #[derive(Debug, Clone)]
 pub struct Value {
     pub id: u32,
@@ -24,9 +20,7 @@ pub enum ValueKind {
     Undefined,
 }
 
-// -------------------------------------------
 // SSA Instructions
-// -------------------------------------------
 #[derive(Debug, Clone)]
 pub enum Instr {
     Binary { op: String, lhs: u32, rhs: u32 },
@@ -64,9 +58,7 @@ impl Instr {
     }
 }
 
-// -------------------------------------------
 // SSA Function IR
-// -------------------------------------------
 #[derive(Debug, Clone)]
 pub struct FunctionIR {
     pub instrs: HashMap<u32, Instr>,

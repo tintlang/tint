@@ -29,10 +29,10 @@ export const uisession_reload: (a: number, b: number, c: number, d: number, e: n
 export const uisession_storage_snapshot: (a: number) => any;
 export const uisession_take_http_requests: (a: number) => any;
 export const uisession_tree: (a: number) => any;
-export const wasm_bindgen_277f91586ca95781___convert__closures_____invoke___f64______true_: (a: number, b: number, c: number) => void;
-export const wasm_bindgen_277f91586ca95781___convert__closures_____invoke___web_sys_12fb11b7fc208418___features__gen_Event__Event______true_: (a: number, b: number, c: any) => void;
-export const wasm_bindgen_277f91586ca95781___convert__closures_____invoke___web_sys_12fb11b7fc208418___features__gen_KeyboardEvent__KeyboardEvent______true_: (a: number, b: number, c: any) => void;
-export const wasm_bindgen_277f91586ca95781___convert__closures_____invoke_______true_: (a: number, b: number) => void;
+export const wasm_bindgen_27a16a9810de17ac___convert__closures_____invoke___f64______true_: (a: number, b: number, c: number) => void;
+export const wasm_bindgen_27a16a9810de17ac___convert__closures_____invoke___web_sys_2fd947709365e817___features__gen_KeyboardEvent__KeyboardEvent______true_: (a: number, b: number, c: any) => void;
+export const wasm_bindgen_27a16a9810de17ac___convert__closures_____invoke___web_sys_2fd947709365e817___features__gen_KeyboardEvent__KeyboardEvent______true__27: (a: number, b: number, c: any) => void;
+export const wasm_bindgen_27a16a9810de17ac___convert__closures_____invoke_______true_: (a: number, b: number) => void;
 export const __wbindgen_malloc: (a: number, b: number) => number;
 export const __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
 export const __wbindgen_exn_store: (a: number) => void;
