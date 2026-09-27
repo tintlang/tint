@@ -215,9 +215,7 @@ function renderPreviewResult(result) {
     showPreviewError(result.error);
     return;
   }
-  // Render the result even when it is empty. Clearing the mount here is
-  // important: a failed/new source must never leave the previous stock tree
-  // visible and make it look as if the editor was ignored.
+  // Clear stale output when the new result is empty.
   renderPreview(result?.tree || []);
 }
 
@@ -233,16 +231,8 @@ function dispatchPreview(handler) {
 
 function updatePreview(source) {
   if (!previewSession) return;
-  // The editor holds a full program (plain `fn`s plus a `ui fn App()`),
-  // exactly like demoSource / what check()/run() already compile as-is --
-  // not a bare UI-node snippet, so it must be reloaded as-is with "App"
-  // as the entry point, the same way `new UiSession(demoSource, "App")`
-  // constructed this session in the first place. Wrapping it in a second
-  // `ui fn Preview() { ... }` (the old behavior here) nested those fn/
-  // ui fn declarations inside a UI body, which never parses, and
-  // `UiSession` had no `reload` method at all until now -- so every edit
-  // silently threw before ever reaching this line, leaving the preview
-  // stuck on whatever last rendered.
+  // The editor contains a complete program, so reload its App entry point
+  // directly instead of wrapping the source in another UI function.
   renderPreviewResult(previewSession.reload(source, "App"));
 }
 
@@ -276,9 +266,7 @@ function mountEditor(panel) {
       }
     });
   }
-  // Tint may preserve the CodePanel element while replacing its children.
-  // Compare the actual DOM island as well; otherwise a detached CodeMirror
-  // editor leaves a valid-looking but empty panel after a theme/resize render.
+  // Reattach CodeMirror after Tint replaces the panel's children.
   if (panel !== lastCodePanel || !panel.contains(editorView.dom)) {
     lastCodePanel = panel;
     panel.replaceChildren(editorView.dom);
@@ -303,10 +291,7 @@ function runCode() {
 }
 
 function renderShellTheme(theme) {
-  // Tint rebuilds the whole root when its state changes. Keep the editor
-  // source outside that tree and restore both external DOM islands before
-  // returning control to the browser. This also covers resize-triggered
-  // rerenders, which can otherwise detach CodeMirror and the preview.
+  // Preserve external DOM islands across Tint rerenders.
   const source = editorView?.state.doc.toString() ?? currentEditorSource();
   shellTheme = theme;
   document.documentElement.dataset.theme = theme;
@@ -339,15 +324,8 @@ function remount() {
     resizer.dataset.resizeBound = "true";
     bindResizer(resizer, workspace, previewPanel);
   }
-  // CheckBtn/RunBtn also carry a click||check_code / click||run_code
-  // binding in the .tn shell source (see sandbox.tn) so DomSession treats
-  // them as a real dispatch and rebuilds the clicked subtree -- even
-  // though check_code/run_code are no-op Tint fns and the actual
-  // check/run work happens in checkCode()/runCode() above. That rebuild
-  // can recreate PreviewPanel/PreviewMount as fresh, empty DOM nodes,
-  // orphaning whatever renderPreview() had appended into the old ones
-  // (renderShellTheme() already re-renders the preview after ITS OWN
-  // intentional rebuild; this covers the same case for an implicit one).
+  // A button dispatch can replace PreviewMount, so restore the preview
+  // after the shell rebuilds its subtree.
   const previewMount = root.querySelector('[data-tag="PreviewMount"]');
   if (previewMount && (previewMount !== lastPreviewMount || previewMount.childElementCount === 0)) {
     lastPreviewMount = previewMount;
@@ -357,23 +335,16 @@ function remount() {
 }
 
 function restoreExternalViews() {
-  // A DomSession render uses replaceChildren(), so external DOM owned by
-  // CodeMirror or the JS preview is intentionally detached. Reattach it in
-  // the same turn instead of waiting for a MutationObserver callback.
+  // Reattach external DOM immediately after a DomSession render.
   remount();
 }
 
-// Capture before DomSession's own event handler rebuilds the subtree. The
-// renderer intentionally replaces the clicked node after a Tint dispatch, so
-// a bubbling listener would otherwise be attached to a DOM branch that has
-// already been removed.
+// Capture events before DomSession rebuilds the clicked subtree.
 document.addEventListener("click", (event) => {
   const tag = event.target.closest("[data-tag]")?.dataset.tag;
   if (tag === "CheckBtn") checkCode();
   if (tag === "RunBtn") runCode();
-  // Keep theme switching explicit at the host boundary as well. DomSession
-  // binds Tint events itself, but this makes the app shell resilient while
-  // its DOM is being replaced after a stateful dispatch.
+  // Handle theme changes at the host boundary as well.
   if (tag === "DarkBtn") renderShellTheme("dark");
   if (tag === "LightBtn") renderShellTheme("light");
 }, true);
@@ -394,9 +365,7 @@ const initialShellSource = initialTheme === "dark"
 shellSession = new DomSession(initialShellSource, "Sandbox", "root");
 const shellError = shellSession.rerender();
 if (shellError) logEvent(shellError);
-// The editor may restore a previously edited program from localStorage.
-// Build the first preview from that exact source too; otherwise the pane
-// starts with the bundled demo and only catches up after the next edit.
+// Build the first preview from the source restored by the editor.
 previewSession = new UiSession(currentEditorSource(), "App");
 renderPreviewResult(previewSession.tree());
 remount();

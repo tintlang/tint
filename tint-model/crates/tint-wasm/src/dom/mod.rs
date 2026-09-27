@@ -1,32 +1,8 @@
-// tint-wasm/src/dom.rs
-//
-// A second rendering backend for the same UI tree tint_runtime::ui_session
-// already produces, alongside the existing Svelte-based one (UiSession in
-// lib.rs: hands a serialized Vec<UiRenderNode> to JS, UiPreviewNode.svelte
-// turns it into DOM). This one skips JS/Svelte entirely -- Rust calls
-// web-sys DOM APIs directly to build real elements from the tree.
-//
-// Deliberately NOT a diffing renderer: every render (initial mount, or
-// after a click/hover_in/hover_out dispatch) tears down the container's
-// children and rebuilds the whole subtree from scratch. That matches the
-// existing Svelte path's own behavior (Preview.svelte swaps in the whole
-// returned tree on every dispatch, no reconciliation) -- see
-// tint_runtime::ui_session's doc comment. A real diff/patch pass (to keep
-// focus/scroll/animation state across renders) is future work.
-//
-// Known cost of "rebuild + web-sys event closures": every build_node call
-// that attaches a listener does `closure.forget()`, which is the standard
-// wasm-bindgen idiom for a closure that must outlive the function that
-// created it -- but it also means the closure's memory is never freed,
-// even once its element is torn down by the next rebuild. Each click/hover
-// therefore leaks the previous render's closures. Fine for a sandbox/demo
-// session; not something to ship in a long-running app without adding
-// real diffing (which reuses elements/listeners instead of recreating
-// them) first.
-//
-// Additive: UiSession (the JS-facing, Svelte-driving type in lib.rs) is
-// untouched. DomSession is a separate, new wasm-bindgen export the
-// sandbox can opt into independently.
+//! Direct-DOM rendering backend for `UiSession`.
+//!
+//! Each render rebuilds the container subtree instead of diffing it. Event
+//! closures are intentionally leaked by `Closure::forget`, which is acceptable
+//! for the sandbox but should be addressed before using this in a long-lived app.
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;

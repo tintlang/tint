@@ -9,11 +9,7 @@ pub fn call_builtin<H: EvalHost>(
     span: Span,
 ) -> EvalResult<Value> {
     match name {
-        // `log` is a plain alias for `print` -- same per-arg output, just
-        // the more familiar name for anyone coming from JS/Rust. Both are
-        // ordinary function calls (`print(x)`, `log(x)`), like every other
-        // builtin here -- there is no separate `{}`-based "VM helper" call
-        // syntax anywhere in the parser.
+        // `log` is an alias for `print`.
         "print" | "log" => {
             for a in args {
                 let line = format!("{:?}", a);
@@ -23,8 +19,7 @@ pub fn call_builtin<H: EvalHost>(
             Ok(Value::Unit)
         }
 
-        // `debug` is a plain alias for `dbg` -- same combined-args dump,
-        // just the more explicit name.
+        // `debug` is an alias for `dbg`.
         "dbg" | "debug" => {
             let line = format!("DBG: {:?}", args);
             println!("{}", line);
@@ -32,10 +27,7 @@ pub fn call_builtin<H: EvalHost>(
             Ok(Value::Unit)
         }
 
-        // Same per-arg shape as `print`, marked as an error line and sent
-        // to stderr natively; the captured output buffer (what the browser
-        // sandbox reads) has no separate error channel, so it still goes
-        // through `write_line` like every other builtin here.
+        // The browser has no separate error channel, so capture these lines too.
         "error" => {
             for a in args {
                 let line = format!("ERROR: {:?}", a);

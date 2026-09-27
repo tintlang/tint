@@ -1,40 +1,6 @@
-// ui_session.rs
-//
-// A stateful UI session: the sandbox's click/hover round-trip needs a
-// `ui fn`'s `state <ident> = <expr>` declarations (see UiStateDecl in
-// tint-ast) to actually persist across calls -- build the tree once, a
-// click handler mutates one, the tree is rebuilt reflecting the new
-// value. Unlike `ReplSession` (see repl.rs), which is deliberately
-// stateless-by-reconstruction (its "persistence" is re-parsing and
-// re-running a growing block of SOURCE TEXT from scratch every call), a
-// `UiSession` keeps one real `TintVM` alive for its whole lifetime,
-// because UI state genuinely needs to live as runtime state, not as more
-// source text -- there's nothing to re-parse, only a value to remember.
-//
-// `state` declarations are bound once, at construction, into the VM's
-// outermost variable scope (`RuntimeScopeStack` starts with exactly one
-// frame -- see scope.rs). Every later `render()`/`dispatch()` call reads
-// and writes that same frame through the ordinary `EvalHost` scope
-// machinery (`load_var`/`set_var`), so no separate state store was
-// needed -- the existing scope stack already does the right thing here,
-// as long as the same `TintVM` instance stays alive, which is this
-// struct's whole job.
-//
-// `dispatch()` calls the handler through `EvalHost::call_user_fn`, NOT
-// `EvalHost::call_fn`'s IR-VM path: `call_fn` routes every plain `fn`
-// through a *fresh, separate* `IrVM` with its own locals (see vm.rs's
-// `call_fn`/the "Bug 3" fix in the project's compilation-status doc), so
-// a handler that assigns to a `state` variable would be mutating a local
-// that vanishes the moment the call returns -- never reaching the
-// `TintVM.scopes` frame the state was actually bound into. `call_user_fn`
-// is the scope-based tree-walking evaluator, which does share that
-// frame.
-//
-// Every call is `catch_unwind`-hardened for the same reason as
-// `ReplSession`: a handler referencing an undefined function, or hitting
-// one of the IR-VM's panic-on-runtime-error paths some other way, is a
-// normal authoring mistake here (this is driving a live sandbox), not a
-// rare crash that should take the whole wasm module down with it.
+//! Stateful UI sessions keep one VM alive so `state` values persist across
+//! renders and event dispatches. Runtime errors are converted to `Result`s so
+//! an authoring mistake does not bring down the host application.
 
 use std::collections::HashMap;
 use std::panic::{catch_unwind, AssertUnwindSafe};

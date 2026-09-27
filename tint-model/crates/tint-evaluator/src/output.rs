@@ -1,15 +1,5 @@
-// `print()`/`dbg()` (see utils/call.rs) used to go straight to real
-// stdout via `println!`, which is fine for the CLI but writes nowhere
-// useful when the evaluator runs inside a browser (tint-wasm has no real
-// stdout to write to). This is a small captured-output buffer: every
-// print/dbg call appends a line here (in addition to `println!`, so the
-// CLI/terminal experience is unchanged), and a host that needs to show
-// the program's output -- currently tint-wasm's `run()`/`render_ui()` --
-// calls `take_output()` once per run to drain it.
-//
-// Thread-local rather than global/shared: each native test or wasm call
-// gets its own buffer, so concurrent runs (e.g. the test suite) never
-// see each other's output.
+// Captured output for hosts without useful stdout, such as the browser.
+// Thread-local storage keeps concurrent evaluator runs isolated.
 
 use std::cell::RefCell;
 
