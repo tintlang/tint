@@ -39,6 +39,16 @@ impl Parser {
                     out.push(UiNodeOrExpr::Node(self.parse_block_node()?));
                 }
 
+                // Standalone `for { var in iterable } { ...body... }` --
+                // a child in its own right, not the `for{}` modifier
+                // parsed inside `parse_modifier_list_block` below (that one
+                // only ever appears right after a node's `{`, before any
+                // children; this one appears IN the children list itself,
+                // so the two can't collide).
+                TokenKind::For => {
+                    out.push(UiNodeOrExpr::Node(self.parse_block_for_node()?));
+                }
+
                 TokenKind::String => {
                     let tok = self.stream.next().clone();
                     let parsed = self.parse_interpolated_text(tok.lexeme.clone(), tok.span)?;
@@ -171,6 +181,30 @@ impl Parser {
 
         Ok((attrs, mods))
     }
+    /// `for { var in iterable } { ...body... }` as a standalone child --
+    /// see `UiNode::For`'s doc comment for how this differs from the
+    /// `for{}` modifier parsed above in `parse_modifier_list_block`.
+    pub(crate) fn parse_block_for_node(&mut self) -> PResult<UiNode> {
+        let start = self.stream.next().span; // 'for'
+
+        self.stream.expect(TokenKind::LBrace)?;
+        let var = self.parse_ident()?;
+        self.stream.expect(TokenKind::In)?;
+        let iterable = self.parse_expr()?;
+        self.stream.expect(TokenKind::RBrace)?;
+
+        self.stream.expect(TokenKind::LBrace)?;
+        let body = self.parse_block_children()?;
+        let end = self.stream.expect(TokenKind::RBrace)?.span;
+
+        Ok(UiNode::For {
+            var,
+            iterable,
+            body,
+            span: Span::merge(start, end),
+        })
+    }
+
     pub(crate) fn parse_theme_node(&mut self) -> PResult<UiNode> {
         let start = self.stream.expect(TokenKind::Ident)?.span;
         self.stream.expect(TokenKind::PathSep)?;

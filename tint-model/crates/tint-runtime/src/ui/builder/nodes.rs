@@ -8,20 +8,43 @@ impl UiBuilder {
         node: &UiNode,
         host: &mut H,
     ) {
-        if let UiNode::Theme { name, children, .. } = node {
-            if theme_matches(name, host) {
-                for child in children {
-                    match child {
-                        UiNodeOrExpr::Node(child) => self.build_into(parent, child, host),
-                        UiNodeOrExpr::Text(text) => {
-                            let id = self.tree.create_text_node(render_ui_text(text, host));
-                            self.tree.add_child(parent, id);
-                        }
-                    }
+        match node {
+            UiNode::Theme { name, children, .. } => {
+                if theme_matches(name, host) {
+                    self.build_children(parent, children, host);
                 }
             }
-        } else if let Some(id) = self.build(node, host) {
-            self.tree.add_child(parent, id);
+
+            // Standalone `for { var in iterable } { body }`: unlike the
+            // `for{}` modifier (`find_for` below, which repeats a single
+            // node's own children into that same node), this has no node
+            // of its own -- each iteration's `body` is built straight into
+            // `parent`, so it can sit among static siblings.
+            UiNode::For {
+                var,
+                iterable,
+                body,
+                ..
+            } => {
+                let value = host.eval_expr(iterable);
+                let items = match value {
+                    EvalValue::List(items) => items,
+                    other => vec![other],
+                };
+
+                for item in items {
+                    host.push_scope();
+                    host.define_var(var, item);
+                    self.build_children(parent, body, host);
+                    host.pop_scope();
+                }
+            }
+
+            _ => {
+                if let Some(id) = self.build(node, host) {
+                    self.tree.add_child(parent, id);
+                }
+            }
         }
     }
 

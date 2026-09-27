@@ -31,6 +31,9 @@ impl UiBuilder {
     pub fn build<H: EvalHost>(&mut self, node: &UiNode, host: &mut H) -> Option<UiNodeId> {
         match node {
             UiNode::Theme { .. } => None,
+            // Splices into the parent instead of creating a node of its
+            // own -- handled in `build_into` (nodes.rs), same as `Theme`.
+            UiNode::For { .. } => None,
             UiNode::Element {
                 name,
                 attributes,

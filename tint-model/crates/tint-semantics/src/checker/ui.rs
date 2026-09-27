@@ -68,6 +68,26 @@ impl SemanticChecker {
                     self.visit_ui_node_or_expr(child);
                 }
             }
+
+            // Standalone `for { var in iterable } { body }` -- the
+            // iterable is visited in the OUTER scope (mirrors the `for{}`
+            // modifier's iterable, visited by `visit_ui_modifiers` before
+            // `visit_ui_children_with_for` binds `var`), then `var` is
+            // bound only for `body`.
+            UiNode::For {
+                var,
+                iterable,
+                body,
+                ..
+            } => {
+                self.visit_expr(iterable);
+                self.scopes.push();
+                self.scopes.define(var, Type::Unit);
+                for child in body {
+                    self.visit_ui_node_or_expr(child);
+                }
+                self.scopes.pop();
+            }
         }
     }
 

@@ -123,6 +123,70 @@ ui fn Widget() {
     );
 }
 
+// Standalone `for { var in iterable } { ...body... }`: unlike the `for{}`
+// modifier above (which repeats a single node's own children, with that
+// node itself as the stable wrapper), this is a child in its own right --
+// it splices a whole run of sibling nodes per iteration straight into the
+// parent, so it can sit between static siblings with no synthetic wrapper
+// node around the loop body.
+#[test]
+fn block_for_node_splices_multiple_children_per_iteration_among_siblings() {
+    let code = r#"
+ui fn Widget() {
+    Block {
+        direction::column
+        "Header"
+        for { item in ["A", "B"] } {
+            Text { "{item}" }
+            Divider {}
+        }
+        "Footer"
+    }
+}
+"#;
+
+    let tokens = collect_tokens(&mut Lexer::new(code));
+    let mut parser = Parser::new(tokens);
+    let program = parser.parse_program().expect("parse failed");
+
+    let mut vm = TintVM::new();
+    vm.run_program(&program);
+
+    let nodes = vm.render_ui_fn("Widget", &[]).expect("render_ui_fn failed");
+    assert_eq!(nodes.len(), 1, "one top-level node (Block)");
+
+    let block = &nodes[0];
+    let tags: Vec<&str> = block.children.iter().map(|c| c.tag.as_str()).collect();
+    assert_eq!(
+        tags,
+        vec!["Text", "Text", "Divider", "Text", "Divider", "Text"],
+        "Header, then (Text, Divider) per item spliced flat into Block, then Footer -- \
+         no wrapper node around the loop body"
+    );
+
+    let texts: Vec<Option<String>> = block
+        .children
+        .iter()
+        .map(|c| {
+            c.text
+                .clone()
+                .or_else(|| c.children.first().and_then(|t| t.text.clone()))
+        })
+        .collect();
+    assert_eq!(
+        texts,
+        vec![
+            Some("Header".to_string()),
+            Some("A".to_string()),
+            None,
+            Some("B".to_string()),
+            None,
+            Some("Footer".to_string()),
+        ],
+        "each repetition's \"{{item}}\" interpolation resolved to that iteration's own value"
+    );
+}
+
 // `if{cond}` was parsed but never evaluated -- a node carrying it rendered
 // unconditionally either way. Proves a falsy condition now removes the
 // node (and its children) entirely, while a truthy one still renders.
