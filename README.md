@@ -157,10 +157,11 @@ ui fn App() {
             }
         }
         
-        for { item in ["Item 1", "Item 2", "Item 3"] }
+        for { item in ["Item 1", "Item 2", "Item 3"] } {
             ListItem { layout::{ padding::12 } paint::{ radius::8, background::#eee }
                 Text { "{item}" }
             }
+        }
     }
 }
 ```

@@ -66,13 +66,23 @@ different, simpler design than the `run.tn`-based one sketched in
 `guide/modules.md` — that doc describes a future direction, not what's
 built.
 
+**UI loops:** two mechanisms. The `for{var in iterable}` modifier repeats
+the node it's written on -- its whole subtree, once per item -- so grouping
+more than one repeated node needs a wrapper. A standalone
+`for { var in iterable } { ...body... }` block is a child in its own right:
+it splices a whole run of sibling nodes per iteration straight into the
+parent, needs no wrapper, and can sit between static siblings. Unlike the
+modifier form, it requires explicit `{...}` braces around its body. See
+`ui/blocks.md`.
+
 **Semantic checker:** a basic pass (undefined-variable and
 duplicate-binding checks, not type checking -- `TypeMismatch` exists in
 `tint-semantics/src/errors.rs` for later, nothing constructs it yet) runs
 over `fn` bodies, `ui fn` bodies (modifiers, attributes, text
-interpolations, `if{}`/`for{}` control flow -- a `for{var in ...}`'s loop
-variable is correctly scoped to just that node's children), and `impl`
-method bodies (`self` binds like any other parameter). `tint check`
+interpolations, `if{}`/`for{}` control flow in both the modifier and
+standalone-block forms -- a loop's variable is correctly scoped to just its
+own body/children), and `impl` method bodies (`self` binds like any other
+parameter). `tint check`
 reports its errors as fatal; `tint run` reports them as non-fatal
 warnings and still executes. Method calls (`x.foo()`), namespaced calls
 (`Type::foo()`), and declarations' own field/variant types are not

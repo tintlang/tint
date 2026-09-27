@@ -95,10 +95,14 @@ the sandbox loader before parsing.
 
 ```tn
 Caption {
-    if{viewport_width >= 640}
     mobile::{ paint::{ color::#9a9a9a } }
+    if{viewport_width >= 640}
     "Visible on wide screens"
 }
 ```
 
 The supported responsive names are `mobile`, `tablet`, `laptop`, and `desktop`.
+Ordinary modifiers (including responsive ones like `mobile::{...}`) must come
+before any `if{}`/`for{}`/`match{}` control-flow modifier in the same node —
+the parser reads a node's plain modifiers first, then its control-flow
+modifiers, so `if{...}` followed by `mobile::{...}` does not parse.

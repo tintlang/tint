@@ -97,8 +97,9 @@ shadow(4px)              // wrong — that's a UI modifier, it uses ::
 ## Full example
 
 ```
-fn renderItems() {
-    for item in items {
+fn renderItems(items, count) {
+    for i in 0..count {
+        let item = items[i];
         if item.enabled {
             showItem(item);
         } else {
@@ -107,3 +108,9 @@ fn renderItems() {
     }
 }
 ```
+
+Logic Mode's `for` only ranges over `start..end` (see "For" above), so
+looping over a list here means ranging over an index and indexing in --
+`for item in items` is not current Logic Mode syntax. That form exists only
+as UI Mode's `for{item in items}` modifier (see `ui/blocks.md`), which is a
+different mechanism entirely.
