@@ -65,6 +65,37 @@ fn expect_number(v: Value) -> f64 {
 }
 
 #[test]
+fn impl_method_can_mutate_self_and_write_back_to_the_receiver() {
+    let mut vm = TintVM::new();
+    parse_and_run(
+        r#"
+struct Point {
+    x{i32},
+    y{i32},
+}
+
+impl Point {
+    fn move_by(&mut self, dx) {
+        self.x = self.x + dx
+    }
+}
+
+fn update() {
+    let mut point = Point { x{1}, y{2} }
+    point.move_by(3)
+    point.x
+}
+"#,
+        &mut vm,
+    );
+
+    let result = vm
+        .call_fn("update", &[], tint_ast::Span::dummy())
+        .expect("method call should succeed");
+    assert_eq!(expect_number(result), 4.0);
+}
+
+#[test]
 fn a_fn_with_no_explicit_return_keeps_its_trailing_expression() {
     // Isolates the DCE half of the bug described above from the Call
     // half: `square` has no explicit `return` and calls nothing --

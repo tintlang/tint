@@ -46,3 +46,4 @@ fn parse_and_run(code: &str, vm: &mut TintVM) {
 
 include!("direct.rs");
 include!("ir.rs");
+include!("host_builtins.rs");

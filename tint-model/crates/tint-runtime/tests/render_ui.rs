@@ -188,7 +188,10 @@ ui fn TestMatch(status) {
     vm.run_program(&program);
 
     let nodes = vm
-        .render_ui_fn("TestMatch", &[tint_evaluator::value::Value::String("error".into())])
+        .render_ui_fn(
+            "TestMatch",
+            &[tint_evaluator::value::Value::String("error".into())],
+        )
         .expect("render_ui_fn failed");
 
     assert_eq!(nodes.len(), 1, "one top-level node (Block)");
@@ -223,7 +226,9 @@ ui fn TestMatch(status) {
     let nodes = vm
         .render_ui_fn(
             "TestMatch",
-            &[tint_evaluator::value::Value::String("something_else".into())],
+            &[tint_evaluator::value::Value::String(
+                "something_else".into(),
+            )],
         )
         .expect("render_ui_fn failed");
 
