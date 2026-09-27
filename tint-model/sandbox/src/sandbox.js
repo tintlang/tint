@@ -276,7 +276,10 @@ function mountEditor(panel) {
       }
     });
   }
-  if (panel !== lastCodePanel) {
+  // Tint may preserve the CodePanel element while replacing its children.
+  // Compare the actual DOM island as well; otherwise a detached CodeMirror
+  // editor leaves a valid-looking but empty panel after a theme/resize render.
+  if (panel !== lastCodePanel || !panel.contains(editorView.dom)) {
     lastCodePanel = panel;
     panel.replaceChildren(editorView.dom);
   }
@@ -300,14 +303,20 @@ function runCode() {
 }
 
 function renderShellTheme(theme) {
+  // Tint rebuilds the whole root when its state changes. Keep the editor
+  // source outside that tree and restore both external DOM islands before
+  // returning control to the browser. This also covers resize-triggered
+  // rerenders, which can otherwise detach CodeMirror and the preview.
+  const source = editorView?.state.doc.toString() ?? currentEditorSource();
   shellTheme = theme;
   document.documentElement.dataset.theme = theme;
   storeTheme(theme);
-  const source = shellSource.replace('state theme = "dark"', `state theme = "${theme}"`);
+  const themedSource = shellSource.replace('state theme = "dark"', `state theme = "${theme}"`);
   shellSession?.free();
-  shellSession = new DomSession(source, "Sandbox", "root");
+  shellSession = new DomSession(themedSource, "Sandbox", "root");
   const error = shellSession.rerender();
   if (error) logEvent(error);
+  remount();
   if (previewSession) renderPreviewResult(previewSession.tree());
 }
 
@@ -340,11 +349,18 @@ function remount() {
   // (renderShellTheme() already re-renders the preview after ITS OWN
   // intentional rebuild; this covers the same case for an implicit one).
   const previewMount = root.querySelector('[data-tag="PreviewMount"]');
-  if (previewMount && previewMount !== lastPreviewMount) {
+  if (previewMount && (previewMount !== lastPreviewMount || previewMount.childElementCount === 0)) {
     lastPreviewMount = previewMount;
     if (previewSession) renderPreviewResult(previewSession.tree());
   }
   setEditorTheme();
+}
+
+function restoreExternalViews() {
+  // A DomSession render uses replaceChildren(), so external DOM owned by
+  // CodeMirror or the JS preview is intentionally detached. Reattach it in
+  // the same turn instead of waiting for a MutationObserver callback.
+  remount();
 }
 
 // Capture before DomSession's own event handler rebuilds the subtree. The
@@ -362,7 +378,7 @@ document.addEventListener("click", (event) => {
   if (tag === "LightBtn") renderShellTheme("light");
 }, true);
 
-new MutationObserver(remount).observe(root, { childList: true, subtree: true });
+new MutationObserver(restoreExternalViews).observe(root, { childList: true, subtree: true });
 
 await initWasm();
 document.title = `Tint Sandbox · ${tint_version()}`;

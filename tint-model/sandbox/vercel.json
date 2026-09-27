@@ -1,5 +1,8 @@
 {
   "rewrites": [
-    { "source": "/sandbox", "destination": "/app.html?route=/sandbox" }
+    { "source": "/sandbox", "destination": "/app.html?route=/sandbox" },
+    { "source": "/sandbox/", "destination": "/app.html?route=/sandbox" },
+    { "source": "/pong", "destination": "/pong.html" },
+    { "source": "/pong/", "destination": "/pong.html" }
   ]
 }

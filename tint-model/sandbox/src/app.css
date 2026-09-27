@@ -63,9 +63,30 @@ button.tint-ui-node {
 }
 .preview-empty { display: grid; place-items: center; min-height: 180px; color: var(--dim); font: 12px ui-monospace, monospace; }
 @media (max-width: 800px) {
-  [data-tag="Workspace"] { flex-direction: column; overflow: auto; }
-  [data-tag="CodeColumn"], [data-tag="PreviewPanel"] { flex: none; width: 100%; }
-  [data-tag="CodePanel"] { min-height: 420px; }
+  #root { overflow: auto; }
+  [data-tag="Page"] { min-height: 100%; height: auto; }
+  [data-tag="Workspace"] {
+    display: flex !important;
+    flex-direction: column;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+  [data-tag="CodeColumn"], [data-tag="PreviewPanel"] {
+    flex: none;
+    width: 100%;
+    height: auto;
+  }
+  [data-tag="CodePanel"] { height: 58vh; min-height: 360px; max-height: 620px; }
   [data-tag="PreviewPanel"] { min-height: 420px; }
+  [data-tag="CodeHeader"] { flex-wrap: wrap; gap: 8px; }
+  [data-tag="OutputPanel"] { flex-wrap: wrap; }
   [data-tag="Resizer"] { display: none; }
+}
+
+@media (max-width: 480px) {
+  [data-tag="CodePanel"] { height: 55vh; min-height: 300px; }
+  [data-tag="PreviewPanel"] { min-height: 360px; }
+  [data-tag="CodeHeader"] { padding-inline: 10px !important; }
+  [data-tag="OutputPanel"] { padding: 10px !important; }
 }
