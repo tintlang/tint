@@ -37,10 +37,14 @@ impl UiBuilder {
             return None;
         }
 
-        let id = self.tree.create_styled_node(name.to_string(), modifiers);
+        let id = self
+            .tree
+            .create_styled_node_with_host(name.to_string(), modifiers, host);
         apply_events(&mut self.tree, id, attributes);
         apply_svg(&mut self.tree, id, attributes);
         apply_route(&mut self.tree, id, attributes);
+        apply_asset(&mut self.tree, id, attributes);
+        apply_key(&mut self.tree, id, modifiers);
 
         match find_for(modifiers) {
             // `for{var in iterable}` on this node: build `children` once

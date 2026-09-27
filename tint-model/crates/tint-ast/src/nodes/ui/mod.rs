@@ -1,4 +1,4 @@
-pub mod attribute;
+mod attribute;
 pub mod block;
 pub mod modifier;
 pub mod node;

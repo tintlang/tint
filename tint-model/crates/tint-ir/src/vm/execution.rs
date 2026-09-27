@@ -1,6 +1,6 @@
 use super::*;
 
-impl IrVM {
+impl<'a> IrVM<'a> {
     pub(super) fn exec_instr(&mut self, instr: &Instr) -> Option<Value> {
         match instr {
             Instr::Const { dst, value } => {
@@ -68,6 +68,19 @@ impl IrVM {
                         (Value::Number(a), "*", Value::Number(b)) => Value::Number(a * b),
                         (Value::Number(a), "/", Value::Number(b)) => Value::Number(a / b),
 
+                        (Value::StructInstance { .. }, "+", Value::StructInstance { .. }) => {
+                            Self::vec2_binary(&l, &r, "+")
+                        }
+                        (Value::StructInstance { .. }, "-", Value::StructInstance { .. }) => {
+                            Self::vec2_binary(&l, &r, "-")
+                        }
+                        (Value::StructInstance { .. }, "*", Value::Number(scalar)) => {
+                            Self::vec2_scale(&l, *scalar)
+                        }
+                        (Value::Number(scalar), "*", Value::StructInstance { .. }) => {
+                            Self::vec2_scale(&r, *scalar)
+                        }
+
                         (Value::Bool(a), "&&", Value::Bool(b)) => Value::Bool(*a && *b),
                         (Value::Bool(a), "||", Value::Bool(b)) => Value::Bool(*a || *b),
 
@@ -90,7 +103,12 @@ impl IrVM {
                 self.alloc_value(*dst, out);
             }
 
-            Instr::Call { dst, func, args } => {
+            Instr::Call {
+                dst,
+                func,
+                args,
+                method,
+            } => {
                 // A bare-identifier callee (`foo(a, b)`) compiles `foo`
                 // through the same generic expression-lowering path as
                 // any other value read, so `func` here is the ValueId of
@@ -105,22 +123,44 @@ impl IrVM {
                 // -- they live in the CALLER's value table.
                 let arg_values: Vec<Value> = args.iter().map(|a| self.get_value(*a)).collect();
 
-                let result = match callee_name {
-                    Some(name) => match self.call_named_function(&name, &arg_values) {
-                        Some(v) => v,
+                let result = if let Some((receiver_id, method_name)) = method {
+                    let receiver = self.get_value(*receiver_id);
+                    match self.method_call.as_deref_mut() {
+                        Some(call_method) => {
+                            match call_method(receiver, method_name, &arg_values) {
+                                Some((updated_receiver, result)) => {
+                                    self.write_back(*receiver_id, updated_receiver);
+                                    result
+                                }
+                                None => Value::Unit,
+                            }
+                        }
                         None => {
                             println!(
-                                "WARNING: Call to unknown function `{}`, returning unit",
-                                name
+                                "WARNING: method call `{}` has no runtime method dispatcher",
+                                method_name
                             );
                             Value::Unit
                         }
-                    },
-                    None => {
-                        println!(
-                            "WARNING: Call to a non-function-name callee is not supported yet, returning unit"
-                        );
-                        Value::Unit
+                    }
+                } else {
+                    match callee_name {
+                        Some(name) => match self.call_named_function(&name, &arg_values) {
+                            Some(v) => v,
+                            None => {
+                                println!(
+                                    "WARNING: Call to unknown function `{}`, returning unit",
+                                    name
+                                );
+                                Value::Unit
+                            }
+                        },
+                        None => {
+                            println!(
+                                "WARNING: Call to a non-function-name callee is not supported yet, returning unit"
+                            );
+                            Value::Unit
+                        }
                     }
                 };
 

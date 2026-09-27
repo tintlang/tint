@@ -39,7 +39,29 @@ impl IrBuilder {
 
     pub fn emit_call(&mut self, block: &mut Block, func: ValueId, args: Vec<ValueId>) -> ValueId {
         let dst = self.fresh_value();
-        block.instrs.push(Instr::Call { dst, func, args });
+        block.instrs.push(Instr::Call {
+            dst,
+            func,
+            args,
+            method: None,
+        });
+        dst
+    }
+
+    pub fn emit_method_call(
+        &mut self,
+        block: &mut Block,
+        receiver: ValueId,
+        method: String,
+        args: Vec<ValueId>,
+    ) -> ValueId {
+        let dst = self.fresh_value();
+        block.instrs.push(Instr::Call {
+            dst,
+            func: receiver,
+            args,
+            method: Some((receiver, method)),
+        });
         dst
     }
 

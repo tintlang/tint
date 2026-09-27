@@ -17,7 +17,21 @@ impl SemanticChecker {
     }
 
     fn collect_top_level_names(&mut self, items: &[Item]) {
-        for builtin in ["print", "dbg", "sqrt"] {
+        // `viewport_width` is injected by UiSession rather than declared in
+        // Tint source. It is nevertheless part of every UI function's
+        // persistent runtime scope, so imported UI fragments must see it
+        // during semantic checking too.
+        self.scopes
+            .define_with_mutability("viewport_width", Type::Simple("f64".into()), true);
+        // UiSession also provides a default `theme` value for UI trees that
+        // use imported theme-switch helpers without declaring `state theme`
+        // themselves (Pong is one such consumer).
+        self.scopes
+            .define_with_mutability("theme", Type::Simple("string".into()), true);
+
+        for builtin in [
+            "print", "dbg", "sqrt", "vec2", "clamp", "min", "max", "abs", "sign",
+        ] {
             self.known_fns.insert(builtin.to_string());
         }
         for item in items {
@@ -38,7 +52,8 @@ impl SemanticChecker {
                     // unknown (confirmed against `examples/ui_app.tn`,
                     // which does exactly this).
                     for state in &f.state {
-                        self.scopes.define(&state.name, Type::Unit);
+                        self.scopes
+                            .define_with_mutability(&state.name, Type::Unit, true);
                     }
                 }
                 Item::Struct(s) => {
@@ -72,6 +87,16 @@ impl SemanticChecker {
     fn visit_item(&mut self, item: &Item) {
         match item {
             Item::Fn(f) | Item::ExportFn(f, _) => self.check_fn_body(f),
+            Item::UiFn(f) => self.visit_ui_fn(f),
+            // Each method is a plain `FnDecl` -- `self` binds through the
+            // ordinary `Pattern::Ident("self", ..)` the parser already
+            // produces for it (see `parse_pattern`'s `SelfKw` case), so
+            // `check_fn_body` needs no changes to also cover these.
+            Item::Impl(block) => {
+                for method in &block.methods {
+                    self.check_fn_body(method);
+                }
+            }
             // `GlobalLet`'s pattern was already bound into the persistent
             // base scope in `collect_top_level_names`; the initializer
             // still needs checking, in its own pass so a later global's
@@ -79,10 +104,12 @@ impl SemanticChecker {
             Item::GlobalLet(Stmt::Let { init, .. }) => {
                 self.visit_expr(init.expr());
             }
-            // Not yet covered by this pass -- see the struct doc comment:
-            // `ui fn` bodies, `impl` method bodies, struct/enum
+            // Not yet covered by this pass, and not oversights: struct/enum
             // declarations themselves (nothing to check about a
-            // declaration in isolation without a type checker), modules.
+            // declaration in isolation without a type checker), and
+            // `Item::Mod`/`Item::Use` (module-resolution concerns handled
+            // entirely by `tint-cli`'s loader before this checker ever
+            // runs -- see that module's doc comment).
             _ => {}
         }
     }

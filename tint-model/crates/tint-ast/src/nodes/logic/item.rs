@@ -8,7 +8,14 @@ use super::{expr::Expr, stmt::Block, types::Type};
 
 #[derive(Debug, Clone)]
 pub struct UseDecl {
-    pub path: Vec<String>, // ["math", "vec3"]
+    pub path: Vec<String>, // ["math", "vec3"] -- a module path (`wildcard`) or module::item path
+    /// `use a::b as c;` -- import `b` under the local name `c` instead of
+    /// its own bare name. Never set together with `wildcard` (there's no
+    /// single name to alias a `use a::*` to).
+    pub alias: Option<String>,
+    /// `use a::*;` -- `path` names a MODULE (not `module::item`); every
+    /// exported item in it is imported under its own bare name.
+    pub wildcard: bool,
     pub span: Span,
 }
 

@@ -31,6 +31,12 @@ impl TintVM {
                 true
             }
 
+            // `self` is a distinct AST node from an ordinary identifier.
+            Expr::SelfKw(_) => {
+                self.host_set_var("self", value);
+                true
+            }
+
             // obj.field = value
             Expr::Field { target, field, .. } => {
                 // 1) evaluate object

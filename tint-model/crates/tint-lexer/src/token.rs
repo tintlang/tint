@@ -43,6 +43,7 @@ pub enum TokenKind {
     LessEq,
     GreaterEq,
     AndAnd,
+    Ampersand,
     OrOr,
     Pipe,
     Bang,
@@ -107,6 +108,7 @@ pub enum TokenKind {
     Export,
     Use,
     Import,
+    As,
 
     At,
     Eof,

@@ -26,6 +26,11 @@ impl Parser {
         match next {
             TokenKind::LBrace if is_upper => self.parse_struct_pattern(name, span),
             TokenKind::LParen if is_upper => self.parse_variant_pattern(name, span),
+            _ if is_upper => Ok(Pattern::Variant {
+                name,
+                args: Vec::new(),
+                span,
+            }),
             _ => Ok(Pattern::Ident(name, span)),
         }
     }

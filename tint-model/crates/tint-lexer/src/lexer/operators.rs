@@ -4,6 +4,15 @@ use tint_ast::{Position, Span};
 
 impl Lexer<'_> {
     pub(super) fn lex_operator(&mut self, start: Position) -> Option<Token> {
+        if self.peek() == Some('&') && self.peek2() != Some(('&', '&')) {
+            self.bump();
+            return Some(Token::new(
+                TokenKind::Ampersand,
+                Span::new(start, self.position()),
+                "&",
+            ));
+        }
+
         if self.peek3() == Some(('.', '.', '.')) {
             self.bump();
             self.bump();

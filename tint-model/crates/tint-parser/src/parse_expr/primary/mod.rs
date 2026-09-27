@@ -112,6 +112,60 @@ impl Parser {
                         });
                     }
 
+                    // Enum constructors also support the two compact forms
+                    // useful for state machines and events:
+                    //
+                    //   GameState::Paused
+                    //   GameEvent::Move(10, 20)
+                    //
+                    // Uppercase variant names distinguish these from module
+                    // namespace expressions such as `math::abs`.
+                    let is_variant = variant
+                        .chars()
+                        .next()
+                        .map(|c| c.is_uppercase())
+                        .unwrap_or(false);
+
+                    if is_variant && self.stream.peek_kind() == TokenKind::LParen {
+                        let start = self.stream.next().span;
+                        let mut fields = Vec::new();
+
+                        if !self.stream.consume_if(TokenKind::RParen) {
+                            loop {
+                                let expr = self.parse_expr()?;
+                                let index = fields.len();
+                                fields.push(StructInitField::Assign {
+                                    name: format!("_{index}"),
+                                    expr,
+                                    span: start,
+                                });
+
+                                if !self.stream.consume_if(Comma) {
+                                    break;
+                                }
+                            }
+                            self.stream.expect(TokenKind::RParen)?;
+                        }
+
+                        let end = self.stream.last_span();
+                        return Ok(Expr::VariantInit {
+                            enum_name,
+                            variant,
+                            fields,
+                            span: Span::merge(start, end),
+                        });
+                    }
+
+                    if is_variant {
+                        let span = Span::merge(tok.span, self.stream.last_span());
+                        return Ok(Expr::VariantInit {
+                            enum_name,
+                            variant,
+                            fields: Vec::new(),
+                            span,
+                        });
+                    }
+
                     // Fall back to a namespace expression and allow postfix parsing.
                     let expr = Expr::Namespace {
                         base: Box::new(Expr::Ident(enum_name.clone(), tok.span)),

@@ -4,14 +4,21 @@ impl Parser {
     pub(crate) fn parse_lhs_for_assignment(&mut self) -> PResult<Expr> {
         let start = self.stream.peek().span;
 
-        let mut expr = if let TokenKind::Ident = self.stream.peek().kind {
-            let name = self.stream.next().lexeme.clone();
-            Expr::Ident(name, start)
-        } else {
-            return Err(ParserError::Message {
-                msg: "Expected identifier for assignment".into(),
-                span: start,
-            });
+        let mut expr = match self.stream.peek().kind {
+            TokenKind::Ident => {
+                let name = self.stream.next().lexeme.clone();
+                Expr::Ident(name, start)
+            }
+            TokenKind::SelfKw => {
+                self.stream.next();
+                Expr::Ident("self".into(), start)
+            }
+            _ => {
+                return Err(ParserError::Message {
+                    msg: "Expected identifier for assignment".into(),
+                    span: start,
+                })
+            }
         };
 
         loop {

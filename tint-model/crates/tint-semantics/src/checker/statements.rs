@@ -14,6 +14,11 @@ impl SemanticChecker {
                 self.bind_pattern(pattern);
             }
             Stmt::Assign { lhs, rhs, span: _ } => {
+                if let Expr::Ident(name, span) = lhs {
+                    if self.scopes.lookup(name).is_some() && !self.scopes.is_mutable(name) {
+                        self.error(*span, SemanticErrorKind::AssignToImmutable(name.clone()));
+                    }
+                }
                 self.visit_expr(lhs);
                 self.visit_expr(rhs);
             }
@@ -25,6 +30,8 @@ impl SemanticChecker {
             } => {
                 if self.scopes.lookup(name).is_none() {
                     self.error(*span, SemanticErrorKind::UnknownIdent(name.clone()));
+                } else if !self.scopes.is_mutable(name) {
+                    self.error(*span, SemanticErrorKind::AssignToImmutable(name.clone()));
                 }
                 self.visit_expr(expr);
             }

@@ -32,10 +32,12 @@ fn apply_property(path: &[String], value: &UiModifierValue, out: &mut StyleList)
         "align" => apply_align(value, out),
         "justify" => apply_justify(value, out),
         "position" => apply_position(value, out),
-        "top" => push_px(out, "top", value),
-        "left" => push_px(out, "left", value),
-        "right" => push_px(out, "right", value),
-        "bottom" => push_px(out, "bottom", value),
+        "width" => push_length_or_raw(out, "width", value),
+        "height" => push_length_or_raw(out, "height", value),
+        "top" => push_length_or_raw(out, "top", value),
+        "left" => push_length_or_raw(out, "left", value),
+        "right" => push_length_or_raw(out, "right", value),
+        "bottom" => push_length_or_raw(out, "bottom", value),
         "z" => push_raw(out, "z-index", value),
         "radius" => push_radius(out, &["border-radius"], value),
         "radius.top" => push_radius(
@@ -101,6 +103,11 @@ fn apply_property(path: &[String], value: &UiModifierValue, out: &mut StyleList)
         // this raw CSS passthrough, the same as `transform`/`filter`/
         // `shadow` above.
         "transition" => push_raw_string(out, "transition", value),
+        "animation" | "animation-name" | "animation-duration" | "animation-delay"
+        | "animation-iteration-count" | "animation-timing-function"
+        | "animation-direction" | "animation-fill-mode" | "animation-play-state" => {
+            push_raw_string(out, &path.join("-"), value)
+        }
         // `text-decoration::"underline"` -- mainly meant for inside a
         // `hover::{...}` block (a link that underlines on hover), the same
         // raw CSS passthrough as `transform`/`filter`/`shadow`/`transition`

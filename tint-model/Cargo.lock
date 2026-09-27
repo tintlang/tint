@@ -362,6 +362,7 @@ dependencies = [
  "tint-ir",
  "tint-lexer",
  "tint-parser",
+ "tint-semantics",
 ]
 
 [[package]]
@@ -369,6 +370,8 @@ name = "tint-semantics"
 version = "0.1.0"
 dependencies = [
  "tint-ast",
+ "tint-lexer",
+ "tint-parser",
 ]
 
 [[package]]

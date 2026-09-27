@@ -114,7 +114,24 @@ impl Parser {
         loop {
             // 1) PATTERN
             self.in_pattern = true;
-            let pat = self.parse_pattern()?;
+            let pat = if self.stream.consume_if(TokenKind::Ampersand) {
+                let mutable = self.stream.peek().lexeme == "mut";
+                if mutable {
+                    self.stream.next();
+                }
+                let self_token = self.stream.expect(TokenKind::SelfKw)?;
+                let self_pattern = Pattern::Ident("self".into(), self_token.span);
+                if mutable {
+                    Pattern::Mut {
+                        span: Span::merge(self_token.span, self_token.span),
+                        inner: Box::new(self_pattern),
+                    }
+                } else {
+                    self_pattern
+                }
+            } else {
+                self.parse_pattern()?
+            };
             self.in_pattern = false;
 
             let mut ty = None;

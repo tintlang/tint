@@ -72,10 +72,26 @@ impl Parser {
         }
 
         while self.stream.peek_kind() != TokenKind::Eof {
-            items.push(self.parse_item()?);
+            self.parse_item_into(&mut items)?;
         }
 
         Ok(Program { globals, items })
+    }
+
+    /// Parses one item-position entry and appends whatever it produces to
+    /// `items` -- one `Item` for everything except `use`, which can
+    /// desugar into several (`use a::{b, c};`). Both item-collecting loops
+    /// (`parse_program`'s top level and `parse_mod`'s inline body) call
+    /// this instead of `parse_item` directly so a grouped `use` doesn't
+    /// need special-casing at either call site.
+    fn parse_item_into(&mut self, items: &mut Vec<Item>) -> PResult<()> {
+        if self.stream.peek_kind() == TokenKind::Use {
+            let uses = self.parse_use()?;
+            items.extend(uses.into_iter().map(Item::Use));
+            return Ok(());
+        }
+        items.push(self.parse_item()?);
+        Ok(())
     }
 
     pub fn parse_item(&mut self) -> PResult<Item> {
@@ -120,10 +136,10 @@ impl Parser {
                 return Ok(Item::Mod(m));
             }
 
-            TokenKind::Use => {
-                let u = self.parse_use()?;
-                return Ok(Item::Use(u));
-            }
+            TokenKind::Use => Err(ParserError::Message {
+                msg: "`use` can desugar into more than one item -- call `parse_item_into`, not `parse_item`, wherever a `use` may appear".to_string(),
+                span: self.stream.peek().span,
+            }),
 
             TokenKind::Import => return self.parse_import(),
 
@@ -140,25 +156,94 @@ impl Parser {
         }
     }
 
-    pub(crate) fn parse_use(&mut self) -> PResult<UseDecl> {
+    /// `use a::b::c;`, and now also `use a::b as c;` (import under a local
+    /// alias), `use a::*;` (wildcard -- every exported item of a module),
+    /// and `use a::{b, c as d, e::f};` (grouped, arbitrarily nested, each
+    /// sub-item optionally carrying its own `as`/`*`). A single `use`
+    /// statement can therefore desugar into more than one `UseDecl` --
+    /// that's why this returns a `Vec`, not one -- see the two call sites
+    /// (`parse_program`'s item loop and `parse_mod`'s inline-body loop),
+    /// which `extend` their item list with `Item::Use(..)` per entry
+    /// instead of pushing a single one.
+    pub(crate) fn parse_use(&mut self) -> PResult<Vec<UseDecl>> {
         let start = self.stream.expect(TokenKind::Use)?.span;
 
-        let mut path = Vec::new();
         let first = self.parse_ident()?;
-        path.push(first);
-
-        while self.stream.consume_if(TokenKind::PathSep) {
-            let seg = self.parse_ident()?;
-            path.push(seg);
-        }
+        let mut out = Vec::new();
+        self.parse_use_tail(start, vec![first], &mut out)?;
 
         self.stream.expect(TokenKind::Semicolon)?;
+        Ok(out)
+    }
 
-        let end = self.stream.last_span();
-        Ok(UseDecl {
-            path,
-            span: Span::merge(start, end),
-        })
+    /// Consumes whatever comes after a `use` path segment has just been
+    /// read into `path`: either nothing more (plain path, optional
+    /// `as name`), a `::*` wildcard, or a `::{ ... }` group -- recursing
+    /// once per group entry so `use a::{b::{c, d as e}, f}` nests as
+    /// naturally as the flat cases. Terminates by pushing exactly one
+    /// `UseDecl` into `out` per concrete (non-group) path it finds; never
+    /// touches the trailing `;`, which only the top-level `parse_use` call
+    /// expects (a group entry ends on `,`/`}` instead).
+    fn parse_use_tail(
+        &mut self,
+        start: Span,
+        path: Vec<String>,
+        out: &mut Vec<UseDecl>,
+    ) -> PResult<()> {
+        if !self.stream.consume_if(TokenKind::PathSep) {
+            let alias = if self.stream.consume_if(TokenKind::As) {
+                Some(self.parse_ident()?)
+            } else {
+                None
+            };
+            let end = self.stream.last_span();
+            out.push(UseDecl {
+                path,
+                alias,
+                wildcard: false,
+                span: Span::merge(start, end),
+            });
+            return Ok(());
+        }
+
+        match self.stream.peek_kind() {
+            TokenKind::Star => {
+                self.stream.next();
+                let end = self.stream.last_span();
+                out.push(UseDecl {
+                    path,
+                    alias: None,
+                    wildcard: true,
+                    span: Span::merge(start, end),
+                });
+                Ok(())
+            }
+
+            TokenKind::LBrace => {
+                self.stream.next();
+                loop {
+                    let mut sub = path.clone();
+                    sub.push(self.parse_ident()?);
+                    self.parse_use_tail(start, sub, out)?;
+
+                    if self.stream.consume_if(TokenKind::Comma) {
+                        if self.stream.peek_kind() == TokenKind::RBrace {
+                            break;
+                        }
+                        continue;
+                    }
+                    break;
+                }
+                self.stream.expect(TokenKind::RBrace)?;
+                Ok(())
+            }
+
+            _ => {
+                let mut path = path;
+                path.push(self.parse_ident()?);
+                self.parse_use_tail(start, path, out)
+            }
+        }
     }
 
     pub(crate) fn parse_import(&mut self) -> PResult<Item> {
@@ -195,7 +280,7 @@ impl Parser {
 
         let mut items = Vec::new();
         while !self.stream.consume_if(TokenKind::RBrace) {
-            items.push(self.parse_item()?);
+            self.parse_item_into(&mut items)?;
         }
 
         let end = self.stream.last_span();

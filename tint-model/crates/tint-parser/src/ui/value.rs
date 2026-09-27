@@ -20,6 +20,7 @@ impl Parser {
             }
 
             TokenKind::LBrace => {
+                let checkpoint = self.stream.checkpoint();
                 self.stream.expect(TokenKind::LBrace)?;
 
                 // Empty braces represent an empty modifier tuple.
@@ -38,8 +39,28 @@ impl Parser {
                         continue;
                     }
 
+                    if self.stream.check(TokenKind::RBrace) {
+                        self.stream.next();
+                        break;
+                    }
+
+                    // Neither a comma (more tuple items follow, e.g.
+                    // `{1, #2b3555}`) nor the closing brace -- this isn't
+                    // the tuple grammar at all, it's a single computed
+                    // expression (`{player_y * 20}`, `{a + b}`, ...).
+                    // Rewind and re-parse the whole `{...}` as one
+                    // expression instead, the same way `if{}`/`for{}`/
+                    // `match{}` already do just below in
+                    // `parse_modifier_list_block`. `evaluate_modifier_value`
+                    // (tint-runtime/src/ui/style/mod.rs) already knows how
+                    // to evaluate a `UiModifierValue::Expr` against live
+                    // state for ANY modifier, not just those three -- this
+                    // was the only piece actually missing.
+                    self.stream.restore(checkpoint);
+                    self.stream.expect(TokenKind::LBrace)?;
+                    let expr = self.parse_expr()?;
                     self.stream.expect(TokenKind::RBrace)?;
-                    break;
+                    return Ok(UiModifierValue::Expr(expr));
                 }
 
                 Ok(UiModifierValue::Tuple(items))

@@ -50,6 +50,16 @@ impl EvalHost for TintVM {
         self.host_call_user_fn(name, args, span)
     }
 
+    fn call_method(
+        &mut self,
+        receiver: EvalValue,
+        method: &str,
+        args: &[EvalValue],
+        span: Span,
+    ) -> EvalResult<(EvalValue, EvalValue)> {
+        self.host_call_method(receiver, method, args, span)
+    }
+
     fn set_var(&mut self, name: &str, value: EvalValue) {
         self.host_set_var(name, value);
     }

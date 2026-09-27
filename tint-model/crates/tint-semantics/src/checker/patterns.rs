@@ -1,41 +1,54 @@
 impl SemanticChecker {
     fn bind_pattern(&mut self, pattern: &Pattern) {
+        self.bind_pattern_with_mutability(pattern, false);
+    }
+
+    fn bind_pattern_with_mutability(&mut self, pattern: &Pattern, is_mutable: bool) {
         match pattern {
             Pattern::Ident(name, span) => {
-                if !self.scopes.define(name, Type::Unit) {
+                if !self
+                    .scopes
+                    .define_with_mutability(name, Type::Unit, is_mutable)
+                {
                     self.error(*span, SemanticErrorKind::DuplicateIdent(name.clone()));
                 }
             }
             Pattern::Tuple(items, _) => {
                 for p in items {
-                    self.bind_pattern(p);
+                    self.bind_pattern_with_mutability(p, is_mutable);
                 }
             }
             Pattern::Struct { fields, .. }
             | Pattern::Map { fields, .. }
             | Pattern::Group { fields, .. } => {
                 for field in fields {
-                    self.bind_pattern_field(field);
+                    self.bind_pattern_field_with_mutability(field, is_mutable);
                 }
             }
             Pattern::Variant { args, .. } => {
                 for p in args {
-                    self.bind_pattern(p);
+                    self.bind_pattern_with_mutability(p, is_mutable);
                 }
             }
-            Pattern::Typed { pat, .. } | Pattern::Mut { inner: pat, .. } => self.bind_pattern(pat),
+            Pattern::Typed { pat, .. } => self.bind_pattern_with_mutability(pat, is_mutable),
+            Pattern::Mut { inner, .. } => self.bind_pattern_with_mutability(inner, true),
             Pattern::Number(_, _) | Pattern::String(_, _) | Pattern::Wildcard(_) => {}
         }
     }
 
-    fn bind_pattern_field(&mut self, field: &PatternField) {
+    fn bind_pattern_field_with_mutability(&mut self, field: &PatternField, is_mutable: bool) {
         match field {
             PatternField::Shorthand { field, span } => {
-                if !self.scopes.define(field, Type::Unit) {
+                if !self
+                    .scopes
+                    .define_with_mutability(field, Type::Unit, is_mutable)
+                {
                     self.error(*span, SemanticErrorKind::DuplicateIdent(field.clone()));
                 }
             }
-            PatternField::Assign { pat, .. } => self.bind_pattern(pat),
+            PatternField::Assign { pat, .. } => {
+                self.bind_pattern_with_mutability(pat, is_mutable)
+            }
             PatternField::Rest(_) => {}
         }
     }

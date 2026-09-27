@@ -88,7 +88,7 @@ pub(super) fn case_label_matches(label: &str, scrutinee: &EvalValue) -> bool {
     label == "_" || label == scrutinee.to_string()
 }
 
-/// Reads this node's `click||`/`hover_in||`/`hover_out||` attributes (a
+/// Reads this node's `click||`/`pointer_down||`/`hover_in||`/`hover_out||` attributes (a
 /// bare `handler_name`, i.e. `UiAttrValue::Ident`) and records them on
 /// the tree node, so the render tree carries real handler names instead
 /// of silently dropping them -- previously the only place an attribute
@@ -96,11 +96,16 @@ pub(super) fn case_label_matches(label: &str, scrutinee: &EvalValue) -> bool {
 /// `node.attrs`/`node.onclick`, which nothing on the Rust side ever
 /// populated.
 pub(super) fn apply_events(tree: &mut UiTree, id: UiNodeId, attributes: &[UiAttribute]) {
+    let on_click = find_handler(attributes, "click")
+        .or_else(|| find_handler(attributes, "pointer_down"));
     tree.set_events(
         id,
-        find_handler(attributes, "click"),
+        on_click,
         find_handler(attributes, "hover_in"),
         find_handler(attributes, "hover_out"),
+        find_handler(attributes, "key_down"),
+        find_handler(attributes, "key_up"),
+        find_handler(attributes, "frame"),
     );
 }
 
@@ -129,6 +134,27 @@ pub(super) fn apply_svg(tree: &mut UiTree, id: UiNodeId, attributes: &[UiAttribu
 /// native, and future renderers without treating the route as CSS.
 pub(super) fn apply_route(tree: &mut UiTree, id: UiNodeId, attributes: &[UiAttribute]) {
     tree.set_route(id, find_literal(attributes, "route"));
+}
+
+pub(super) fn apply_asset(tree: &mut UiTree, id: UiNodeId, attributes: &[UiAttribute]) {
+    tree.set_asset(id, find_literal(attributes, "asset"));
+    tree.set_sound(id, find_literal(attributes, "sound"));
+}
+
+pub(super) fn apply_key(tree: &mut UiTree, id: UiNodeId, modifiers: &[UiModifier]) {
+    let key = modifiers.iter().find_map(|modifier| {
+        if modifier.path.len() == 1 && modifier.path[0] == "key" {
+            match &modifier.value {
+                UiModifierValue::String(value) | UiModifierValue::Ident(value) => {
+                    Some(value.clone())
+                }
+                _ => None,
+            }
+        } else {
+            None
+        }
+    });
+    tree.set_key(id, key);
 }
 
 fn find_literal(attributes: &[UiAttribute], name: &str) -> Option<String> {

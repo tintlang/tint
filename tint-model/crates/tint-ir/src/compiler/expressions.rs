@@ -90,13 +90,27 @@ impl SsaCompiler {
 
             // CALL: foo(a,b)
             Expr::Call { target, args, .. } => {
-                let fn_val = self.lower_expr(target, block, locals);
-                let lowered = args
-                    .iter()
-                    .map(|a| self.lower_expr(a, block, locals))
-                    .collect::<Vec<_>>();
-
-                self.builder.emit_call(block, fn_val, lowered)
+                if let Expr::Field {
+                    target: receiver,
+                    field: method,
+                    ..
+                } = target.as_ref()
+                {
+                    let receiver = self.lower_expr(receiver, block, locals);
+                    let lowered = args
+                        .iter()
+                        .map(|a| self.lower_expr(a, block, locals))
+                        .collect::<Vec<_>>();
+                    self.builder
+                        .emit_method_call(block, receiver, method.clone(), lowered)
+                } else {
+                    let fn_val = self.lower_expr(target, block, locals);
+                    let lowered = args
+                        .iter()
+                        .map(|a| self.lower_expr(a, block, locals))
+                        .collect::<Vec<_>>();
+                    self.builder.emit_call(block, fn_val, lowered)
+                }
             }
 
             // FIELD: obj.field

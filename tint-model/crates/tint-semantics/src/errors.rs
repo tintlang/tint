@@ -10,6 +10,7 @@ pub struct SemanticError {
 pub enum SemanticErrorKind {
     UnknownIdent(String),
     DuplicateIdent(String),
+    AssignToImmutable(String),
     TypeMismatch { expected: String, found: String },
     InvalidUiInLogic,
     InvalidLogicInUi,

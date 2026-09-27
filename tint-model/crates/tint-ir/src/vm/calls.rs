@@ -1,6 +1,6 @@
 use super::*;
 
-impl IrVM {
+impl<'a> IrVM<'a> {
     pub(super) fn call_named_function(&mut self, name: &str, args: &[Value]) -> Option<Value> {
         let idx = match self.program.functions.iter().position(|f| f.name == name) {
             Some(idx) => idx,

@@ -30,6 +30,7 @@ pub enum Instr {
         dst: ValueId,
         func: ValueId,
         args: Vec<ValueId>,
+        method: Option<(ValueId, String)>,
     },
     FieldAccess {
         dst: ValueId,

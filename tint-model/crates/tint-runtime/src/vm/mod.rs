@@ -20,6 +20,7 @@ pub struct TintVM {
     pub scopes: RuntimeScopeStack,
     pub logic_functions: HashMap<String, FnDecl>,
     pub ui_functions: HashMap<String, UiFnDecl>,
+    pub impl_methods: HashMap<(String, String), FnDecl>,
 
     // Real Rust functions registered from outside the language (see
     // `register_native`) -- direct Rust interop: no Rust parsing, no
@@ -35,11 +36,32 @@ pub struct TintVM {
     pub native_fns:
         Rc<RefCell<HashMap<String, Box<dyn Fn(&[EvalValue]) -> EvalResult<EvalValue>>>>>,
 
+    /// Host-backed application storage. The default implementation is an
+    /// in-memory store; browser hosts can hydrate/snapshot it through the
+    /// UiSession API and persist it in localStorage.
+    pub storage: Rc<RefCell<HashMap<String, String>>>,
+
+    /// HTTP requests started by Tint. Fetch itself belongs to the host, so
+    /// the VM queues a request and returns its numeric id synchronously.
+    pub http_requests: Rc<RefCell<Vec<HttpRequest>>>,
+
     pub ui: UiRuntime,
+
+    // UI handlers and helpers called by them execute through the tree-walker
+    // and must share the persistent state scope.  Top-level logic calls can
+    // still use the isolated IR VM.
+    pub(crate) treewalk_call_depth: usize,
 
     // IR
     pub ir_program: ProgramIR,
     pub last_result: EvalValue,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HttpRequest {
+    pub id: u64,
+    pub method: String,
+    pub url: String,
 }
 
 mod classification;

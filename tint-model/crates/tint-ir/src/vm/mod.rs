@@ -6,7 +6,7 @@ mod execution;
 mod helpers;
 mod patterns;
 
-pub struct IrVM {
+pub struct IrVM<'a> {
     pub program: ProgramIR,
     locals: std::collections::HashMap<String, Value>,
     values: Vec<Value>,                                   // SSA value table
@@ -23,9 +23,10 @@ pub struct IrVM {
     // fallback available", not an error -- `call_named_function` treats
     // it exactly like "no such function".
     native_call: Option<Box<dyn Fn(&str, &[Value]) -> Option<Value>>>,
+    method_call: Option<&'a mut dyn FnMut(Value, &str, &[Value]) -> Option<(Value, Value)>>,
 }
 
-impl IrVM {
+impl<'a> IrVM<'a> {
     pub fn new(program: ProgramIR) -> Self {
         Self {
             program,
@@ -35,6 +36,7 @@ impl IrVM {
             current_instrs: Vec::new(),
             dst_index: Default::default(),
             native_call: None,
+            method_call: None,
         }
     }
 
@@ -49,6 +51,13 @@ impl IrVM {
     // which additionally covers "no callback installed at all").
     pub fn set_native_call(&mut self, cb: Box<dyn Fn(&str, &[Value]) -> Option<Value>>) {
         self.native_call = Some(cb);
+    }
+
+    pub fn set_method_call(
+        &mut self,
+        cb: &'a mut dyn FnMut(Value, &str, &[Value]) -> Option<(Value, Value)>,
+    ) {
+        self.method_call = Some(cb);
     }
 
     pub fn run(&mut self, entry: &str) -> Value {

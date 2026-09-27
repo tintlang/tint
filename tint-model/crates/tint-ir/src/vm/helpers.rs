@@ -1,6 +1,62 @@
 use super::*;
 
-impl IrVM {
+impl<'a> IrVM<'a> {
+    pub(super) fn vec2_components(value: &Value) -> Option<(f64, f64)> {
+        let Value::StructInstance { name, fields } = value else {
+            return None;
+        };
+        if name != "Vec2" {
+            return None;
+        }
+
+        let number = |field: &str| {
+            fields
+                .iter()
+                .find(|(name, _)| name == field)
+                .and_then(|(_, value)| match value {
+                    Value::Number(value) => Some(*value),
+                    _ => None,
+                })
+        };
+        Some((number("x")?, number("y")?))
+    }
+
+    pub(super) fn vec2_binary(left: &Value, right: &Value, op: &str) -> Value {
+        match (
+            Self::vec2_components(left),
+            Self::vec2_components(right),
+            op,
+        ) {
+            (Some((x1, y1)), Some((x2, y2)), "+") => Value::StructInstance {
+                name: "Vec2".into(),
+                fields: vec![
+                    ("x".into(), Value::Number(x1 + x2)),
+                    ("y".into(), Value::Number(y1 + y2)),
+                ],
+            },
+            (Some((x1, y1)), Some((x2, y2)), "-") => Value::StructInstance {
+                name: "Vec2".into(),
+                fields: vec![
+                    ("x".into(), Value::Number(x1 - x2)),
+                    ("y".into(), Value::Number(y1 - y2)),
+                ],
+            },
+            _ => Value::Unit,
+        }
+    }
+
+    pub(super) fn vec2_scale(value: &Value, scalar: f64) -> Value {
+        match Self::vec2_components(value) {
+            Some((x, y)) => Value::StructInstance {
+                name: "Vec2".into(),
+                fields: vec![
+                    ("x".into(), Value::Number(x * scalar)),
+                    ("y".into(), Value::Number(y * scalar)),
+                ],
+            },
+            None => Value::Unit,
+        }
+    }
     pub(super) fn alloc_value(&mut self, id: ValueId, v: Value) {
         if id as usize >= self.values.len() {
             self.values.resize((id + 1) as usize, Value::Unit);
@@ -75,22 +131,20 @@ impl IrVM {
                 | Instr::Tuple { .. }
                 | Instr::TupleExtract { .. }
                 | Instr::MapInit { .. }
-                | Instr::MapAccess { .. }
-                // `Call` belongs here for the exact same reason `Binary`/etc.
-                // do (see the module doc comment on match-arm bodies being
-                // compiled ahead of the `Match` that establishes their
-                // bindings): a recursive call sitting in an arm that ISN'T
-                // taken must not run at all, let alone run unconditionally
-                // on every level of the recursion. Before this, `Call` ran
-                // eagerly in program order regardless of which arm `Match`
-                // would go on to pick, so as soon as `Instr::Call` actually
-                // did something (rather than the old no-op stub), a
-                // recursive function's base case never had a chance to
-                // stop it -- every level re-entered the recursive arm's
-                // `Call` before `Match` ran at all, overflowing the stack
-                // even for `factorial(0)`.
-                | Instr::Call { .. }
-        )
+                | Instr::MapAccess { .. } // A plain `Call` belongs here for the exact same reason `Binary`/etc.
+                                          // do (see the module doc comment on match-arm bodies being
+                                          // compiled ahead of the `Match` that establishes their
+                                          // bindings): a recursive call sitting in an arm that ISN'T
+                                          // taken must not run at all, let alone run unconditionally
+                                          // on every level of the recursion. Before this, `Call` ran
+                                          // eagerly in program order regardless of which arm `Match`
+                                          // would go on to pick, so as soon as `Instr::Call` actually
+                                          // did something (rather than the old no-op stub), a
+                                          // recursive function's base case never had a chance to
+                                          // stop it -- every level re-entered the recursive arm's
+                                          // `Call` before `Match` ran at all, overflowing the stack
+                                          // even for `factorial(0)`.
+        ) || matches!(instr, Instr::Call { method: None, .. })
     }
 
     // Stringifies a value for "+" string concatenation (numbers/bools/etc.

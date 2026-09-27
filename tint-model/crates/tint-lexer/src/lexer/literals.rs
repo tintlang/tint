@@ -120,6 +120,7 @@ fn keyword_kind(value: &str) -> Option<TokenKind> {
         "export" => TokenKind::Export,
         "use" => TokenKind::Use,
         "import" => TokenKind::Import,
+        "as" => TokenKind::As,
         _ => return None,
     })
 }

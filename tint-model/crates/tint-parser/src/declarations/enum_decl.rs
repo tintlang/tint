@@ -87,11 +87,23 @@ impl Parser {
                     EnumVariant::Struct(variant_name, fields)
                 }
 
-                // Tuple-style enum variants are intentionally unsupported here.
+                // Tuple-style variants are useful for compact events, for
+                // example `Move(i32, i32)`.
                 TokenKind::LParen => {
-                    return self
-                        .stream
-                        .error_here("Tuple variants like Foo(T) are not allowed in Tint");
+                    self.stream.next();
+                    let mut fields = Vec::new();
+
+                    if !self.stream.consume_if(TokenKind::RParen) {
+                        loop {
+                            fields.push(self.parse_type()?);
+                            if !self.stream.consume_if(TokenKind::Comma) {
+                                break;
+                            }
+                        }
+                        self.stream.expect(TokenKind::RParen)?;
+                    }
+
+                    EnumVariant::Tuple(variant_name, fields)
                 }
 
                 // Unit variant

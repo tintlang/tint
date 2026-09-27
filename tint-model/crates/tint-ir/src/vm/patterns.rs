@@ -1,7 +1,7 @@
 use super::*;
 use tint_ast::{Pattern, PatternField, Type};
 
-impl IrVM {
+impl<'a> IrVM<'a> {
     // Shared by `Pattern::Struct` against either a `StructInstance`'s or an
     // `EnumInstance`'s named fields (see the doc comment where this is
     // called): walks the pattern's field list against a `(name, value)`

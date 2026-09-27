@@ -30,6 +30,22 @@ pub trait EvalHost {
     /// Invoke a user-defined function by name.
     fn call_user_fn(&mut self, name: &str, args: &[Value], span: Span) -> EvalResult<Value>;
 
+    /// Invoke a method on a value. The returned value is the possibly
+    /// mutated receiver plus the method result, so callers can write the
+    /// receiver back into a local/state binding.
+    fn call_method(
+        &mut self,
+        _receiver: Value,
+        _method: &str,
+        _args: &[Value],
+        span: Span,
+    ) -> EvalResult<(Value, Value)> {
+        Err(crate::errors::EvalError::InvalidOp {
+            msg: "Methods are not supported by this evaluator".into(),
+            span,
+        })
+    }
+
     fn set_var(&mut self, name: &str, value: Value);
 
     fn call_value(&mut self, value: Value, args: &[Value], span: Span) -> Value;

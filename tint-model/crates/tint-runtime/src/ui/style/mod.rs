@@ -18,6 +18,7 @@
 // separate, later piece of work, not a limitation of this resolver.
 
 use tint_ast::{UiModifier, UiModifierValue};
+use tint_evaluator::{EvalHost, Value as EvalValue};
 
 /// Reconstruct the Tint modifier syntax for browser Elements inspection.
 pub fn format_modifier_source(modifiers: &[UiModifier]) -> String {
@@ -131,6 +132,57 @@ pub fn resolve_style(modifiers: &[UiModifier]) -> (StyleList, StyleList, Vec<(St
     }
 
     (style, hover_style, breakpoints)
+}
+
+/// Resolves style expressions against the live UI scope.  Literal styles keep
+/// using `resolve_style`; this variant is used by the stateful UI builder so a
+/// game can bind `left::{ball_px}`/`top::{ball_py}` without rebuilding a grid
+/// cell for every movement.
+pub fn resolve_style_with_host<H: EvalHost>(
+    modifiers: &[UiModifier],
+    host: &mut H,
+) -> (StyleList, StyleList, Vec<(String, StyleList)>) {
+    let evaluated = modifiers
+        .iter()
+        .map(|modifier| UiModifier {
+            path: modifier.path.clone(),
+            value: evaluate_modifier_value(&modifier.value, host),
+            span: modifier.span,
+        })
+        .collect::<Vec<_>>();
+    resolve_style(&evaluated)
+}
+
+fn evaluate_modifier_value<H: EvalHost>(value: &UiModifierValue, host: &mut H) -> UiModifierValue {
+    match value {
+        UiModifierValue::Expr(expr) => match host.eval_expr(expr) {
+            EvalValue::Number(n) => UiModifierValue::Number(n),
+            EvalValue::String(s) => UiModifierValue::String(s),
+            EvalValue::Bool(b) => UiModifierValue::Ident(b.to_string()),
+            _ => UiModifierValue::Ident("auto".to_string()),
+        },
+        UiModifierValue::Block(items) => UiModifierValue::Block(
+            items
+                .iter()
+                .map(|item| UiModifier {
+                    path: item.path.clone(),
+                    value: evaluate_modifier_value(&item.value, host),
+                    span: item.span,
+                })
+                .collect(),
+        ),
+        UiModifierValue::Tuple(items) => UiModifierValue::Tuple(
+            items
+                .iter()
+                .map(|item| evaluate_modifier_value(item, host))
+                .collect(),
+        ),
+        UiModifierValue::MiniMod { key, value } => UiModifierValue::MiniMod {
+            key: key.clone(),
+            value: Box::new(evaluate_modifier_value(value, host)),
+        },
+        other => other.clone(),
+    }
 }
 
 fn apply_nested_style(value: &UiModifierValue, out: &mut StyleList) {

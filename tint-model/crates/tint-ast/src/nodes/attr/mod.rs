@@ -1,3 +1,3 @@
-pub mod attribute;
+mod attribute;
 
 pub use attribute::*;

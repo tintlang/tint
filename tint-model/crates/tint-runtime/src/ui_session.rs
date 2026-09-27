@@ -36,6 +36,7 @@
 // normal authoring mistake here (this is driving a live sandbox), not a
 // rare crash that should take the whole wasm module down with it.
 
+use std::collections::HashMap;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
 use tint_ast::{Item, Span};
@@ -43,9 +44,11 @@ use tint_evaluator::errors::EvalResult;
 use tint_evaluator::{EvalHost, Value as EvalValue};
 use tint_lexer::{collect_tokens, Lexer};
 use tint_parser::Parser;
+use tint_semantics::prelude::CheckerContext;
+use tint_semantics::SemanticChecker;
 
 use crate::ui::render::UiRenderNode;
-use crate::vm::TintVM;
+use crate::vm::{HttpRequest, TintVM};
 
 /// Name of the read-only variable `UiSession` keeps in scope for a
 /// `ui fn` body to branch on structurally (an `if{}` directive, not
@@ -72,6 +75,11 @@ impl UiSession {
         let tokens = collect_tokens(&mut Lexer::new(source));
         let mut parser = Parser::new(tokens);
         let program = parser.parse_program().map_err(|e| format!("{:?}", e))?;
+
+        let semantic_errors = SemanticChecker::new(CheckerContext::default()).check(&program);
+        if !semantic_errors.is_empty() {
+            return Err(format!("semantic errors: {:?}", semantic_errors));
+        }
 
         let has_ui_fn = program
             .items
@@ -145,13 +153,41 @@ impl UiSession {
     /// module's doc comment for why that needs `call_user_fn` and a
     /// long-lived `TintVM`, not a fresh one per call.
     pub fn dispatch(&mut self, handler: &str) -> Result<Vec<UiRenderNode>, String> {
+        self.dispatch_with_args(handler, &[])
+    }
+
+    /// Dispatches a host event with runtime values, used by `frame||handler`
+    /// to pass elapsed seconds without making the browser part of Tint logic.
+    pub fn dispatch_with_args(
+        &mut self,
+        handler: &str,
+        args: &[EvalValue],
+    ) -> Result<Vec<UiRenderNode>, String> {
         let vm = &mut self.vm;
         let name = &self.ui_fn_name;
         let outcome = catch_unwind(AssertUnwindSafe(|| {
-            vm.call_user_fn(handler, &[], Span::dummy())?;
+            vm.call_user_fn(handler, args, Span::dummy())?;
             vm.render_ui_fn(name, &[])
         }));
         unwrap_outcome(outcome)
+    }
+
+    /// Returns the session's host storage so a browser can persist it in
+    /// localStorage (or another host-specific store).
+    pub fn storage_snapshot(&self) -> HashMap<String, String> {
+        self.vm.storage_snapshot()
+    }
+
+    /// Hydrates host storage before the next render/dispatch.
+    pub fn hydrate_storage(&mut self, values: HashMap<String, String>) {
+        self.vm.hydrate_storage(values);
+    }
+
+    /// Takes HTTP work queued by `http_get(url)`. The host owns fetch,
+    /// credentials, CORS and cancellation; Tint receives completion through
+    /// `dispatch_with_args`.
+    pub fn take_http_requests(&mut self) -> Vec<HttpRequest> {
+        self.vm.take_http_requests()
     }
 }
 

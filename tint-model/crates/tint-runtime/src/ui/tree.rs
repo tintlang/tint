@@ -36,6 +36,12 @@ pub struct UiElement {
     pub on_hover_enter: Option<String>,
     /// Handler from `hover_out||handler`.
     pub on_hover_leave: Option<String>,
+    pub on_key_down: Option<String>,
+    pub on_key_up: Option<String>,
+    pub on_frame: Option<String>,
+    pub asset: Option<String>,
+    pub key: Option<String>,
+    pub sound: Option<String>,
 
     /// Raw inline SVG markup from this node's `svg||"<svg ...>...</svg>"`
     /// attribute (a `UiAttrValue::Literal`, not `Ident` -- see
@@ -65,6 +71,12 @@ impl UiElement {
             on_click: None,
             on_hover_enter: None,
             on_hover_leave: None,
+            on_key_down: None,
+            on_key_up: None,
+            on_frame: None,
+            asset: None,
+            key: None,
+            sound: None,
             svg: None,
             route: None,
         }
@@ -108,6 +120,27 @@ impl UiTree {
         id
     }
 
+    pub fn create_styled_node_with_host<H: tint_evaluator::EvalHost>(
+        &mut self,
+        tag: String,
+        modifiers: &[tint_ast::UiModifier],
+        host: &mut H,
+    ) -> UiNodeId {
+        let id = self.create_node(tag);
+        let (style, hover_style, breakpoints) =
+            super::style::resolve_style_with_host(modifiers, host);
+        let node = &mut self.nodes[id];
+        node.tint_source = format!(
+            "{} {{ {} }}",
+            node.tag,
+            super::style::format_modifier_source(modifiers)
+        );
+        node.style = style;
+        node.hover_style = hover_style;
+        node.breakpoints = breakpoints;
+        id
+    }
+
     /// Sets the event handlers resolved from a node's `click||`/
     /// `hover_in||`/`hover_out||` attributes (see builder.rs's
     /// `find_handler`). A `None` leaves that slot untouched -- there's
@@ -118,11 +151,35 @@ impl UiTree {
         on_click: Option<String>,
         on_hover_enter: Option<String>,
         on_hover_leave: Option<String>,
+        on_key_down: Option<String>,
+        on_key_up: Option<String>,
+        on_frame: Option<String>,
     ) {
         if let Some(node) = self.nodes.get_mut(id) {
             node.on_click = on_click;
             node.on_hover_enter = on_hover_enter;
             node.on_hover_leave = on_hover_leave;
+            node.on_key_down = on_key_down;
+            node.on_key_up = on_key_up;
+            node.on_frame = on_frame;
+        }
+    }
+
+    pub fn set_asset(&mut self, id: UiNodeId, asset: Option<String>) {
+        if let Some(node) = self.nodes.get_mut(id) {
+            node.asset = asset;
+        }
+    }
+
+    pub fn set_key(&mut self, id: UiNodeId, key: Option<String>) {
+        if let Some(node) = self.nodes.get_mut(id) {
+            node.key = key;
+        }
+    }
+
+    pub fn set_sound(&mut self, id: UiNodeId, sound: Option<String>) {
+        if let Some(node) = self.nodes.get_mut(id) {
+            node.sound = sound;
         }
     }
 

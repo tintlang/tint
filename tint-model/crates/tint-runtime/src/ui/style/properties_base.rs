@@ -32,6 +32,16 @@ fn push_px(out: &mut StyleList, prop: &str, value: &UiModifierValue) {
     }
 }
 
+fn push_length_or_raw(out: &mut StyleList, prop: &str, value: &UiModifierValue) {
+    match value {
+        UiModifierValue::Number(n) => out.push((prop.to_string(), px(*n))),
+        UiModifierValue::String(v) | UiModifierValue::Ident(v) => {
+            out.push((prop.to_string(), v.clone()))
+        }
+        _ => {}
+    }
+}
+
 fn push_raw(out: &mut StyleList, prop: &str, value: &UiModifierValue) {
     if let UiModifierValue::Number(n) = value {
         out.push((prop.to_string(), trim_num(*n)));

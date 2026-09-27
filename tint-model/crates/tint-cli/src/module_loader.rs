@@ -62,11 +62,14 @@ pub(crate) struct Loaded {
 /// Basic-version scope (matching this project's usual "narrow but real"
 /// convention -- see the semantic checker's existence-only design): a
 /// `use` path is always absolute from the entry file's own module tree (no
-/// `self::`/`super::`), one name per `use` line (no `use a::{b, c};`, no
-/// `as` aliasing, no `use a::*;`), and only `fn`/`struct`/`enum` can be
-/// exported/imported -- `ui fn`, `impl`, `let`, kernels and type aliases
-/// stay local to the file that declares them for now (matching what
-/// `export` already syntactically applies to, see `parse_export.rs`).
+/// `self::`/`super::`). Grouped imports (`use a::{b, c};`, arbitrarily
+/// nested), `as` aliasing (`use a::b as c;`), and wildcard imports
+/// (`use a::*;`) ARE supported -- see `tint-parser`'s `parse_use_tail` for
+/// the grammar and `resolve_use`/`resolve_use_wildcard` below for how each
+/// resolves. Only `fn`/`struct`/`enum` can be exported/imported -- `ui fn`,
+/// `impl`, `let`, kernels and type aliases stay local to the file that
+/// declares them for now (matching what `export` already syntactically
+/// applies to, see `parse_export.rs`).
 /// Two reachable items ending up with the same bare name is a hard load
 /// error: there's no per-module runtime scoping to fall back on for
 /// disambiguation -- the VM's `logic_functions` table is one flat, global
@@ -150,7 +153,14 @@ fn collect_modules(
                         ));
                     }
                     all_sources.push(child_source);
-                    collect_modules(&child_dir, child_path, child_items, tree, loading, all_sources)?;
+                    collect_modules(
+                        &child_dir,
+                        child_path,
+                        child_items,
+                        tree,
+                        loading,
+                        all_sources,
+                    )?;
                     loading.remove(&canon);
                 } else {
                     collect_modules(dir, child_path, m.items, tree, loading, all_sources)?;
@@ -221,6 +231,49 @@ fn export_info(item: &Item) -> Option<(&str, bool)> {
     }
 }
 
+/// Renames an exportable item's own embedded name (`FnDecl`/`StructDecl`/
+/// `EnumDecl.name`) to `new_name`. Needed for `use a::b as c;`: keying
+/// `merged`/`order` under the alias `c` is not enough on its own, because
+/// every other consumer (`item_names` in this file's own tests,
+/// `tint-semantics`'s checker, `register_functions`, the IR compiler, ...)
+/// reads a function's callable name straight off its own `FnDecl.name`,
+/// never off whatever key `resolve()` happened to file it under. Without
+/// this, an aliased import would be reachable under its ORIGINAL name once
+/// flattened (since the clone's embedded name never changed), not the
+/// alias the `.tn` source actually wrote.
+fn rename_item(item: Item, new_name: &str) -> Item {
+    match item {
+        Item::Fn(mut f) => {
+            f.name = new_name.to_string();
+            Item::Fn(f)
+        }
+        Item::ExportFn(mut f, span) => {
+            f.name = new_name.to_string();
+            Item::ExportFn(f, span)
+        }
+        Item::Struct(mut s) => {
+            s.name = new_name.to_string();
+            Item::Struct(s)
+        }
+        Item::ExportStruct(mut s) => {
+            s.name = new_name.to_string();
+            Item::ExportStruct(s)
+        }
+        Item::Enum(mut e) => {
+            e.name = new_name.to_string();
+            Item::Enum(e)
+        }
+        Item::ExportEnum(mut e) => {
+            e.name = new_name.to_string();
+            Item::ExportEnum(e)
+        }
+        // Anything else never reaches here: `resolve_use`/`resolve_use_wildcard`
+        // only ever call this on an item that already passed `export_info`'s
+        // filter, which covers exactly the six arms above.
+        other => other,
+    }
+}
+
 fn module_path_str(path: &[String]) -> String {
     if path.is_empty() {
         "<entry file>".to_string()
@@ -244,7 +297,13 @@ fn resolve(tree: &ModuleTree) -> Result<Vec<Item>, String> {
     // this is exactly today's single-file behavior, `export` or not.
     for item in &root_items {
         if let Some((name, _)) = export_info(item) {
-            insert_merged(&mut merged, &mut order, name.to_string(), Vec::new(), item.clone())?;
+            insert_merged(
+                &mut merged,
+                &mut order,
+                name.to_string(),
+                Vec::new(),
+                item.clone(),
+            )?;
         }
     }
 
@@ -314,6 +373,22 @@ fn insert_merged(
     }
 }
 
+/// A `use` line's own text, reconstructed for error messages -- `u.path`
+/// alone doesn't distinguish `use a::b;` from `use a::*;` (wildcard) or
+/// `use a::b as c;` (aliased), so error messages built straight from
+/// `u.path.join("::")` used to read fine for the plain case and silently
+/// drop the `*`/`as c` the user actually wrote for the other two.
+fn use_decl_str(u: &UseDecl) -> String {
+    let base = u.path.join("::");
+    if u.wildcard {
+        format!("{}::*", base)
+    } else if let Some(alias) = &u.alias {
+        format!("{} as {}", base, alias)
+    } else {
+        base
+    }
+}
+
 fn resolve_use(
     tree: &ModuleTree,
     importer_path: &[String],
@@ -322,10 +397,14 @@ fn resolve_use(
     order: &mut Vec<String>,
     queue: &mut VecDeque<Vec<String>>,
 ) -> Result<(), String> {
+    if u.wildcard {
+        return resolve_use_wildcard(tree, importer_path, u, merged, order, queue);
+    }
+
     if u.path.len() < 2 {
         return Err(format!(
             "`use {}` in `{}` -- a `use` path needs at least `module::item`",
-            u.path.join("::"),
+            use_decl_str(u),
             module_path_str(importer_path),
         ));
     }
@@ -333,11 +412,15 @@ fn resolve_use(
     let (mod_path, item_name) = u.path.split_at(u.path.len() - 1);
     let mod_path = mod_path.to_vec();
     let item_name = &item_name[0];
+    // `use a::b as c;` binds the imported item under `c` in the merged,
+    // flat namespace instead of its own bare name `b`; a plain `use a::b;`
+    // (no alias) keeps today's behavior of binding it under `b`.
+    let bound_name = u.alias.clone().unwrap_or_else(|| item_name.clone());
 
     let Some(target_items) = tree.get(&mod_path) else {
         return Err(format!(
             "`use {}` in `{}` -- no module `{}`",
-            u.path.join("::"),
+            use_decl_str(u),
             module_path_str(importer_path),
             module_path_str(&mod_path),
         ));
@@ -351,25 +434,71 @@ fn resolve_use(
 
     match found {
         Some((item, true)) => {
-            insert_merged(merged, order, item_name.clone(), mod_path.clone(), item.clone())?;
+            let item = match &u.alias {
+                Some(alias) => rename_item(item.clone(), alias),
+                None => item.clone(),
+            };
+            insert_merged(merged, order, bound_name, mod_path.clone(), item)?;
             queue.push_back(mod_path);
             Ok(())
         }
         Some((_, false)) => Err(format!(
             "`use {}` in `{}` -- `{}` exists in `{}` but isn't exported (add `export` before it)",
-            u.path.join("::"),
+            use_decl_str(u),
             module_path_str(importer_path),
             item_name,
             module_path_str(&mod_path),
         )),
         None => Err(format!(
             "`use {}` in `{}` -- no exported item named `{}` in `{}`",
-            u.path.join("::"),
+            use_decl_str(u),
             module_path_str(importer_path),
             item_name,
             module_path_str(&mod_path),
         )),
     }
+}
+
+/// `use a::*;` -- `u.path` names the MODULE directly (no trailing item
+/// segment to split off, unlike the single-item case above). Every
+/// exported item in it is imported under its own bare name; a name
+/// collision with something already merged (from this or another import)
+/// is caught by `insert_merged` exactly as it would be for an explicit
+/// `use`, since a wildcard is just sugar for "import everything exported
+/// here", not a separate resolution path.
+fn resolve_use_wildcard(
+    tree: &ModuleTree,
+    importer_path: &[String],
+    u: &UseDecl,
+    merged: &mut HashMap<String, (Vec<String>, Item)>,
+    order: &mut Vec<String>,
+    queue: &mut VecDeque<Vec<String>>,
+) -> Result<(), String> {
+    let mod_path = u.path.clone();
+
+    let Some(target_items) = tree.get(&mod_path) else {
+        return Err(format!(
+            "`use {}` in `{}` -- no module `{}`",
+            use_decl_str(u),
+            module_path_str(importer_path),
+            module_path_str(&mod_path),
+        ));
+    };
+
+    let exported: Vec<(String, Item)> = target_items
+        .iter()
+        .filter_map(|item| {
+            export_info(item).and_then(|(name, exported)| {
+                exported.then(|| (name.to_string(), item.clone()))
+            })
+        })
+        .collect();
+
+    for (name, item) in exported {
+        insert_merged(merged, order, name, mod_path.clone(), item)?;
+    }
+    queue.push_back(mod_path);
+    Ok(())
 }
 
 #[cfg(test)]
@@ -426,7 +555,11 @@ mod tests {
 
         let loaded = try_load(main.to_str().unwrap()).expect("should load");
         let names = item_names(&loaded.program.items);
-        assert!(names.contains(&"add".to_string()), "expected `add` to be pulled in: {:?}", names);
+        assert!(
+            names.contains(&"add".to_string()),
+            "expected `add` to be pulled in: {:?}",
+            names
+        );
         assert!(names.contains(&"main".to_string()));
         assert!(
             !names.contains(&"internal_helper".to_string()),
@@ -440,7 +573,11 @@ mod tests {
     fn directory_module_resolves_via_mod_tn() {
         let dir = scratch_dir("dirmod");
         write(&dir, "math/mod.tn", "export fn add(a, b) { a + b }\n");
-        let main = write(&dir, "main.tn", "mod math;\nuse math::add;\nfn main() { add(1, 1) }\n");
+        let main = write(
+            &dir,
+            "main.tn",
+            "mod math;\nuse math::add;\nfn main() { add(1, 1) }\n",
+        );
 
         let loaded = try_load(main.to_str().unwrap()).expect("should load via math/mod.tn");
         assert!(item_names(&loaded.program.items).contains(&"add".to_string()));
@@ -449,7 +586,11 @@ mod tests {
     #[test]
     fn nested_mod_resolves_relative_to_its_own_directory() {
         let dir = scratch_dir("nested");
-        write(&dir, "math/mod.tn", "mod vec3;\nexport fn add(a, b) { a + b }\n");
+        write(
+            &dir,
+            "math/mod.tn",
+            "mod vec3;\nexport fn add(a, b) { a + b }\n",
+        );
         write(&dir, "math/vec3.tn", "export fn len(v) { v }\n");
         let main = write(
             &dir,
@@ -468,20 +609,36 @@ mod tests {
     fn importing_a_non_exported_item_is_an_error() {
         let dir = scratch_dir("private");
         write(&dir, "math.tn", "fn add(a, b) { a + b }\n");
-        let main = write(&dir, "main.tn", "mod math;\nuse math::add;\nfn main() { add(1, 1) }\n");
+        let main = write(
+            &dir,
+            "main.tn",
+            "mod math;\nuse math::add;\nfn main() { add(1, 1) }\n",
+        );
 
         let err = try_load(main.to_str().unwrap()).unwrap_err();
-        assert!(err.contains("isn't exported"), "unexpected message: {}", err);
+        assert!(
+            err.contains("isn't exported"),
+            "unexpected message: {}",
+            err
+        );
     }
 
     #[test]
     fn importing_a_missing_name_is_an_error() {
         let dir = scratch_dir("missing_name");
         write(&dir, "math.tn", "export fn add(a, b) { a + b }\n");
-        let main = write(&dir, "main.tn", "mod math;\nuse math::subtract;\nfn main() { 1 }\n");
+        let main = write(
+            &dir,
+            "main.tn",
+            "mod math;\nuse math::subtract;\nfn main() { 1 }\n",
+        );
 
         let err = try_load(main.to_str().unwrap()).unwrap_err();
-        assert!(err.contains("no exported item named"), "unexpected message: {}", err);
+        assert!(
+            err.contains("no exported item named"),
+            "unexpected message: {}",
+            err
+        );
     }
 
     #[test]
@@ -523,7 +680,8 @@ mod tests {
             "mod shared;\nuse shared::thing;\nuse shared::thing;\nfn main() { thing() }\n",
         );
 
-        let loaded = try_load(main.to_str().unwrap()).expect("repeated identical use should be fine");
+        let loaded =
+            try_load(main.to_str().unwrap()).expect("repeated identical use should be fine");
         assert!(item_names(&loaded.program.items).contains(&"thing".to_string()));
     }
 
@@ -536,7 +694,11 @@ mod tests {
         // loading "successfully".
         let dir = scratch_dir("transitive");
         write(&dir, "helpers.tn", "export fn helper() { 1 }\n");
-        write(&dir, "math.tn", "use helpers::helper;\nexport fn add(a, b) { helper() }\n");
+        write(
+            &dir,
+            "math.tn",
+            "use helpers::helper;\nexport fn add(a, b) { helper() }\n",
+        );
         let main = write(
             &dir,
             "main.tn",
@@ -588,7 +750,11 @@ mod tests {
         let mut vm = TintVM::new();
         vm.run_program(&loaded.program);
 
-        match vm.call_fn("add", &[Value::Number(2.0), Value::Number(3.0)], Span::dummy()) {
+        match vm.call_fn(
+            "add",
+            &[Value::Number(2.0), Value::Number(3.0)],
+            Span::dummy(),
+        ) {
             Ok(Value::Number(n)) => assert_eq!(n, 5.0),
             other => panic!("expected Ok(Number(5)), got {:?}", other),
         }
@@ -597,12 +763,140 @@ mod tests {
     #[test]
     fn a_program_with_no_modules_at_all_is_unchanged() {
         let dir = scratch_dir("nomod");
-        let main = write(&dir, "main.tn", "fn main() { 1 }\nexport fn helper() { 2 }\n");
+        let main = write(
+            &dir,
+            "main.tn",
+            "fn main() { 1 }\nexport fn helper() { 2 }\n",
+        );
 
         let loaded = try_load(main.to_str().unwrap()).expect("plain single-file program");
         assert_eq!(loaded.all_sources.len(), 1);
         let names = item_names(&loaded.program.items);
         assert!(names.contains(&"main".to_string()));
         assert!(names.contains(&"helper".to_string()));
+    }
+
+    #[test]
+    fn use_group_imports_every_item_listed_from_one_statement() {
+        let dir = scratch_dir("group");
+        write(
+            &dir,
+            "math.tn",
+            "export fn add(a, b) { a + b }\nexport fn sub(a, b) { a - b }\nfn internal_helper() { 99 }\n",
+        );
+        let main = write(
+            &dir,
+            "main.tn",
+            "mod math;\nuse math::{add, sub};\nfn main() { add(2, 3) }\n",
+        );
+
+        let loaded = try_load(main.to_str().unwrap()).expect("grouped use should resolve");
+        let names = item_names(&loaded.program.items);
+        assert!(names.contains(&"add".to_string()), "{:?}", names);
+        assert!(names.contains(&"sub".to_string()), "{:?}", names);
+        assert!(!names.contains(&"internal_helper".to_string()), "{:?}", names);
+    }
+
+    #[test]
+    fn use_group_supports_a_trailing_comma_and_an_alias_together() {
+        let dir = scratch_dir("group_alias");
+        write(
+            &dir,
+            "math.tn",
+            "export fn add(a, b) { a + b }\nexport fn sub(a, b) { a - b }\n",
+        );
+        let main = write(
+            &dir,
+            "main.tn",
+            "mod math;\nuse math::{add, sub as minus,};\nfn main() { add(2, 3) }\n",
+        );
+
+        let loaded = try_load(main.to_str().unwrap()).expect("trailing comma + alias in a group should resolve");
+        let names = item_names(&loaded.program.items);
+        assert!(names.contains(&"add".to_string()), "{:?}", names);
+        assert!(
+            names.contains(&"minus".to_string()),
+            "aliased group member should land under its alias: {:?}",
+            names
+        );
+        assert!(
+            !names.contains(&"sub".to_string()),
+            "an aliased import should NOT also be reachable under its original name: {:?}",
+            names
+        );
+    }
+
+    #[test]
+    fn use_alias_binds_the_imported_fn_under_the_local_name_and_it_actually_runs() {
+        // Mirrors `imported_fn_actually_computes_through_the_real_vm_not_just_present_by_name`
+        // above, but for the `as` path specifically: proves the alias is a
+        // real rename all the way through to a callable `TintVM` function,
+        // not just a name that happens to appear in `program.items`.
+        use tint_ast::Span;
+        use tint_evaluator::value::Value;
+        use tint_evaluator::EvalHost;
+        use tint_runtime::vm::TintVM;
+
+        let dir = scratch_dir("alias_end_to_end");
+        write(&dir, "math.tn", "export fn add(a, b) { a + b }\n");
+        let main = write(
+            &dir,
+            "main.tn",
+            "mod math;\nuse math::add as plus;\nfn main() { plus(2, 3) }\n",
+        );
+
+        let loaded = try_load(main.to_str().unwrap()).expect("aliased use should resolve");
+        let names = item_names(&loaded.program.items);
+        assert!(names.contains(&"plus".to_string()), "{:?}", names);
+        assert!(!names.contains(&"add".to_string()), "{:?}", names);
+
+        let mut vm = TintVM::new();
+        vm.run_program(&loaded.program);
+        match vm.call_fn(
+            "plus",
+            &[Value::Number(2.0), Value::Number(3.0)],
+            Span::dummy(),
+        ) {
+            Ok(Value::Number(n)) => assert_eq!(n, 5.0),
+            other => panic!("expected Ok(Number(5)), got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn use_wildcard_imports_every_exported_item_and_only_those() {
+        let dir = scratch_dir("wildcard");
+        write(
+            &dir,
+            "math.tn",
+            "export fn add(a, b) { a + b }\nexport fn sub(a, b) { a - b }\nfn internal_helper() { 99 }\n",
+        );
+        let main = write(
+            &dir,
+            "main.tn",
+            "mod math;\nuse math::*;\nfn main() { add(2, 3) }\n",
+        );
+
+        let loaded = try_load(main.to_str().unwrap()).expect("wildcard use should resolve");
+        let names = item_names(&loaded.program.items);
+        assert!(names.contains(&"add".to_string()), "{:?}", names);
+        assert!(names.contains(&"sub".to_string()), "{:?}", names);
+        assert!(
+            !names.contains(&"internal_helper".to_string()),
+            "a wildcard import must still respect `export` -- private items must not leak: {:?}",
+            names
+        );
+    }
+
+    #[test]
+    fn use_wildcard_of_a_missing_module_is_a_clean_error() {
+        let dir = scratch_dir("wildcard_missing");
+        let main = write(&dir, "main.tn", "use nope::*;\nfn main() { 1 }\n");
+
+        let err = try_load(main.to_str().unwrap()).expect_err("module doesn't exist");
+        assert!(
+            err.contains("no module `nope`"),
+            "expected a clear missing-module error, got: {}",
+            err
+        );
     }
 }
