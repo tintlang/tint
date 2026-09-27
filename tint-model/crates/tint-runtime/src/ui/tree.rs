@@ -106,8 +106,9 @@ impl UiTree {
         tag: String,
         modifiers: &[tint_ast::UiModifier],
     ) -> UiNodeId {
-        let id = self.create_node(tag);
-        let (style, hover_style, breakpoints) = super::style::resolve_style(modifiers);
+        let id = self.create_node(tag.clone());
+        let (mut style, hover_style, breakpoints) = super::style::resolve_style(modifiers);
+        super::style::apply_container_defaults(&tag, &mut style);
         let node = &mut self.nodes[id];
         node.tint_source = format!(
             "{} {{ {} }}",
@@ -126,9 +127,10 @@ impl UiTree {
         modifiers: &[tint_ast::UiModifier],
         host: &mut H,
     ) -> UiNodeId {
-        let id = self.create_node(tag);
-        let (style, hover_style, breakpoints) =
+        let id = self.create_node(tag.clone());
+        let (mut style, hover_style, breakpoints) =
             super::style::resolve_style_with_host(modifiers, host);
+        super::style::apply_container_defaults(&tag, &mut style);
         let node = &mut self.nodes[id];
         node.tint_source = format!(
             "{} {{ {} }}",

@@ -18,6 +18,11 @@ ui fn App() {
 Indentation is optional. Braces define the tree and commas separate values
 inside a modifier tuple.
 
+`Column` and `Row` are built-in layout containers: `Column` defaults to a
+vertical flex layout and `Row` to a horizontal flex layout. Therefore
+`gap::16` works on them without an explicit `direction::...`; use
+`direction::...` when a different axis is needed.
+
 ## Nodes and modifiers
 
 ```tn

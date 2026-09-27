@@ -53,6 +53,11 @@ for compatibility, but new code and documentation should use semantic groups.
 
 ## Layout
 
+`Column` and `Row` automatically use flex layout (`column` and `row`
+respectively), so their children can use `gap` directly. Other node names are
+ordinary elements: `gap` requires `direction::row`, `direction::column`, or a
+`grid::{...}` layout on those nodes.
+
 ```tn
 Panel {
     layout::{

@@ -74,6 +74,26 @@ fn format_modifier_value(value: &UiModifierValue) -> String {
 /// source modifiers were written.
 pub type StyleList = Vec<(String, String)>;
 
+/// `Column` and `Row` are semantic layout containers, so they must be flex
+/// containers for child spacing (`gap`) and their conventional axis to work.
+/// An explicit `direction::...` or `display::...` modifier always wins.
+pub fn apply_container_defaults(tag: &str, style: &mut StyleList) {
+    if style.iter().any(|(property, _)| {
+        property == "display" || property == "flex-direction"
+    }) {
+        return;
+    }
+
+    let direction = match tag {
+        "Column" => "column",
+        "Row" => "row",
+        _ => return,
+    };
+
+    style.push(("display".to_string(), "flex".to_string()));
+    style.push(("flex-direction".to_string(), direction.to_string()));
+}
+
 /// Screen-size names a `mobile::{...}`/`tablet::{...}`/`laptop::{...}`/
 /// `desktop::{...}` modifier can use -- same nested-modifier shape as
 /// `hover::{...}` (a `key::{ sub_key::value, ... }` block), just keyed by

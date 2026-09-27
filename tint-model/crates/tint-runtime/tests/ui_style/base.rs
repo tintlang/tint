@@ -136,6 +136,46 @@ ui fn App() {
 }
 
 #[test]
+fn row_and_column_are_flex_containers_by_default() {
+    let code = r#"
+ui fn App() {
+    Column {
+        gap::16
+        Row {
+            gap::8
+            "A"
+            "B"
+        }
+    }
+}
+"#;
+
+    let ui_fn = parse_ui_fn(code, "App");
+    let mut builder = UiBuilder::new();
+    let mut vm = TintVM::new();
+    builder.build_root(&ui_fn.body, &mut vm);
+    let tree = builder.finish();
+
+    let column = tree.nodes.iter().find(|node| node.tag == "Column").unwrap();
+    assert!(column
+        .style
+        .contains(&("display".to_string(), "flex".to_string())));
+    assert!(column
+        .style
+        .contains(&("flex-direction".to_string(), "column".to_string())));
+    assert!(column.style.contains(&("gap".to_string(), "16px".to_string())));
+
+    let row = tree.nodes.iter().find(|node| node.tag == "Row").unwrap();
+    assert!(row
+        .style
+        .contains(&("display".to_string(), "flex".to_string())));
+    assert!(row
+        .style
+        .contains(&("flex-direction".to_string(), "row".to_string())));
+    assert!(row.style.contains(&("gap".to_string(), "8px".to_string())));
+}
+
+#[test]
 fn justify_resolves_to_main_axis_distribution() {
     let code = r#"
 ui fn App() {
