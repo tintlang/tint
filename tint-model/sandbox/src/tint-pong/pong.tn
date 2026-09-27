@@ -1,0 +1,255 @@
+import "../landing/landing-actions.tn";
+
+enum GameState {
+    Menu,
+    Playing,
+    Paused,
+}
+
+enum GameEvent {
+    Start,
+    Pause,
+    Resume,
+    Restart,
+    MoveUp,
+    MoveDown,
+    Tick(f32),
+}
+
+struct Ball {
+    position{Vec2},
+    velocity{Vec2},
+}
+
+struct Paddle {
+    position{Vec2},
+    speed{f32},
+}
+
+struct Game {
+    mode{GameState},
+    ball{Ball},
+    player{Paddle},
+    cpu{Paddle},
+    player_score{i32},
+    cpu_score{i32},
+    serve_seed{i32},
+}
+
+impl Game {
+    fn reset_ball(&mut self, direction) {
+        self.ball.position = vec2(11.5, 5.5)
+        self.serve_seed = self.serve_seed + 283
+        if self.serve_seed > 1000 { self.serve_seed = self.serve_seed - 1000 }
+
+        let vertical = match self.serve_seed {
+            seed if seed > 800 => 3,
+            seed if seed > 600 => 2,
+            seed if seed > 400 => 0 - 2,
+            seed if seed > 200 => 0 - 1,
+            _ => 1,
+        }
+
+        self.ball.velocity = vec2(direction * 8, vertical * 2)
+    }
+
+    fn restart(&mut self) {
+        self.mode = GameState::Menu
+        self.player.position = vec2(0, 4.5)
+        self.cpu.position = vec2(22, 4.5)
+        self.player_score = 0
+        self.cpu_score = 0
+        self.serve_seed = 417
+        self.ball.position = vec2(11.5, 5.5)
+        self.ball.velocity = vec2(8, 2)
+    }
+
+    fn start(&mut self) {
+        self.mode = GameState::Playing
+        self.reset_ball(1);
+    }
+
+    fn pause(&mut self) {
+        match self.mode {
+            Playing => { self.mode = GameState::Paused },
+            _ => {},
+        }
+    }
+
+    fn resume(&mut self) {
+        match self.mode {
+            Paused => { self.mode = GameState::Playing },
+            _ => {},
+        }
+    }
+
+    fn move_player(&mut self, delta) {
+        self.player.position.y = clamp(self.player.position.y + delta * self.player.speed, 1, 8)
+        match self.mode {
+            Menu => { self.mode = GameState::Playing },
+            _ => {},
+        }
+    }
+
+    fn update_cpu(&mut self, dt) {
+        if self.ball.velocity.x > 0 {
+            if self.ball.position.y + 0.5 < self.cpu.position.y + 1.5 - 0.15 { self.cpu.position.y = self.cpu.position.y - self.cpu.speed * dt }
+            if self.ball.position.y + 0.5 > self.cpu.position.y + 1.5 + 0.15 { self.cpu.position.y = self.cpu.position.y + self.cpu.speed * dt }
+        }
+
+        if self.ball.velocity.x < 0 {
+            self.cpu.position.y = self.cpu.position.y + sign(4.5 - self.cpu.position.y) * 2 * dt
+        }
+
+        self.cpu.position.y = clamp(self.cpu.position.y, 1, 8)
+    }
+
+    fn bounce_from_walls(&mut self) {
+        if self.ball.position.y <= 1 && self.ball.velocity.y < 0 {
+            self.ball.position.y = 1
+            self.ball.velocity.y = abs(self.ball.velocity.y)
+        }
+        if self.ball.position.y >= 10 && self.ball.velocity.y > 0 {
+            self.ball.position.y = 10
+            self.ball.velocity.y = 0 - abs(self.ball.velocity.y)
+        }
+    }
+
+    fn collide_with_player(&mut self) {
+        if self.ball.position.x <= 2 && self.ball.velocity.x < 0 {
+            if self.ball.position.y + 0.5 >= self.player.position.y {
+                if self.ball.position.y + 0.5 <= self.player.position.y + 3 {
+                    self.ball.position.x = 2
+                    self.ball.velocity.x = abs(self.ball.velocity.x)
+                    self.ball.velocity.y = (self.ball.position.y + 0.5 - self.player.position.y - 1.5) / 1.5 * 6
+                }
+            }
+        }
+    }
+
+    fn collide_with_cpu(&mut self) {
+        if self.ball.position.x >= 21 && self.ball.velocity.x > 0 {
+            if self.ball.position.y + 0.5 >= self.cpu.position.y {
+                if self.ball.position.y + 0.5 <= self.cpu.position.y + 3 {
+                    self.ball.position.x = 21
+                    self.ball.velocity.x = 0 - abs(self.ball.velocity.x)
+                    self.ball.velocity.y = (self.ball.position.y + 0.5 - self.cpu.position.y - 1.5) / 1.5 * 6
+                }
+            }
+        }
+    }
+
+    fn check_score(&mut self) {
+        if self.ball.position.x <= 0 {
+            self.cpu_score = self.cpu_score + 1
+            self.reset_ball(1);
+        }
+        if self.ball.position.x >= 23 {
+            self.player_score = self.player_score + 1
+            self.reset_ball(0 - 1);
+        }
+    }
+
+    fn update_ball(&mut self, dt) {
+        self.ball.position = self.ball.position + self.ball.velocity * dt
+        self.bounce_from_walls();
+        self.collide_with_player();
+        self.collide_with_cpu();
+        self.check_score();
+    }
+
+    fn update(&mut self, dt) {
+        match self.mode {
+            Playing => {
+                self.update_cpu(dt);
+                self.update_ball(dt);
+            }
+            _ => {},
+        }
+    }
+
+    fn handle(&mut self, event) {
+        match event {
+            Start => self.start(),
+            Pause => self.pause(),
+            Resume => self.resume(),
+            Restart => self.restart(),
+            MoveUp => self.move_player(0 - 1),
+            MoveDown => self.move_player(1),
+            Tick(dt) => self.update(dt),
+        }
+    }
+}
+
+fn on_frame(dt) {
+    game.handle(GameEvent::Tick(dt));
+}
+
+// Thin UI handlers kept for the pointer buttons in pong-board.tn. The game
+// itself still receives only domain events through Game::handle.
+fn move_up() {
+    game.handle(GameEvent::MoveUp);
+}
+
+fn move_down() {
+    game.handle(GameEvent::MoveDown);
+}
+
+fn restart() {
+    game.handle(GameEvent::Restart);
+}
+
+fn on_key_down(key) {
+    if key == "ArrowUp" || key == "w" || key == "W" || key == "KeyW" { game.handle(GameEvent::MoveUp) }
+    if key == "ArrowDown" || key == "s" || key == "S" || key == "KeyS" { game.handle(GameEvent::MoveDown) }
+    if key == "r" || key == "R" { game.handle(GameEvent::Restart) }
+    if key == " " { game.handle(GameEvent::Start) }
+}
+
+ui fn PongGame() {
+    state rows = [0,1,2,3,4,5,6,7,8,9,10,11]
+    state cols = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23]
+    state game = Game {
+        mode{GameState::Menu},
+        ball{Ball { position{vec2(11.5, 5.5)}, velocity{vec2(8, 2)} }},
+        player{Paddle { position{vec2(0, 4.5)}, speed{0.8} }},
+        cpu{Paddle { position{vec2(22, 4.5)}, speed{4.2} }},
+        player_score{0},
+        cpu_score{0},
+        serve_seed{417},
+    }
+
+    theme::dark {
+        Page {
+            key_down||on_key_down
+            frame||on_frame
+            background::#0a0a0a
+            color::#d0d0d0
+            direction::column
+            align::center
+            justify::start
+            gap::14
+            padding.x::0
+            padding.y::0
+            import "../landing/topbar.tn";
+            import "./pong-board.tn";
+        }
+    }
+
+    theme::light {
+        Page {
+            key_down||on_key_down
+            frame||on_frame
+            background::#ffffff
+            color::#353535
+            direction::column
+            align::center
+            justify::start
+            gap::14
+            padding.x::0
+            padding.y::0
+            import "../landing/topbar.tn";
+            import "./pong-board.tn";
+        }
+    }
+}
