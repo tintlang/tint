@@ -1,0 +1,8 @@
+ui fn App() {
+    Column {
+        layout::{ padding::24, gap::12 }
+        paint::{ background::#12141a }
+        Text { text::{24, bold, white} "Hello Tint" }
+        Button { paint::{ radius::8, color::white } "Click me" }
+    }
+}

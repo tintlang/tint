@@ -14,6 +14,11 @@ ui fn App() {
 }
 ```
 
+## Demo
+
+- Live sandbox + landing page: https://tint-gamma.vercel.app/
+- Pong, built entirely in Tint (`.tn`) source: https://tint-gamma.vercel.app/pong
+
 ## Features
 
 - **Compiler pipeline**: Lexer → Parser → AST → Semantic Checker → SSA IR → Optimizer → WASM
