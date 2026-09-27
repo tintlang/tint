@@ -97,10 +97,14 @@ tint/
 │   │   ├── tint-runtime/    # VM + UI renderer
 │   │   ├── tint-wasm/       # WASM bindings
 │   │   └── tint-cli/        # Command-line tool
-│   ├── sandbox/             # Tint-rendered Web IDE
-│   └── tests/               # Integration tests
+│   ├── examples/            # Sample .tn programs
+│   └── sandbox/             # Tint-rendered Web IDE
 └── vscode-tint/             # VSCode extension (TypeScript)
 ```
+
+Tests live inside each crate's own `tests/` directory (standard Rust layout),
+not in a separate top-level folder -- `tint-runtime/tests/` has the most,
+covering the UI runtime, sessions, layout, and rendering.
 
 ## What Works
 
