@@ -8,10 +8,16 @@ fn build_node(
     // Button/MenuItem or anything with a click handler (so it gets free
     // keyboard/focus/AT behavior), a plain <div> otherwise.
     let is_link = node.route.is_some();
+    let is_image = node.asset.is_some() && node.tag == "Image";
+    let is_audio = node.asset.is_some() && node.tag == "Audio";
     let is_button =
         !is_link && (node.tag == "Button" || node.tag == "MenuItem" || node.on_click.is_some());
     let tag_name = if is_link {
         "a"
+    } else if is_image {
+        "img"
+    } else if is_audio {
+        "audio"
     } else if is_button {
         "button"
     } else {
@@ -20,8 +26,14 @@ fn build_node(
     let el = document.create_element(tag_name)?;
     el.set_attribute("data-tag", &node.tag)?;
     el.set_attribute("data-tint-source", &node.tint_source)?;
+    if let Some(key) = &node.key {
+        el.set_attribute("data-tint-key", key)?;
+    }
     if let Some(route) = &node.route {
         el.set_attribute("href", route)?;
+    }
+    if let Some(asset) = &node.asset {
+        el.set_attribute("src", asset)?;
     }
 
     if let Some(svg) = &node.svg {
@@ -56,31 +68,66 @@ fn build_node(
 
     if !node.hover_style.is_empty() {
         let base_css = style_to_css_text(&base_props);
-        let hover_style = node.hover_style.clone();
+        let mut hover_props = base_props.clone();
+        hover_props.extend(node.hover_style.iter().cloned());
+        let hover_css = style_to_css_text(&hover_props);
+
+        // Stashed on the element as attributes (not just captured by the
+        // closures below) because `patch_node` reuses this same element on
+        // later renders (a keyed diff, not a rebuild) and can resolve a
+        // different base/hover style for it -- a theme switch is the
+        // common case. `patch_node` refreshes these same two attributes on
+        // every patch, so mouseenter/mouseleave always read the current
+        // style instead of whatever was active when this element was
+        // first built. Before this, a theme switch left the closures
+        // applying the old theme's hover color, racing against the
+        // periodic tick reconciliation below (which used the current
+        // theme) -- that race was the flicker.
+        let _ = el.set_attribute("data-tint-base-css", &base_css);
+        let _ = el.set_attribute("data-tint-hover-css", &hover_css);
 
         let el_enter = el.clone();
         let enter_cb = Closure::wrap(Box::new(move |_e: web_sys::Event| {
-            let _ = apply_style_props(&el_enter, &hover_style);
+            let _ = el_enter.set_attribute("data-tint-hover", "true");
+            // Apply the hover layer in one pass. This avoids briefly writing
+            // a base value and then a hover value when a render tick lands
+            // on the same frame as mouseenter. Read fresh off the element
+            // rather than a captured string -- see the comment above.
+            if let Some(hover_css) = el_enter.get_attribute("data-tint-hover-css") {
+                let _ = el_enter.set_attribute("style", &hover_css);
+            }
         }) as Box<dyn FnMut(_)>);
         el.add_event_listener_with_callback("mouseenter", enter_cb.as_ref().unchecked_ref())?;
         enter_cb.forget();
 
         let el_leave = el.clone();
         let leave_cb = Closure::wrap(Box::new(move |_e: web_sys::Event| {
-            let _ = el_leave.set_attribute("style", &base_css);
+            let _ = el_leave.remove_attribute("data-tint-hover");
+            if let Some(base_css) = el_leave.get_attribute("data-tint-base-css") {
+                let _ = el_leave.set_attribute("style", &base_css);
+            }
         }) as Box<dyn FnMut(_)>);
         el.add_event_listener_with_callback("mouseleave", leave_cb.as_ref().unchecked_ref())?;
         leave_cb.forget();
     }
 
     if let Some(handler) = node.on_click.clone() {
-        bind_dispatch(&el, "click", handler, shared);
+        // Dispatch immediately on press. A late click can arrive after a
+        // keyed DOM patch replaced the event target, which made controls feel
+        // like they required a double-click in fast-moving UIs.
+        bind_dispatch(&el, "pointerdown", handler, shared, node.sound.clone());
     }
     if let Some(handler) = node.on_hover_enter.clone() {
-        bind_dispatch(&el, "mouseenter", handler, shared);
+        bind_dispatch(&el, "mouseenter", handler, shared, None);
     }
     if let Some(handler) = node.on_hover_leave.clone() {
-        bind_dispatch(&el, "mouseleave", handler, shared);
+        bind_dispatch(&el, "mouseleave", handler, shared, None);
+    }
+    if let Some(handler) = node.on_key_down.clone() {
+        bind_key_dispatch("keydown", handler, shared);
+    }
+    if let Some(handler) = node.on_key_up.clone() {
+        bind_key_dispatch("keyup", handler, shared);
     }
 
     if node.text.is_none() && node.svg.is_none() {
@@ -99,18 +146,30 @@ fn build_node(
 /// event. Bound as its own `addEventListener` call, alongside (not
 /// instead of) any style-only hover listener already bound above for
 /// the same event name.
-fn bind_dispatch(el: &Element, event_name: &'static str, handler: String, shared: &Rc<Shared>) {
+fn bind_dispatch(
+    el: &Element,
+    event_name: &'static str,
+    handler: String,
+    shared: &Rc<Shared>,
+    sound: Option<String>,
+) {
     let shared = shared.clone();
     let cb = Closure::wrap(Box::new(move |_e: web_sys::Event| {
-        let tree = match shared.session.borrow_mut().dispatch(&handler) {
-            Ok(tree) => tree,
-            Err(e) => {
-                web_sys::console::error_1(&JsValue::from_str(&format!(
-                    "tint: dispatch({}) failed: {}",
-                    handler, e
-                )));
-                return;
-            }
+        if let Some(sound) = &sound {
+            play_sound(sound);
+        }
+        let tree = match shared.session.try_borrow_mut() {
+            Ok(mut session) => match session.dispatch(&handler) {
+                Ok(tree) => tree,
+                Err(e) => {
+                    web_sys::console::error_1(&JsValue::from_str(&format!(
+                        "tint: dispatch({}) failed: {}",
+                        handler, e
+                    )));
+                    return;
+                }
+            },
+            Err(_) => return,
         };
         if let Err(e) = mount_tree(&tree, &shared) {
             web_sys::console::error_1(&e);
@@ -120,5 +179,75 @@ fn bind_dispatch(el: &Element, event_name: &'static str, handler: String, shared
     // element itself is broken, which document.create_element's Result
     // earlier in build_node would already have surfaced.
     let _ = el.add_event_listener_with_callback(event_name, cb.as_ref().unchecked_ref());
+    cb.forget();
+}
+
+fn play_sound(src: &str) {
+    let Some(window) = web_sys::window() else { return };
+    let Some(document) = window.document() else { return };
+    let Ok(audio) = web_sys::HtmlAudioElement::new_with_src(src) else { return };
+    let _ = audio.play();
+    // Keep the element alive until playback ends without putting it into the
+    // visible UI tree. The browser owns the detached media element while its
+    // play promise is active; future audio pooling belongs to the resource
+    // layer rather than the event bridge.
+    let _ = document;
+}
+
+fn bind_key_dispatch(event_name: &'static str, handler: String, shared: &Rc<Shared>) {
+    let (handler_slot, already_bound) = match event_name {
+        "keydown" => {
+            shared.key_down_handler.replace(Some(handler));
+            ("keydown", shared.key_down_bound.replace(true))
+        }
+        "keyup" => {
+            shared.key_up_handler.replace(Some(handler));
+            ("keyup", shared.key_up_bound.replace(true))
+        }
+        _ => return,
+    };
+    if already_bound {
+        return;
+    }
+
+    let window = match web_sys::window() {
+        Some(window) => window,
+        None => return,
+    };
+    let shared = shared.clone();
+    let cb = Closure::wrap(Box::new(move |event: web_sys::KeyboardEvent| {
+        // A `key_down||`/`key_up||` handler is an explicit, deliberate
+        // opt-in by the .tint source (unlike the plain global listener
+        // this replaces in pong.js/pacman.js, which guarded this with an
+        // `instanceof HTMLInputElement` check before calling it). Prevent
+        // the browser's own default for the key here the same way that
+        // host-side JS did -- otherwise Up/Down/Space still scroll the
+        // page underneath a game that's consuming them as controls.
+        event.prevent_default();
+        // Read the current handler because mount_tree rebuilds the DOM after
+        // every dispatch. One stable window listener is enough for the whole
+        // session and avoids multiplying W/S input after every frame.
+        let handler = match handler_slot {
+            "keydown" => shared.key_down_handler.borrow().clone(),
+            "keyup" => shared.key_up_handler.borrow().clone(),
+            _ => None,
+        };
+        let Some(handler) = handler else { return };
+        let args = [tint_evaluator::Value::String(event.key())];
+        let tree = match shared.session.try_borrow_mut() {
+            Ok(mut session) => match session.dispatch_with_args(&handler, &args) {
+                Ok(tree) => tree,
+                Err(e) => {
+                    web_sys::console::error_1(&JsValue::from_str(&format!("tint: {} failed: {}", event_name, e)));
+                    return;
+                }
+            },
+            Err(_) => return,
+        };
+        if let Err(e) = mount_tree(&tree, &shared) {
+            web_sys::console::error_1(&e);
+        }
+    }) as Box<dyn FnMut(_)>);
+    let _ = window.add_event_listener_with_callback(event_name, cb.as_ref().unchecked_ref());
     cb.forget();
 }

@@ -22,6 +22,16 @@ export class DomSession {
      * does for the Svelte path), then rebuilds the DOM from the result.
      */
     dispatch(handler: string): string | undefined;
+    /**
+     * Dispatches a `frame||handler` with elapsed seconds as `dt`.
+     */
+    dispatch_frame(handler: string, dt: number): string | undefined;
+    /**
+     * Delivers `(request_id, status, body)` to a Tint HTTP handler and
+     * updates the DOM with its result.
+     */
+    dispatch_http(handler: string, request_id: number, status: number, body: string): string | undefined;
+    hydrate_storage(values: any): void;
     constructor(source: string, ui_fn_name: string, container_id: string);
     /**
      * Points this SAME `DomSession` at different source -- re-parsing
@@ -48,6 +58,12 @@ export class DomSession {
      * throwing; `None` means it went fine.
      */
     rerender(): string | undefined;
+    storage_snapshot(): any;
+    /**
+     * Returns and clears queued `http_get(url)` work as a JS array. The
+     * browser host performs fetch and feeds completion to `dispatch_http`.
+     */
+    take_http_requests(): any;
 }
 
 /**
@@ -100,6 +116,19 @@ export class UiSession {
      * real, persistent session rather than a fresh `render_ui()` call.
      */
     dispatch(handler: string): any;
+    /**
+     * Dispatches a Tint frame handler with elapsed seconds as `dt`.
+     */
+    dispatch_frame(handler: string, dt: number): any;
+    /**
+     * Delivers an HTTP completion to a Tint handler as
+     * `(request_id, status, body)`.
+     */
+    dispatch_http(handler: string, request_id: number, status: number, body: string): any;
+    /**
+     * Merges a plain JS object into the VM storage.
+     */
+    hydrate_storage(values: any): void;
     constructor(source: string, ui_fn_name: string);
     /**
      * Points this SAME `UiSession` at different source -- re-parsing
@@ -113,6 +142,15 @@ export class UiSession {
      * bad-source error the same way `tree()` does) per keystroke.
      */
     reload(source: string, ui_fn_name: string): any;
+    /**
+     * Reads the VM storage as a plain JS object for localStorage syncing.
+     */
+    storage_snapshot(): any;
+    /**
+     * Returns and clears requests queued by Tint's `http_get(url)` calls.
+     * The host should perform fetch and later call `dispatch_http`.
+     */
+    take_http_requests(): any;
     /**
      * The session's current tree (a fresh build, not cached).
      */
@@ -155,9 +193,14 @@ export interface InitOutput {
     readonly __wbg_uisession_free: (a: number, b: number) => void;
     readonly check: (a: number, b: number) => any;
     readonly domsession_dispatch: (a: number, b: number, c: number) => [number, number];
+    readonly domsession_dispatch_frame: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly domsession_dispatch_http: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
+    readonly domsession_hydrate_storage: (a: number, b: any) => [number, number];
     readonly domsession_new: (a: number, b: number, c: number, d: number, e: number, f: number) => number;
     readonly domsession_reload: (a: number, b: number, c: number, d: number, e: number) => [number, number];
     readonly domsession_rerender: (a: number) => [number, number];
+    readonly domsession_storage_snapshot: (a: number) => any;
+    readonly domsession_take_http_requests: (a: number) => any;
     readonly render_ui: (a: number, b: number, c: number, d: number) => any;
     readonly run: (a: number, b: number, c: number, d: number) => any;
     readonly tint_version: () => [number, number];
@@ -165,10 +208,17 @@ export interface InitOutput {
     readonly tintrepl_new: () => number;
     readonly tintrepl_reset: (a: number) => void;
     readonly uisession_dispatch: (a: number, b: number, c: number) => any;
+    readonly uisession_dispatch_frame: (a: number, b: number, c: number, d: number) => any;
+    readonly uisession_dispatch_http: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => any;
+    readonly uisession_hydrate_storage: (a: number, b: any) => [number, number];
     readonly uisession_new: (a: number, b: number, c: number, d: number) => number;
     readonly uisession_reload: (a: number, b: number, c: number, d: number, e: number) => any;
+    readonly uisession_storage_snapshot: (a: number) => any;
+    readonly uisession_take_http_requests: (a: number) => any;
     readonly uisession_tree: (a: number) => any;
-    readonly wasm_bindgen_277f91586ca95781___convert__closures_____invoke___web_sys_f9f876d40c4e3ed___features__gen_Event__Event______true_: (a: number, b: number, c: any) => void;
+    readonly wasm_bindgen_277f91586ca95781___convert__closures_____invoke___f64______true_: (a: number, b: number, c: number) => void;
+    readonly wasm_bindgen_277f91586ca95781___convert__closures_____invoke___web_sys_12fb11b7fc208418___features__gen_Event__Event______true_: (a: number, b: number, c: any) => void;
+    readonly wasm_bindgen_277f91586ca95781___convert__closures_____invoke___web_sys_12fb11b7fc208418___features__gen_KeyboardEvent__KeyboardEvent______true_: (a: number, b: number, c: any) => void;
     readonly wasm_bindgen_277f91586ca95781___convert__closures_____invoke_______true_: (a: number, b: number) => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
@@ -177,6 +227,7 @@ export interface InitOutput {
     readonly __wbindgen_externrefs: WebAssembly.Table;
     readonly __wbindgen_destroy_closure: (a: number, b: number) => void;
     readonly __wbindgen_free: (a: number, b: number, c: number) => void;
+    readonly __externref_table_dealloc: (a: number) => void;
     readonly __wbindgen_start: () => void;
 }
 

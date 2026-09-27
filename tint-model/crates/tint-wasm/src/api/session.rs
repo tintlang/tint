@@ -96,4 +96,98 @@ impl UiSession {
         }
         serde_wasm_bindgen::to_value(&result).unwrap_or(JsValue::NULL)
     }
+
+    /// Dispatches a Tint frame handler with elapsed seconds as `dt`.
+    pub fn dispatch_frame(&mut self, handler: &str, dt: f64) -> JsValue {
+        let mut result = UiSessionResult::default();
+        match &mut self.inner {
+            None => result.error = self.init_error.clone(),
+            Some(session) => match session.dispatch_with_args(
+                handler,
+                &[tint_evaluator::Value::Number(dt)],
+            ) {
+                Ok(tree) => {
+                    result.ok = true;
+                    result.tree = tree;
+                }
+                Err(e) => result.error = Some(e),
+            },
+        }
+        serde_wasm_bindgen::to_value(&result).unwrap_or(JsValue::NULL)
+    }
+
+    /// Returns and clears requests queued by Tint's `http_get(url)` calls.
+    /// The host should perform fetch and later call `dispatch_http`.
+    pub fn take_http_requests(&mut self) -> JsValue {
+        let requests = match &mut self.inner {
+            Some(session) => session
+                .take_http_requests()
+                .into_iter()
+                .map(|request| HttpRequestResult {
+                    id: request.id,
+                    method: request.method,
+                    url: request.url,
+                })
+                .collect::<Vec<_>>(),
+            None => Vec::new(),
+        };
+        serde_wasm_bindgen::to_value(&requests).unwrap_or(JsValue::NULL)
+    }
+
+    /// Delivers an HTTP completion to a Tint handler as
+    /// `(request_id, status, body)`.
+    pub fn dispatch_http(&mut self, handler: &str, request_id: f64, status: f64, body: &str) -> JsValue {
+        let mut result = UiSessionResult::default();
+        match &mut self.inner {
+            None => result.error = self.init_error.clone(),
+            Some(session) => match session.dispatch_with_args(
+                handler,
+                &[
+                    tint_evaluator::Value::Number(request_id),
+                    tint_evaluator::Value::Number(status),
+                    tint_evaluator::Value::String(body.to_string()),
+                ],
+            ) {
+                Ok(tree) => {
+                    result.ok = true;
+                    result.tree = tree;
+                }
+                Err(e) => result.error = Some(e),
+            },
+        }
+        serde_wasm_bindgen::to_value(&result).unwrap_or(JsValue::NULL)
+    }
+
+    /// Reads the VM storage as a plain JS object for localStorage syncing.
+    pub fn storage_snapshot(&self) -> JsValue {
+        let values = self
+            .inner
+            .as_ref()
+            .map(|session| session.storage_snapshot())
+            .unwrap_or_default();
+        serde_wasm_bindgen::to_value(&values).unwrap_or(JsValue::NULL)
+    }
+
+    /// Merges a plain JS object into the VM storage.
+    pub fn hydrate_storage(&mut self, values: JsValue) -> Result<(), JsValue> {
+        let values: HashMap<String, String> = serde_wasm_bindgen::from_value(values)
+            .map_err(|error| JsValue::from_str(&error.to_string()))?;
+        match &mut self.inner {
+            Some(session) => {
+                session.hydrate_storage(values);
+                Ok(())
+            }
+            None => Err(JsValue::from_str(
+                self.init_error.as_deref().unwrap_or("session is unavailable"),
+            )),
+        }
+    }
+}
+use std::collections::HashMap;
+
+#[derive(Serialize)]
+struct HttpRequestResult {
+    id: u64,
+    method: String,
+    url: String,
 }

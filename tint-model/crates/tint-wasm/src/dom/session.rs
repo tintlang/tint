@@ -8,6 +8,13 @@ impl DomSession {
                     session: RefCell::new(session),
                     container_id: container_id.to_string(),
                     resize_timeout: Cell::new(None),
+                    frame_handler: RefCell::new(None),
+                    raf_active: Cell::new(false),
+                    key_down_handler: RefCell::new(None),
+                    key_up_handler: RefCell::new(None),
+                    key_down_bound: Cell::new(false),
+                    key_up_bound: Cell::new(false),
+                    last_frame_time: Cell::new(None),
                 });
                 bind_resize_listener(&shared);
                 DomSession {
@@ -58,6 +65,98 @@ impl DomSession {
             .map(|e| js_error_to_string(&e))
     }
 
+    /// Dispatches a `frame||handler` with elapsed seconds as `dt`.
+    pub fn dispatch_frame(&mut self, handler: &str, dt: f64) -> Option<String> {
+        let shared = match &self.shared {
+            Some(s) => s.clone(),
+            None => return self.init_error.clone(),
+        };
+        sync_viewport_width(&shared);
+        let tree = match shared.session.borrow_mut().dispatch_with_args(
+            handler,
+            &[tint_evaluator::Value::Number(dt)],
+        ) {
+            Ok(tree) => tree,
+            Err(e) => return Some(e),
+        };
+        mount_tree(&tree, &shared)
+            .err()
+            .map(|e| js_error_to_string(&e))
+    }
+
+    /// Returns and clears queued `http_get(url)` work as a JS array. The
+    /// browser host performs fetch and feeds completion to `dispatch_http`.
+    pub fn take_http_requests(&mut self) -> JsValue {
+        let requests = match &self.shared {
+            Some(shared) => shared
+                .session
+                .borrow_mut()
+                .take_http_requests()
+                .into_iter()
+                .map(|request| HttpRequestJson {
+                    id: request.id,
+                    method: request.method,
+                    url: request.url,
+                })
+                .collect::<Vec<_>>(),
+            None => Vec::new(),
+        };
+        serde_wasm_bindgen::to_value(&requests).unwrap_or(JsValue::NULL)
+    }
+
+    /// Delivers `(request_id, status, body)` to a Tint HTTP handler and
+    /// updates the DOM with its result.
+    pub fn dispatch_http(
+        &mut self,
+        handler: &str,
+        request_id: f64,
+        status: f64,
+        body: &str,
+    ) -> Option<String> {
+        let shared = match &self.shared {
+            Some(s) => s.clone(),
+            None => return self.init_error.clone(),
+        };
+        let tree = match shared.session.borrow_mut().dispatch_with_args(
+            handler,
+            &[
+                tint_evaluator::Value::Number(request_id),
+                tint_evaluator::Value::Number(status),
+                tint_evaluator::Value::String(body.to_string()),
+            ],
+        ) {
+            Ok(tree) => tree,
+            Err(e) => return Some(e),
+        };
+        mount_tree(&tree, &shared)
+            .err()
+            .map(|e| js_error_to_string(&e))
+    }
+
+    pub fn storage_snapshot(&self) -> JsValue {
+        let values = self
+            .shared
+            .as_ref()
+            .map(|shared| shared.session.borrow().storage_snapshot())
+            .unwrap_or_default();
+        serde_wasm_bindgen::to_value(&values).unwrap_or(JsValue::NULL)
+    }
+
+    pub fn hydrate_storage(&mut self, values: JsValue) -> Result<(), JsValue> {
+        let values: std::collections::HashMap<String, String> =
+            serde_wasm_bindgen::from_value(values)
+                .map_err(|error| JsValue::from_str(&error.to_string()))?;
+        match &self.shared {
+            Some(shared) => {
+                shared.session.borrow_mut().hydrate_storage(values);
+                Ok(())
+            }
+            None => Err(JsValue::from_str(
+                self.init_error.as_deref().unwrap_or("session is unavailable"),
+            )),
+        }
+    }
+
     /// Points this SAME `DomSession` at different source -- re-parsing
     /// `source` as `ui_fn_name` into a brand-new inner session and
     /// rendering it, in place of the one built at construction time.
@@ -92,4 +191,11 @@ impl DomSession {
             .err()
             .map(|e| js_error_to_string(&e))
     }
+}
+
+#[derive(serde::Serialize)]
+struct HttpRequestJson {
+    id: u64,
+    method: String,
+    url: String,
 }

@@ -23,13 +23,13 @@ web-sys = { version = "0.3", features = [
     "CssStyleDeclaration",
     "DocumentFragment",
     "Node",
+    "NodeList",
     "EventTarget",
     "Event",
+    "KeyboardEvent",
+    "HtmlAudioElement",
     "console",
 ] }
-
-[profile.release]
-opt-level = "s"
 
 # wasm-pack's own wasm-opt post-processing step needs a specific binaryen
 # release (117 as of this writing) that matches the wasm-bindgen version

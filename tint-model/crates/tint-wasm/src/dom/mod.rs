@@ -50,6 +50,27 @@ struct Shared {
     /// (dragging a window edge) should trigger one rebuild after it
     /// settles, not one per event.
     resize_timeout: Cell<Option<i32>>,
+    /// The `frame||handler` name from the most recently mounted tree, if
+    /// any -- refreshed on every `mount_tree` call (see
+    /// `find_frame_handler`) so the running rAF loop (see
+    /// `start_frame_loop`) always dispatches whatever the CURRENT tree
+    /// asked for, not whatever was true when the loop started.
+    frame_handler: RefCell<Option<String>>,
+    /// Whether `start_frame_loop` has already scheduled its
+    /// `requestAnimationFrame` chain for this session. A `ui fn` declares
+    /// `frame||` at most once in practice, and the loop just keeps
+    /// rescheduling itself once started (see `start_frame_loop`), so this
+    /// only needs to gate the FIRST scheduling.
+    raf_active: Cell<bool>,
+    key_down_handler: RefCell<Option<String>>,
+    key_up_handler: RefCell<Option<String>>,
+    key_down_bound: Cell<bool>,
+    key_up_bound: Cell<bool>,
+    /// The rAF timestamp (ms, from `performance.now()`) the loop last ran
+    /// at, used to compute the real elapsed `dt` (seconds) handed to the
+    /// `frame||` handler. `None` on the very first frame, which reports
+    /// `dt = 0` rather than a bogus jump from page load.
+    last_frame_time: Cell<Option<f64>>,
 }
 
 /// Direct-DOM counterpart to `UiSession` in lib.rs. Wraps the exact same
