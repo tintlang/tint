@@ -3,7 +3,7 @@ name = "tint-evaluator"
 version = "0.1.0"
 edition = "2021"
 description = "TintLang evaluator runtime"
-license = "MIT"
+license = "Unlicense"
 
 [dependencies]
 tint-ast   = { path = "../tint-ast" }
