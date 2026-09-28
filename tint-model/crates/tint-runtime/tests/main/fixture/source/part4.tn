@@ -102,7 +102,7 @@ fn TestForBreak() {
 }
 
 export fn exported_fn(a) { a + 1 }
-export struct Ex { id{i32} }
+export struct Ex { id: i32 }
 
 type Number = union(i32 | f32 | f64)
 
@@ -132,8 +132,8 @@ fn TestTupleDefaultMatch2() {
 }
 
 struct User {
-    id{i32},
-    name{string},
+    id: i32,
+    name: string,
 }
 
 fn TestStructDefault1(User { id, name } {"X"}) {
@@ -145,8 +145,8 @@ fn TestStructDefault2(User { id, name } { 99 }) {
 }
 
 struct Pair {
-    a{i32},
-    b{i32},
+    a: i32,
+    b: i32,
 }
 
 fn TestStructDefault3(Pair { a, b } {7}) {
@@ -155,16 +155,16 @@ fn TestStructDefault3(Pair { a, b } {7}) {
 
 
 fn TestStructUpdateField() {
-    let u = User { id{1}, name{"A"}, age{10} };
-    let u2 = User { age{u.age + 1}, ..u };
+    let u = User { id: 1, name: "A", age: 10 };
+    let u2 = User { age: u.age + 1, ..u };
     u2.age
 }
 
-fn TestDefaultParams(a, b{10}, c: i32{5}) {
+fn TestDefaultParams(a, b = 10, c: i32 = 5) {
     a + b + c
 }
 
-fn TestDefaultParams2(x{1}) { x * 2 }
+fn TestDefaultParams2(x = 1) { x * 2 }
 
 fn make_user(name, age) {
-    User { name{name}, age{age}, id{0} }
+    User { name: name, age: age, id: 0 }

@@ -114,7 +114,7 @@ impl Parser {
         loop {
             // 1) PATTERN
             self.in_pattern = true;
-            let pat = if self.stream.consume_if(TokenKind::Ampersand) {
+            let parsed_pat = if self.stream.consume_if(TokenKind::Ampersand) {
                 let mutable = self.stream.peek().lexeme == "mut";
                 if mutable {
                     self.stream.next();
@@ -134,11 +134,19 @@ impl Parser {
             };
             self.in_pattern = false;
 
-            let mut ty = None;
-            let mut default: Option<DefaultValue> = None;
+            // `parse_pattern` owns the `name: Type` form and therefore may
+            // already have consumed the type before control gets here.  Pull
+            // that type back out so defaults (`x: T = expr`) are parsed by
+            // this parameter parser instead of being mistaken for trailing
+            // tokens after the pattern.
+            let inferred_ty = match &parsed_pat {
+                Pattern::Typed { ty, .. } => Some(ty.clone()),
+                _ => None,
+            };
+            let pat = parsed_pat;
 
-            // 2) optional type: x: T
-            if self.stream.consume_if(TokenKind::Colon) {
+            let typed_pattern = inferred_ty.is_some();
+            if typed_pattern {
                 match style {
                     None => style = Some(Style::Typed),
                     Some(Style::Typed) => {}
@@ -149,37 +157,69 @@ impl Parser {
                         });
                     }
                 }
-
-                ty = Some(self.parse_type()?);
-
-                // optional default: x: T = expr
-                if self.stream.consume_if(TokenKind::Eq) {
-                    let expr = self.parse_expr()?;
-                    default = Some(DefaultValue::Single(expr));
-                }
             }
-            // 3) Tint-style default: pattern {expr}
-            else if self.stream.consume_if(TokenKind::LBrace) {
+
+            let mut ty = inferred_ty;
+            let mut default: Option<DefaultValue> = None;
+
+            // 2) optional type: x: T. Simple identifier patterns have
+            // already consumed this in parse_pattern; this branch remains
+            // for patterns whose type annotation is parsed here.
+            if !typed_pattern && self.stream.consume_if(TokenKind::Colon) {
                 match style {
-                    None => style = Some(Style::Tint),
-                    Some(Style::Tint) => {}
-                    Some(Style::Typed) => {
+                    None => style = Some(Style::Typed),
+                    Some(Style::Typed) => {}
+                    Some(Style::Tint) => {
                         return Err(ParserError::Message {
-                            msg: "Cannot mix Tint-style defaults (`x {expr}`) with typed parameters (`x: T = expr`)".into(),
+                            msg: "Cannot mix typed parameters (`x: T`) with Tint parameters (`x {expr}`)".into(),
                             span: self.stream.last_span(),
                         });
                     }
                 }
+                ty = Some(self.parse_type()?);
+            }
 
+            // Canonical typed default: x: T = expr. This also handles the
+            // simple identifier case where parse_pattern consumed `: T`.
+            if self.stream.consume_if(TokenKind::Eq) {
                 let expr = self.parse_expr()?;
-                self.stream.expect(TokenKind::RBrace)?;
-
-                // SINGLE vs BROADCAST
-                match &pat {
-                    Pattern::Ident(_, _) => {
-                        default = Some(DefaultValue::Single(expr));
+                default = Some(DefaultValue::Single(expr));
+            }
+            // Legacy Tint-style default: pattern {expr}. A typed pattern may
+            // keep this old spelling as a compatibility form, but an
+            // untyped parameter still selects the Tint style and cannot be
+            // mixed with typed parameters in the same signature.
+            else if self.stream.consume_if(TokenKind::LBrace) {
+                if typed_pattern {
+                    let expr = self.parse_expr()?;
+                    self.stream.expect(TokenKind::RBrace)?;
+                    default = Some(DefaultValue::Single(expr));
+                } else {
+                    match style {
+                        None => style = Some(Style::Tint),
+                        Some(Style::Tint) => {}
+                        Some(Style::Typed) => {
+                            return Err(ParserError::Message {
+                            msg: "Cannot mix Tint-style defaults (`x {expr}`) with typed parameters (`x: T = expr`)".into(),
+                            span: self.stream.last_span(),
+                        });
+                        }
                     }
-                    _ => {
+
+                    let expr = self.parse_expr()?;
+                    self.stream.expect(TokenKind::RBrace)?;
+
+                    // SINGLE vs BROADCAST
+                    let simple_ident = match &pat {
+                        Pattern::Ident(_, _) => true,
+                        Pattern::Typed { pat, .. } => {
+                            matches!(pat.as_ref(), Pattern::Ident(_, _))
+                        }
+                        _ => false,
+                    };
+                    if simple_ident {
+                        default = Some(DefaultValue::Single(expr));
+                    } else {
                         default = Some(DefaultValue::Broadcast(expr));
                     }
                 }

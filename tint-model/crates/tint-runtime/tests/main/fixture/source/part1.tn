@@ -1,22 +1,22 @@
 [@(main.att)]
 
-ui fn TestXml() {
-    <Column padding::20 radius::12>
+// XML-style `<Tag ...>...</Tag>` syntax was removed -- block mode (see
+// TestBlock just below) is the only UI syntax now. `TestChildrenGroup`
+// exercises the `children { ... }` grouping tag instead: a plain tag
+// named "children" that the builder splices straight into its parent
+// rather than wrapping (tint-runtime/src/ui/builder/nodes.rs), used to
+// visually separate a node's own modifiers from several structural
+// children.
+ui fn TestChildrenGroup() {
+    Button {
+        click||restart
+        padding::{left::20, right::20}
 
-        <Text text::{24, bold}>
-            "Hello XML"
-        </Text>
-
-        <Button click||increment radius.top::6 padding::12>
-            "Click me"
-        </Button>
-
-        <Row gap::12>
-            <Icon glyph||home size::16 />
-            <Icon glyph||settings size::16 />
-        </Row>
-
-    </Column>
+        children {
+            Icon { "refresh" }
+            Text { "Restart" }
+        }
+    }
 }
 
 ui fn TestBlock() {
@@ -78,33 +78,37 @@ ui fn TestModifiers() {
 }
 
 ui fn TestMultiRoot() {
-    <Text text::20> "First" </Text>
-    <Text text::20> "Second" </Text>
-    <Text text::20> "Third" </Text>
+    Text { text::20 "First" }
+    Text { text::20 "Second" }
+    Text { text::20 "Third" }
 }
 
 ui fn TestIf(visible) {
-    <Block if{visible}>
-        <Text text::20> "Visible!" </Text>
-    </Block>
+    Block {
+        if{visible}
+        Text { text::20 "Visible!" }
+    }
 
-    <Block if{!visible}>
-        <Text text::20> "Hidden" </Text>
-    </Block>
+    Block {
+        if{!visible}
+        Text { text::20 "Hidden" }
+    }
 }
 
 ui fn TestFor(list) {
-    <Block for{item in list}>
-        <Text text::16> "{item}" </Text>
-    </Block>
+    Block {
+        for{item in list}
+        Text { text::16 "{item}" }
+    }
 }
 
 ui fn TestMatch(status) {
-    <Block match{status}>
-        <case ready>   <Text>"OK"</Text> </case>
-        <case error>   <Text>"ERR"</Text> </case>
-        <case loading> <Text>"LOAD"</Text> </case>
-    </Block>
+    Block {
+        match{status}
+        case ready { Text { "OK" } }
+        case error { Text { "ERR" } }
+        case loading { Text { "LOAD" } }
+    }
 }
 ui fn TestClick() {
     Column {
@@ -145,9 +149,9 @@ ui fn TestNested() {
 
 space Logic {
     struct Node<T> {
-        id{i32},
-        value{T},
-        next{Option<Node<T>>},
+        id: i32,
+        value: T,
+        next: Option<Node<T>>,
     }
 
     impl Node<T> {
@@ -163,8 +167,8 @@ space Logic {
     }
 
     struct Vec2 {
-        x{f32},
-        y{f32},
+        x: f32,
+        y: f32,
     }
 
     impl Vec2 {

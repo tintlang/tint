@@ -35,6 +35,25 @@ impl Parser {
                 {
                     out.push(UiNodeOrExpr::Node(self.parse_theme_node()?));
                 }
+                // `case <label> { ... }` -- a match{}-arm child, block
+                // mode's counterpart to the old XML dialect's `<case
+                // label>...</case>` (see `parse_block_case_node` below).
+                // Checked before the generic child-tag branch just under
+                // this one: a bare `case { ... }` (no label) has no
+                // `Ident`/`Underscore` in between, so it falls through to
+                // that generic branch and parses as an ordinary tag named
+                // "case", same as any other component name would.
+                TokenKind::Ident
+                    if self.stream.peek().lexeme == "case"
+                        && matches!(
+                            self.stream.peek2_kind(),
+                            TokenKind::Ident | TokenKind::Underscore
+                        )
+                        && self.stream.peek_n_kind(2) == TokenKind::LBrace =>
+                {
+                    out.push(UiNodeOrExpr::Node(self.parse_block_case_node()?));
+                }
+
                 TokenKind::Ident if self.stream.peek2_kind() == TokenKind::LBrace => {
                     out.push(UiNodeOrExpr::Node(self.parse_block_node()?));
                 }
@@ -201,6 +220,43 @@ impl Parser {
             var,
             iterable,
             body,
+            span: Span::merge(start, end),
+        })
+    }
+
+    /// `case <label> { ...children... }` -- the block-mode arm of a
+    /// `match{scrutinee}` node, replacing the old XML dialect's `<case
+    /// label>...</case>`. Produces the exact same AST shape that old
+    /// syntax did: a node carrying a synthetic `UiAttribute{name: "case",
+    /// value: Ident(label)}` (see
+    /// `tint-runtime/src/ui/builder/helpers.rs`'s `find_case_label`/
+    /// `case_label_matches`, and `build_container`'s match{} case-scanning
+    /// in `tint-runtime/src/ui/builder/nodes.rs`, neither of which had to
+    /// change to accept this -- they already just look for a `case`
+    /// attribute on any child, regardless of which syntax produced it).
+    /// `_` is the wildcard arm; it lexes as its own `TokenKind::Underscore`
+    /// (same token the `match` expression's wildcard pattern uses in Logic
+    /// Mode), not `Ident`, hence the explicit check for both above.
+    pub(crate) fn parse_block_case_node(&mut self) -> PResult<UiNode> {
+        let start = self.stream.next().span; // 'case'
+
+        let label_tok = self.stream.next();
+        let label = label_tok.lexeme.clone();
+        let label_span = label_tok.span;
+
+        self.stream.expect(TokenKind::LBrace)?;
+        let children = self.parse_block_children()?;
+        let end = self.stream.expect(TokenKind::RBrace)?.span;
+
+        Ok(UiNode::BlockElement {
+            name: "case".to_string(),
+            attributes: vec![UiAttribute {
+                name: "case".to_string(),
+                value: UiAttrValue::Ident(label),
+                span: label_span,
+            }],
+            modifiers: vec![],
+            children,
             span: Span::merge(start, end),
         })
     }

@@ -125,11 +125,13 @@ covering the UI runtime, sessions, layout, and rendering.
 ✅ A native fn called from *inside* a plain `fn`'s own body, invoked the normal top-level way through the IR VM -- `IrVM` now falls back to a native-lookup callback (`set_native_call`) when no IR-compiled function matches the callee name, backed by `TintVM::native_fns` (see `tint-runtime/tests/native_fn.rs`)
 ✅ Multi-file modules (`mod`/`use`/`export`) via a `tint-cli`-side loader -- absolute paths only (no `self::`/`super::`), but grouped (`use a::{b, c}`), `as`-aliased, and wildcard (`use a::*`) imports all work alongside the plain form; `fn`/`struct`/`enum` are exportable
 ✅ A basic semantic checker (undefined-variable/duplicate-binding checks, not type checking) over `fn`, `ui fn`, and `impl` method bodies -- `tint check` fails on errors, `tint run` warns and still executes
+✅ One UI syntax: the earlier XML dialect (`<Tag ...>...</Tag>`) has been removed -- `Tag { ... }` block syntax is now the only way to write UI, including `match{}`'s case arms (see below)
+✅ `children { ... }` -- an optional grouping tag for a node's own children, so they don't blur together with several modifiers in the same block; splices straight into its parent, no wrapper node of its own (see `tint-runtime/tests/render_ui.rs`)
 
 ## Known Gaps
 
 ❌ Multiple independent component instances (state is one flat scope per `UiSession`)
-✅ `match{}` in UI trees, XML-mode only: `<case label>...</case>` children (`<case _>` as the wildcard arm), matched by comparing the scrutinee's display text against each label -- see `tint-runtime/tests/render_ui.rs`
+✅ `match{}` in UI trees: `case label { ... }` children (`case _ { ... }` as the wildcard arm), matched by comparing the scrutinee's display text against each label -- see `tint-runtime/tests/render_ui.rs`
 ✅ Compile-time `.tn` imports in the Vite sandbox source pipeline
 ❌ Namespace access (`Ns::item`) and lambda expressions are unimplemented specifically in the IR VM path (both already work through the tree-walking path used for UI handlers)
 ❌ Tuple-style enum variants (`enum E { A(T) }`) -- rejected at the semantic-check stage; only named-field variants (`enum E { A { x } }`) are supported

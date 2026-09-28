@@ -57,5 +57,24 @@ Nav {
 ```
 
 Style-only responsive changes use `mobile::{...}`, `tablet::{...}`,
-`laptop::{...}`, and `desktop::{...}`. `match{...}` is parsed but is not yet
-evaluated in the UI tree.
+`laptop::{...}`, and `desktop::{...}`.
+
+## Match
+
+`match{scrutinee}` picks exactly one `case` child to build, by comparing
+each label against the scrutinee's display text:
+
+```tn
+Block {
+    match{status}
+    case ready { Text { "OK" } }
+    case error { Text { "ERR" } }
+    case _     { Text { "Unknown" } }
+}
+```
+
+`case _ { ... }` is the wildcard arm, matched when nothing else does. A
+`case` arm never shows up as a node of its own in the render tree -- only
+its own children do, spliced directly into the parent, same as `for{}`'s
+standalone block form above. With no matching case and no wildcard, the
+node simply has no children that render.

@@ -5,37 +5,44 @@ use tint_lexer::TokenKind;
 mod block;
 mod text;
 mod value;
-mod xml;
 
 impl Parser {
     pub fn parse_ui_root(&mut self) -> PResult<Vec<UiNode>> {
         let mut nodes = Vec::new();
 
-        let mode = self.detect_ui_mode()?;
+        self.check_ui_root_start()?;
 
         while !self.stream.check(TokenKind::RBrace) {
-            match mode {
-                UiMode::Xml => nodes.push(self.parse_xml_node()?),
-                UiMode::Block => {
-                    if self.stream.peek().lexeme == "theme"
-                        && self.stream.peek2_kind() == TokenKind::PathSep
-                        && self.stream.peek_n_kind(2) == TokenKind::Ident
-                        && self.stream.peek_n_kind(3) == TokenKind::LBrace
-                    {
-                        nodes.push(self.parse_theme_node()?);
-                    } else {
-                        nodes.push(self.parse_block_node()?);
-                    }
-                }
+            if self.stream.peek().lexeme == "theme"
+                && self.stream.peek2_kind() == TokenKind::PathSep
+                && self.stream.peek_n_kind(2) == TokenKind::Ident
+                && self.stream.peek_n_kind(3) == TokenKind::LBrace
+            {
+                nodes.push(self.parse_theme_node()?);
+            } else {
+                nodes.push(self.parse_block_node()?);
             }
         }
 
         Ok(nodes)
     }
 
-    fn detect_ui_mode(&mut self) -> PResult<UiMode> {
+    /// UI syntax is block-mode only (`Tag { ... }`) -- the earlier XML
+    /// dialect (`<Tag ...>...</Tag>`) was removed (see `tint-parser/src/ui/block.rs`'s
+    /// `parse_block_case_node` for where its one syntax-unique feature,
+    /// `<case label>`, landed in block mode as `case label { ... }`).
+    /// A leading `<` gets its own, specific error rather than falling
+    /// through to the generic message below, since it's the one mistake
+    /// someone coming from the old syntax (or an example predating the
+    /// removal) is actually likely to make.
+    fn check_ui_root_start(&mut self) -> PResult<()> {
         match self.stream.peek().kind {
-            TokenKind::LAngle => Ok(UiMode::Xml),
+            TokenKind::LAngle => Err(ParserError::Message {
+                msg: "XML-style UI syntax (<Tag>...</Tag>) has been removed -- \
+                      use block syntax instead: Tag { ... }"
+                    .into(),
+                span: self.stream.peek().span,
+            }),
             TokenKind::Ident => {
                 if self.stream.peek2_kind() == TokenKind::LBrace
                     || (self.stream.peek().lexeme == "theme"
@@ -43,17 +50,16 @@ impl Parser {
                         && self.stream.peek_n_kind(2) == TokenKind::Ident
                         && self.stream.peek_n_kind(3) == TokenKind::LBrace)
                 {
-                    Ok(UiMode::Block)
+                    Ok(())
                 } else {
                     Err(ParserError::Message {
-                        msg: "UI must start either with <Tag> (XML mode) or Tag { } (Block mode)"
-                            .into(),
+                        msg: "Invalid beginning of UI. Expected Tag { }".into(),
                         span: self.stream.peek().span,
                     })
                 }
             }
             _ => Err(ParserError::Message {
-                msg: "Invalid beginning of UI. Expected <Tag> or Tag { }".into(),
+                msg: "Invalid beginning of UI. Expected Tag { }".into(),
                 span: self.stream.peek().span,
             }),
         }
@@ -81,10 +87,4 @@ impl Parser {
             _ => self.stream.error_here("Invalid value after ||"),
         }
     }
-}
-
-#[derive(Debug, Clone, Copy)]
-enum UiMode {
-    Xml,
-    Block,
 }

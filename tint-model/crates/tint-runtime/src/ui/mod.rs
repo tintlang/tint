@@ -11,7 +11,7 @@ use crate::ui::tree::{UiNodeId, UiTree};
 use tint_ast::*;
 use tint_evaluator::EvalHost;
 
-/// Runtime for the new Tint UI system (multi-root, XML or BLOCK mode)
+/// Runtime for the Tint UI system (multi-root, block-mode syntax)
 pub struct UiRuntime {
     /// Virtual synthetic root that contains all nodes from UiFnDecl.body
     pub root: Option<UiNodeId>,

@@ -107,8 +107,8 @@ fn TestMapPattern() {
 //    Ok { value }
 //
 // Initialization:
-//    Option::Some { value{10} }
-//    Result::Err { error{"msg"} }
+//    Option::Some { value: 10 }
+//    Result::Err { error: "msg" }
 
 enum Option<T> {
     Some { value },
@@ -121,7 +121,7 @@ enum Result<T, E> {
 }
 
 fn TestTintOption() {
-    let a = Option::Some { value{10} };
+    let a = Option::Some { value: 10 };
     let b = Option::None {};
 
     match a {
@@ -131,8 +131,8 @@ fn TestTintOption() {
 }
 
 fn TestTintResult() {
-    let r1 = Result::Ok { value{"OK"} };
-    let r2 = Result::Err { error{"E"} };
+    let r1 = Result::Ok { value: "OK" };
+    let r2 = Result::Err { error: "E" };
 
     match r1 {
         Ok { value } => value.len(),

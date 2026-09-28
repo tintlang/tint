@@ -52,6 +52,36 @@ Workspace {
 }
 ```
 
+## Grouping children
+
+A node's modifiers and its children live in the same block, with no
+syntax marking where one ends and the other begins -- normally fine, but
+several modifiers followed by several structural children can blur
+together at a glance. `children { ... }` is an optional tag for exactly
+that case: it splices its own children straight into the parent (no
+wrapper node of its own), so it's purely a readability grouping, not a
+new kind of node.
+
+```tn
+Button {
+    click||restart
+    layout::{ padding::{ left::20, right::20 } }
+
+    children {
+        Icon { "refresh" }
+        Text { "Restart" }
+    }
+}
+```
+
+A single child (plain text, or one element) is unambiguous either way, so
+`children { ... }` is worth reaching for once a node has more than one --
+not required for every block.
+
+`children` is a reserved tag name: the builder recognizes it by name
+alone and always splices it, so a component you name `children` will not
+render as its own node -- pick a different name for one.
+
 ## State and events
 
 State is declared inside a UI function. Event attributes use `||` followed by a

@@ -34,13 +34,6 @@ impl UiBuilder {
             // Splices into the parent instead of creating a node of its
             // own -- handled in `build_into` (nodes.rs), same as `Theme`.
             UiNode::For { .. } => None,
-            UiNode::Element {
-                name,
-                attributes,
-                modifiers,
-                children,
-                ..
-            } => self.build_container(name, attributes, modifiers, children, host),
             UiNode::BlockElement {
                 name,
                 attributes,
@@ -48,32 +41,12 @@ impl UiBuilder {
                 children,
                 ..
             } => self.build_container(name, attributes, modifiers, children, host),
-            UiNode::SelfClosing {
-                name,
-                attributes,
-                modifiers,
-                ..
-            } => {
-                if !check_if(modifiers, host) {
-                    return None;
-                }
-                let id = self
-                    .tree
-                    .create_styled_node_with_host(name.clone(), modifiers, host);
-                apply_events(&mut self.tree, id, attributes);
-                apply_svg(&mut self.tree, id, attributes);
-                apply_route(&mut self.tree, id, attributes);
-                apply_asset(&mut self.tree, id, attributes);
-                apply_key(&mut self.tree, id, modifiers);
-                Some(id)
-            }
             UiNode::BlockSelfClosing {
                 name, modifiers, ..
             } => {
                 // Block-mode self-closing nodes (`Tag {}`) carry no
                 // `attributes` in the AST at all (see tint_ast::UiNode) --
-                // only XML self-closing (`<Tag />`) does. Nothing to wire
-                // events from here.
+                // nothing to wire events from here.
                 if !check_if(modifiers, host) {
                     return None;
                 }

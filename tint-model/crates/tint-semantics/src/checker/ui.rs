@@ -3,9 +3,9 @@
 // scope as everywhere else in this checker: is every identifier actually
 // in scope, are there no duplicate bindings -- NOT type checking, and NOT
 // resolution of anything that needs a value's type (a `click||handler`
-// name, a `<case label>`, a modifier path like `padding`/`hover` are all
-// left alone here, exactly as they are at runtime until something actually
-// evaluates them).
+// name, a `case label { ... }` arm's label, a modifier path like
+// `padding`/`hover` are all left alone here, exactly as they are at
+// runtime until something actually evaluates them).
 impl SemanticChecker {
     fn visit_ui_fn(&mut self, f: &UiFnDecl) {
         self.ctx.mode = Mode::UI;
@@ -33,13 +33,7 @@ impl SemanticChecker {
 
     fn visit_ui_node(&mut self, node: &UiNode) {
         match node {
-            UiNode::Element {
-                attributes,
-                modifiers,
-                children,
-                ..
-            }
-            | UiNode::BlockElement {
+            UiNode::BlockElement {
                 attributes,
                 modifiers,
                 children,
@@ -48,15 +42,6 @@ impl SemanticChecker {
                 self.visit_ui_attributes(attributes);
                 self.visit_ui_modifiers(modifiers);
                 self.visit_ui_children_with_for(modifiers, children);
-            }
-
-            UiNode::SelfClosing {
-                attributes,
-                modifiers,
-                ..
-            } => {
-                self.visit_ui_attributes(attributes);
-                self.visit_ui_modifiers(modifiers);
             }
 
             UiNode::BlockSelfClosing { modifiers, .. } => {
@@ -136,7 +121,7 @@ impl SemanticChecker {
             match &attr.value {
                 UiAttrValue::Expr(e) => self.visit_expr(e),
                 UiAttrValue::Modifier(block) => self.visit_ui_modifier_block(block),
-                // `click||handler_name`, `<case label>`, `svg||"..."`,
+                // `click||handler_name`, a `case`-arm's label, `svg||"..."`,
                 // `route||"..."` -- a bare identifier or literal, resolved
                 // dynamically at runtime (against `TintVM.logic_functions`
                 // or a case comparison), never a variable read this pass

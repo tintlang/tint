@@ -12,8 +12,8 @@ count = count + 1;
 count += 1;              // shorthand
 ```
 
-`=` is for assignment, `:` for types. Neither `{}` nor `()` belongs in this kind of
-statement.
+`=` is for assignment, `:` for types. The older `let value{expr}` spelling is
+accepted for compatibility, but new code should use `=`.
 
 ## Type inference
 

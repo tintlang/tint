@@ -7,9 +7,9 @@
         list{ [ (1,2) (3,4) (5, [6,7,8]) ] },
         user{
             User {
-                id{ a.2.id },
-                name{"Deep"},
-                age{ a.2.age + 1 }
+                id: a.2.id,
+                name: "Deep",
+                age: a.2.age + 1
             }
         }
     };
@@ -30,10 +30,10 @@
         _ => 0
     };
 
-    let op = Option::Some { value{ map {
+    let op = Option::Some { value: map {
         inner{ [1,2,3] },
-        deep{ User { id{5}, name{"X"}, age{7} } }
-    }}};
+        deep{ User { id: 5, name: "X", age: 7 } }
+    }};
 
     let r = match op {
         Some { value{ inner, deep } } => {
@@ -55,11 +55,11 @@
 }
 
 struct Box<T> {
-    value{T}
+    value: T
 }
 
 fn TestStructGeneric() {
-    let b = Box { value{50} }
+    let b = Box { value: 50 }
     b.value + 1
 }
 
@@ -69,7 +69,7 @@ enum Option<T> {
 }
 
 fn TestOptionGeneric() {
-    let a = Option::Some { value{10} }
+    let a = Option::Some { value: 10 }
     let b = Option::None {}
 
     match a {
@@ -79,7 +79,7 @@ fn TestOptionGeneric() {
 }
 
 struct Vec3<T> {
-    x{T}, y{T}, z{T}
+    x: T, y: T, z: T
 }
 
 fn length<T>(v: Vec3<T>) { 0 } // fake test, just checks parsing
@@ -99,7 +99,7 @@ fn TestReturnGeneric() {
 }
 
 fn TestGenericResult() {
-    let r = Result::Ok { value{50} }
+    let r = Result::Ok { value: 50 }
 
     match r {
         Ok { value } => value * 2,
@@ -145,12 +145,12 @@ struct Sprite {
 struct Sprite{
     @kit.transform2d {
         @kit.position {
-            x{f32},
-            y{f32},
+            x: f32,
+            y: f32,
         }
 
         @kit.rotation {
-            angle{f32},
+            angle: f32,
         }
     }
 }

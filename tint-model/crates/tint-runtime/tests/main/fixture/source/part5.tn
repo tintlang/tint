@@ -1,7 +1,7 @@
 }
 
 fn TestNamedCalls() {
-    let u = make_user { name{"Tint"}, age{20} };
+    let u = make_user { name: "Tint", age: 20 };
     u.age + 1
 }
 
@@ -60,7 +60,7 @@ fn TestMutLocal() {
 
 
 fn TestStructFieldAssign() {
-    let mut u = User { id{1}, name{"M"}, age{10} };
+    let mut u = User { id: 1, name: "M", age: 10 };
     u.age = 20;
     u.age
 }
@@ -119,9 +119,9 @@ fn typed2((a: i32, b)) {
 //     STRUCT + ENUM DEFINITIONS
 
 struct User {
-    id{i32},
-    name{string},
-    age{i32},
+    id: i32,
+    name: string,
+    age: i32,
 }
 
 enum Shape {
@@ -138,8 +138,8 @@ enum E2 {
 
 fn test_updates() {
     User { ..old }
-    User { ..old, age{30} }
-    User { id{1}, ..other }
+    User { ..old, age: 30 }
+    User { id: 1, ..other }
 }
 
 
@@ -155,16 +155,16 @@ fn AllFeatures() {
     let a0 = arr[0];
     let a3 = arr[3];
 
-    let u = User { id{x}, name{"Tint"}, age{99} };
+    let u = User { id: x, name: "Tint", age: 99 };
 
     let user2 = User {
-        age{u.age + 1},
-        name{"Nornse"},
-        id{u.id},
+        age: u.age + 1,
+        name: "Nornse",
+        id: u.id,
     };
 
     // variant pattern match
-    let en = E2::A { x{50} };
+    let en = E2::A { x: 50 };
 
     let r1 = match en {
         A { x } => x * 2,

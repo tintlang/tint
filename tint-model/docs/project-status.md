@@ -11,14 +11,16 @@ parentheses, unary (`-x`, `!x`), binary operators with precedence
 (`+ - * / %`, `== != < > <= >=`, `&& ||`), `true`/`false`, `()` (unit),
 string interpolation in logic (`"a {b}"`).
 
-**Bindings:** `let a = 10`, `let a: i32 = 10`, and the Tint-style field-literal form
-`let a{10}` / `let a: i32{10}`.
+**Bindings:** `let a = 10` and `let a: i32 = 10` are canonical. The older
+Tint-style initializer form `let a{10}` / `let a: i32{10}` remains accepted for
+compatibility, although it is not used by current examples.
 
-**Structs:** both a Rust-style declaration (`struct User { id: i32, name: string }`)
-and a Tint-style one (`struct User { id{i32}, name{string} }`) are accepted, but a
-single struct can't mix the two styles. Initialization mirrors this: `User { id: 10,
-name: "Marek" }` or `User { id{10}, name{"Marek"} }`. Struct update syntax also
-works: `User { ..old, score{40} }`.
+**Structs:** the canonical declaration is Rust-style (`struct User { id: i32,
+name: string }`). The older Tint-style form (`struct User { id{i32},
+name{string} }`) remains accepted for compatibility, but a single struct can't
+mix the two styles. Initialization follows the same rule: `User { id: 10,
+name: "Marek" }` is canonical, while `User { id{10}, name{"Marek"} }` is
+legacy-compatible. Struct update syntax also works: `User { ..old, score: 40 }`.
 
 **Enums:** unit and struct-like variants are usable in the current runtime.
 Tuple-style variants are parser-level only and are not supported end to end.
@@ -27,8 +29,10 @@ Tuple-style variants are parser-level only and are not supported end to end.
 
 **Functions:** `fn add(a: i32, b: i32) -> i32 { return a + b; }`, implicit return,
 and the short expression form `fn add(a: i32, b: i32) = a + b`. Default parameters
-(`fn greet(name: string, prefix: string{"Hello"})`) and named-argument-style calls
-(`login { user{"Marek"}, password{"123"} }`) both parse.
+use `=` canonically (`fn greet(name: string, prefix: string = "Hello")`); the
+older brace-default forms remain accepted. Calls such as `login { user: "Marek",
+password: "123" }` use the same known-type struct-initializer path rather than a
+separate named-argument grammar.
 
 **Lambdas:** the syntax parses, but lambda lowering is not complete in the IR VM.
 
@@ -119,11 +123,15 @@ A basic end-to-end semantic checker (now covering `fn`, `ui fn`, and
 `impl` method bodies -- still existence/duplicate-binding checks only, no
 type checking), a real standalone build that embeds the WASM runtime, a
 module system with grouped/aliased/wildcard `use` imports, and `match{}`
-evaluation in UI trees (XML-mode `<case label>`/`<case _>` children only
--- see `tint-runtime/tests/render_ui.rs`) have all landed. The next
-useful milestones are a stable language reference, a block-mode
-equivalent for `match{}`/`case`, lambda lowering to SSA IR (lambdas parse
-and run today only through the tree-walking evaluator, not the IR-compiled
-path -- see the "Lambdas" entry above and `tint-ir/src/compiler/expressions.rs`),
+evaluation in UI trees (`case label { ... }`/`case _ { ... }` children --
+see `tint-runtime/tests/render_ui.rs`) have all landed. The earlier XML
+UI dialect (`<Tag ...>...</Tag>`) has been removed entirely -- block
+syntax (`Tag { ... }`) is now the only way to write UI, including
+`match{}`'s case arms, and a `children { ... }` grouping tag is available
+for separating a node's own children from its modifiers when both are
+present in the same block. The next useful milestones are a stable
+language reference, lambda lowering to SSA IR (lambdas parse and run
+today only through the tree-walking evaluator, not the IR-compiled path
+-- see the "Lambdas" entry above and `tint-ir/src/compiler/expressions.rs`),
 and broader UI component semantics. GPU/WebGPU and async features remain
 future experiments.

@@ -15,6 +15,32 @@ impl UiBuilder {
                 }
             }
 
+            // `children { ... }` -- a grouping tag for separating a
+            // node's own children from its modifiers when they'd
+            // otherwise be hard to tell apart at a glance (several
+            // modifiers followed by several structural children). Same
+            // "splice into parent, no wrapper node of its own" shape as
+            // `Theme`/`For` above and below -- it's an ordinary tag as
+            // far as the parser is concerned (no grammar change needed to
+            // support it), just one the builder recognizes by name and
+            // never wraps.
+            //
+            // RESERVED NAME: "children" is matched by name alone, with no
+            // way to opt out -- a user component actually named `children`
+            // (e.g. `children { padding::8 "x" }` meant as an ordinary
+            // tag) would silently splice its own children into the parent
+            // instead of rendering as its own node, the same way naming a
+            // component `case` right before a control-flow keyword would
+            // collide with that grammar. Documented in
+            // docs/ui/ui-syntax.md's "Grouping children" section; not
+            // otherwise guarded against (no semantic-checker warning) --
+            // matches this project's existing scope for that checker
+            // (existence/duplicate-binding only, see
+            // tint-semantics/src/checker/ui.rs).
+            UiNode::BlockElement { name, children, .. } if name == "children" => {
+                self.build_children(parent, children, host);
+            }
+
             // Standalone `for { var in iterable } { body }`: unlike the
             // `for{}` modifier (`find_for` below, which repeats a single
             // node's own children into that same node), this has no node
@@ -92,9 +118,9 @@ impl UiBuilder {
             None => match find_match(modifiers) {
                 // `match{scrutinee}` on this node: only the first
                 // `case`-tagged child whose label matches (or `_`) gets
-                // built, spliced straight into `id` -- the `<case ...>`
-                // wrapper itself never appears in the render tree, only
-                // its own children do. A child that isn't `case`-tagged
+                // built, spliced straight into `id` -- the `case { ... }`
+                // arm itself never appears in the render tree, only its
+                // own children do. A child that isn't `case`-tagged
                 // (rare, but not forbidden) always builds, same as if
                 // there were no `match{}` at all.
                 Some(scrutinee_expr) => {
@@ -107,7 +133,7 @@ impl UiBuilder {
                             continue;
                         };
                         let (case_children, case_attrs) = match node {
-                            UiNode::Element {
+                            UiNode::BlockElement {
                                 children,
                                 attributes,
                                 ..

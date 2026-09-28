@@ -25,7 +25,7 @@ pub(super) fn check_if<H: EvalHost>(modifiers: &[UiModifier], host: &mut H) -> b
 
 /// Finds this node's `for{var in iterable}` modifier, if any. The parser
 /// stores it as `MiniMod{key: [var], value: Expr(iterable)}` (see
-/// tint-parser/src/ui/{block,xml}.rs) -- same shape as any other nested
+/// tint-parser/src/ui/block.rs) -- same shape as any other nested
 /// modifier, just repurposed to carry the loop variable's name alongside
 /// its expression.
 pub(super) fn find_for(modifiers: &[UiModifier]) -> Option<(String, &Expr)> {
@@ -44,7 +44,7 @@ pub(super) fn find_for(modifiers: &[UiModifier]) -> Option<(String, &Expr)> {
 
 /// Finds this node's `match{scrutinee}` modifier, if any. Same shape as
 /// `find_for`, minus the extra loop-variable name -- `match{}` parses to a
-/// plain `UiModifierValue::Expr` (see tint-parser/src/ui/xml.rs), unlike
+/// plain `UiModifierValue::Expr` (see tint-parser/src/ui/block.rs), unlike
 /// `for{}`'s `MiniMod`.
 pub(super) fn find_match(modifiers: &[UiModifier]) -> Option<&Expr> {
     modifiers.iter().find_map(|m| {
@@ -59,10 +59,10 @@ pub(super) fn find_match(modifiers: &[UiModifier]) -> Option<&Expr> {
 }
 
 /// Reads a `case`-tagged child's label -- the identifier captured by the
-/// parser's `<case ready>` handling (see tint-parser/src/ui/xml.rs; a bare
-/// trailing identifier with no `||`/`::` after it is recorded as a
-/// synthetic `case` attribute rather than discarded). `_` is the wildcard
-/// arm, matched by `case_label_matches` below regardless of the scrutinee.
+/// parser's `case ready { ... }` handling (see tint-parser/src/ui/block.rs's
+/// `parse_block_case_node`; the label is recorded as a synthetic `case`
+/// attribute on the arm's own node). `_` is the wildcard arm, matched by
+/// `case_label_matches` below regardless of the scrutinee.
 pub(super) fn find_case_label(attributes: &[UiAttribute]) -> Option<String> {
     attributes.iter().find_map(|a| {
         if a.name != "case" {
@@ -78,8 +78,8 @@ pub(super) fn find_case_label(attributes: &[UiAttribute]) -> Option<String> {
 /// A case arm matches when its label is the wildcard `_`, or when it's
 /// exactly equal to the scrutinee's own display text -- the same
 /// stringification `render_ui_text` already uses for interpolations, so
-/// `match{status}` against a `status = "ready"` string and a `<case
-/// ready>` label compare the same way a `"{status}"` interpolation would
+/// `match{status}` against a `status = "ready"` string and a `case ready
+/// { ... }` arm compare the same way a `"{status}"` interpolation would
 /// display it. Deliberately simple (whole-value string equality, no
 /// pattern destructuring) -- matches this project's existing "narrow but
 /// real" scope for UI-tree control flow (`if{}`/`for{}}` are similarly
@@ -96,8 +96,8 @@ pub(super) fn case_label_matches(label: &str, scrutinee: &EvalValue) -> bool {
 /// `node.attrs`/`node.onclick`, which nothing on the Rust side ever
 /// populated.
 pub(super) fn apply_events(tree: &mut UiTree, id: UiNodeId, attributes: &[UiAttribute]) {
-    let on_click = find_handler(attributes, "click")
-        .or_else(|| find_handler(attributes, "pointer_down"));
+    let on_click =
+        find_handler(attributes, "click").or_else(|| find_handler(attributes, "pointer_down"));
     tree.set_events(
         id,
         on_click,

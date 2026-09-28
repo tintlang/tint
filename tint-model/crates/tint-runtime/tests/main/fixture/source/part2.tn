@@ -4,27 +4,25 @@
 
     fn deep_mix(a, b) {
         let n = Node {
-            id{1},
-            value{10},
-            next{
+            id: 1,
+            value: 10,
+            next:
                 Option::Some {
-                    value{20},
-                    next{
-                        Option::Some { value{30} }
+                    value: 20,
+                    next:
+                        Option::Some { value: 30 }
                     }
-                }
-            }
         };
 
-        let v = Vec2 { x{3.0}, y{4.0} };
+        let v = Vec2 { x: 3.0, y: 4.0 };
         let s = n.sum() + v.len();
 
         let m = map {
             user{
                 User {
-                    id{ a + b },
-                    name{"A"},
-                    age{ s }
+                    id: a + b,
+                    name: "A",
+                    age: s
                 }
             },
             arr{ [ (1,2) (3,4) (5, [6,7,8]) ] },
@@ -105,7 +103,7 @@ space G1 {
 
 space L1 {
     fn add(a, b) { a + b }
-    struct User { id{i32} }
+    struct User { id: i32 }
 }
 
 kernel invert(tex: Texture) -> Texture {
@@ -160,10 +158,9 @@ fn MegaNested() {
         1,
         (2, (3, (4, 5))),
         User {
-            id{10},
-            name{"Tint"},
-            age{
+            id: 10,
+            name: "Tint",
+            age:
                 (1 + 2) * 3
             }
-        }
     );

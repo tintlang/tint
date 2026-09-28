@@ -17,23 +17,23 @@ enum GameEvent {
 }
 
 struct Ball {
-    position{Vec2},
-    velocity{Vec2},
+    position: Vec2,
+    velocity: Vec2,
 }
 
 struct Paddle {
-    position{Vec2},
-    speed{f32},
+    position: Vec2,
+    speed: f32,
 }
 
 struct Game {
-    mode{GameState},
-    ball{Ball},
-    player{Paddle},
-    cpu{Paddle},
-    player_score{i32},
-    cpu_score{i32},
-    serve_seed{i32},
+    mode: GameState,
+    ball: Ball,
+    player: Paddle,
+    cpu: Paddle,
+    player_score: i32,
+    cpu_score: i32,
+    serve_seed: i32,
 }
 
 impl Game {
@@ -210,13 +210,13 @@ ui fn PongGame() {
     state rows = [0,1,2,3,4,5,6,7,8,9,10,11]
     state cols = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23]
     state game = Game {
-        mode{GameState::Menu},
-        ball{Ball { position{vec2(11.5, 5.5)}, velocity{vec2(8, 2)} }},
-        player{Paddle { position{vec2(0, 4.5)}, speed{0.8} }},
-        cpu{Paddle { position{vec2(22, 4.5)}, speed{4.2} }},
-        player_score{0},
-        cpu_score{0},
-        serve_seed{417},
+        mode: GameState::Menu,
+        ball: Ball { position: vec2(11.5, 5.5), velocity: vec2(8, 2) },
+        player: Paddle { position: vec2(0, 4.5), speed: 0.8 },
+        cpu: Paddle { position: vec2(22, 4.5), speed: 4.2 },
+        player_score: 0,
+        cpu_score: 0,
+        serve_seed: 417,
     }
 
     theme::dark {

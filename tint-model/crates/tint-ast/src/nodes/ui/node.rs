@@ -4,29 +4,27 @@ use crate::Span;
 
 #[derive(Debug, Clone)]
 pub enum UiNode {
-    // XML-style <Tag ...>...</Tag>
-    Element {
-        name: String,
-        attributes: Vec<UiAttribute>,
-        modifiers: Vec<UiModifier>,
-        children: Vec<UiNodeOrExpr>,
-        span: Span,
-    },
-
     // BLOCK-style Tag { ... }
+    //
+    // Also the shape a `case <label> { ... }` arm parses to (a
+    // `BlockElement` named "case" carrying a synthetic
+    // `UiAttribute{name: "case", ...}` -- see
+    // tint-parser/src/ui/block.rs's `parse_block_case_node`), and the
+    // shape a `children { ... }` grouping tag parses to (nothing special
+    // in the AST at all -- it's an ordinary tag named "children" that the
+    // builder splices instead of wrapping, see
+    // tint-runtime/src/ui/builder/nodes.rs). "children" is therefore an
+    // unconditionally reserved tag name at the builder level -- an
+    // ordinary component actually named `children` always gets spliced
+    // instead of rendering as its own node ("case" isn't reserved the
+    // same way: `case { ... }` with no label in front still renders as a
+    // plain tag, only `case <label> { ... }` is special -- see the parser
+    // vs. builder doc comments for each).
     BlockElement {
         name: String,
         attributes: Vec<UiAttribute>,
         modifiers: Vec<UiModifier>,
         children: Vec<UiNodeOrExpr>,
-        span: Span,
-    },
-
-    // XML-style <Tag ... />
-    SelfClosing {
-        name: String,
-        attributes: Vec<UiAttribute>,
-        modifiers: Vec<UiModifier>,
         span: Span,
     },
 
@@ -61,9 +59,7 @@ pub enum UiNode {
 impl UiNode {
     pub fn span(&self) -> Span {
         match self {
-            UiNode::Element { span, .. } => *span,
             UiNode::BlockElement { span, .. } => *span,
-            UiNode::SelfClosing { span, .. } => *span,
             UiNode::BlockSelfClosing { span, .. } => *span,
             UiNode::Theme { span, .. } => *span,
             UiNode::For { span, .. } => *span,
