@@ -12,5 +12,11 @@ ui fn Smoke() {
             motion::{ transition::"color .15s ease", hover::{ color::#b7a8ff } }
             "Open GitHub"
         }
+        Button {
+            ref||"callback-button"
+            js||on_smoke_callback
+            paint::{ background::#24243a, color::#ffffff, padding::10, radius::8 }
+            "Run JS callback"
+        }
     }
 }

@@ -68,6 +68,31 @@ fn render_ui_fn_reports_unknown_ui_fn() {
 }
 
 #[test]
+fn render_ui_fn_preserves_dom_escape_hatches() {
+    let code = r#"
+ui fn Widget() {
+    Button {
+        ref||"settings"
+        js||open_settings
+        "Settings"
+    }
+}
+"#;
+
+    let mut vm = TintVM::new();
+    vm.run_program(
+        &Parser::new(collect_tokens(&mut Lexer::new(code)))
+            .parse_program()
+            .expect("parse failed"),
+    );
+
+    let nodes = vm.render_ui_fn("Widget", &[]).expect("render_ui_fn failed");
+    let button = &nodes[0];
+    assert_eq!(button.reference.as_deref(), Some("settings"));
+    assert_eq!(button.on_js.as_deref(), Some("open_settings"));
+}
+
+#[test]
 fn active_theme_tokens_resolve_inside_ui_modifier_tuples() {
     let code = r#"
 ui fn Widget() {

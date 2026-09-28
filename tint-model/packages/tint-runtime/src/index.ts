@@ -11,8 +11,16 @@ import init, { compile_bytecode, DomSession } from "../tint_wasm.js";
 
 export type TintEntry = string;
 
+export interface TintCallbackContext {
+  event: Event;
+  element: Element;
+}
+
+export type TintCallback = (context: TintCallbackContext) => void | Promise<void>;
+
 export interface TintMountOptions {
   entry?: TintEntry;
+  callbacks?: Record<string, TintCallback>;
 }
 
 export interface TintApp {
@@ -55,7 +63,7 @@ export async function mount(
   const entry = options.entry ?? "App";
   const containerId = ensureContainer(element);
   const session = new DomSession(source, entry, containerId);
-  return mountSession(session, element, entry);
+  return mountSession(session, element, entry, options.callbacks);
 }
 
 /** Compile source once and return the versioned Tint program blob. */
@@ -75,16 +83,30 @@ export async function mountBytecode(
   const entry = options.entry ?? "App";
   const containerId = ensureContainer(element);
   const session = DomSession.from_bytecode(bytecode, entry, containerId);
-  return mountSession(session, element, entry);
+  return mountSession(session, element, entry, options.callbacks);
 }
 
 function mountSession(
   session: DomSession,
   element: Element,
   entry: string,
+  callbacks: Record<string, TintCallback> = {},
 ): TintApp {
   const initialError = session.rerender();
   if (initialError) throw new Error(initialError);
+
+  const onHostClick = (event: Event) => {
+    const target = event.target instanceof Element
+      ? event.target.closest("[data-tint-js]")
+      : null;
+    if (!target || !element.contains(target)) return;
+    const name = target.getAttribute("data-tint-js");
+    if (!name) return;
+    const callback = callbacks[name];
+    if (!callback) return;
+    void callback({ event, element: target });
+  };
+  element.addEventListener("click", onHostClick, true);
 
   let mounted = true;
   return {
@@ -106,6 +128,7 @@ function mountSession(
     unmount() {
       if (!mounted) return;
       mounted = false;
+      element.removeEventListener("click", onHostClick, true);
       element.replaceChildren();
     },
   };

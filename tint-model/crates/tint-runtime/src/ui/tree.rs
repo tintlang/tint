@@ -59,6 +59,10 @@ pub struct UiElement {
     pub route: Option<String>,
     /// Optional link target from target||"_blank".
     pub target: Option<String>,
+    /// Stable DOM escape-hatch name from ref||"name".
+    pub reference: Option<String>,
+    /// Host callback name from js||callback.
+    pub on_js: Option<String>,
 }
 
 impl UiElement {
@@ -84,6 +88,8 @@ impl UiElement {
             svg: None,
             route: None,
             target: None,
+            reference: None,
+            on_js: None,
         }
     }
 }
@@ -231,6 +237,18 @@ impl UiTree {
     pub fn set_target(&mut self, id: UiNodeId, target: Option<String>) {
         if let Some(node) = self.nodes.get_mut(id) {
             node.target = target;
+        }
+    }
+
+    pub fn set_reference(&mut self, id: UiNodeId, reference: Option<String>) {
+        if let Some(node) = self.nodes.get_mut(id) {
+            node.reference = reference;
+        }
+    }
+
+    pub fn set_js_handler(&mut self, id: UiNodeId, handler: Option<String>) {
+        if let Some(node) = self.nodes.get_mut(id) {
+            node.on_js = handler;
         }
     }
 

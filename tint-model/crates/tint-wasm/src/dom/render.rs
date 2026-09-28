@@ -10,8 +10,11 @@ fn build_node(
     let is_link = node.route.is_some();
     let is_image = node.asset.is_some() && node.tag == "Image";
     let is_audio = node.asset.is_some() && node.tag == "Audio";
-    let is_button =
-        !is_link && (node.tag == "Button" || node.tag == "MenuItem" || node.on_click.is_some());
+    let is_button = !is_link
+        && (node.tag == "Button"
+            || node.tag == "MenuItem"
+            || node.on_click.is_some()
+            || node.on_js.is_some());
     let tag_name = if is_link {
         "a"
     } else if is_image {
@@ -40,6 +43,12 @@ fn build_node(
     }
     if let Some(asset) = &node.asset {
         el.set_attribute("src", asset)?;
+    }
+    if let Some(reference) = &node.reference {
+        el.set_attribute("data-tint-ref", reference)?;
+    }
+    if let Some(handler) = &node.on_js {
+        el.set_attribute("data-tint-js", handler)?;
     }
 
     if let Some(svg) = &node.svg {

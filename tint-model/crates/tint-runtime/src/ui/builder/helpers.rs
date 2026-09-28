@@ -141,6 +141,16 @@ pub(super) fn apply_target(tree: &mut UiTree, id: UiNodeId, attributes: &[UiAttr
     tree.set_target(id, find_literal(attributes, "target"));
 }
 
+/// Reads ref||"name" for a stable DOM escape-hatch reference.
+pub(super) fn apply_reference(tree: &mut UiTree, id: UiNodeId, attributes: &[UiAttribute]) {
+    tree.set_reference(id, find_literal(attributes, "ref"));
+}
+
+/// Reads js||callback for a host-side click callback.
+pub(super) fn apply_js_handler(tree: &mut UiTree, id: UiNodeId, attributes: &[UiAttribute]) {
+    tree.set_js_handler(id, find_name(attributes, "js"));
+}
+
 pub(super) fn apply_asset(tree: &mut UiTree, id: UiNodeId, attributes: &[UiAttribute]) {
     tree.set_asset(id, find_literal(attributes, "asset"));
     tree.set_sound(id, find_literal(attributes, "sound"));
@@ -169,6 +179,18 @@ fn find_literal(attributes: &[UiAttribute], name: &str) -> Option<String> {
         }
         match &a.value {
             UiAttrValue::Literal(s) => Some(s.clone()),
+            _ => None,
+        }
+    })
+}
+
+fn find_name(attributes: &[UiAttribute], name: &str) -> Option<String> {
+    attributes.iter().find_map(|a| {
+        if a.name != name {
+            return None;
+        }
+        match &a.value {
+            UiAttrValue::Ident(value) | UiAttrValue::Literal(value) => Some(value.clone()),
             _ => None,
         }
     })

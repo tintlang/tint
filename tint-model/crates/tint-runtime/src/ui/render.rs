@@ -38,6 +38,8 @@ pub struct UiRenderNode {
     pub svg: Option<String>,
     pub route: Option<String>,
     pub target: Option<String>,
+    pub reference: Option<String>,
+    pub on_js: Option<String>,
     pub children: Vec<UiRenderNode>,
 }
 
@@ -66,6 +68,8 @@ pub fn to_render_tree(tree: &UiTree, id: UiNodeId) -> UiRenderNode {
         svg: node.svg.clone(),
         route: node.route.clone(),
         target: node.target.clone(),
+        reference: node.reference.clone(),
+        on_js: node.on_js.clone(),
         children: node
             .children
             .iter()
