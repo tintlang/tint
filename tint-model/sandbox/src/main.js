@@ -142,6 +142,3 @@ initWasm().then(() => {
   const err = session.rerender();
   if (err) console.error("Tint landing render error:", err);
 }).catch((e) => console.error("Failed to render the landing page:", e));
-root.addEventListener("click", (e) => {
-  if (e.target.closest('[data-tag="GithubBtn"]') || e.target.closest('[data-tag="RepoLink"]')) window.open("https://github.com/tintlang/tint", "_blank", "noopener");
-});

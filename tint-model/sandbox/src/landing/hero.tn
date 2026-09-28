@@ -11,13 +11,14 @@ Hero {
         ActionButton {
             variant::solid
             click||open_sandbox
-            route||"/sandbox"
+            route||"/app.html?route=/sandbox"
             "Sandbox"
         }
 
         ActionButton {
             variant::outline
-            click||open_github
+            route||"https://github.com/tintlang/tint"
+            target||"_blank"
             "GitHub"
         }
     }

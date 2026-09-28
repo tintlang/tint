@@ -15,5 +15,5 @@ initWasm().then(() => {
   if (renderError) throw new Error(renderError);
 }).catch((error) => {
   console.error("Failed to start Tint Pong:", error);
-  root.textContent = "Tint Pong failed to start. See the console.";
+  root.textContent = `Tint Pong failed to start: ${error?.message ?? error}`;
 });

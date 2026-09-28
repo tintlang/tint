@@ -1,5 +1,5 @@
 Footer {
     use::FooterBase
     Text { text::{12, @text-muted} "MIT ·" }
-    RepoLink { click||open_github "github.com/tintlang/tint" }
+    RepoLink { route||"https://github.com/tintlang/tint" target||"_blank" "github.com/tintlang/tint" }
 }

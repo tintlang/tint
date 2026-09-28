@@ -1,0 +1,44 @@
+// Shared theme tokens and navigation styles used by Landing and Pong.
+import "./tokens.tn";
+
+style NavBase {
+    layout::{ direction::row, align::center, justify::space-between, position::sticky, top::0, z::10, width::"100%", padding.x::18, padding.y::10 }
+    paint::{ background::@nav-bg, backdrop-blur::14, border.b::{1, @nav-border} }
+}
+
+style LogoBase {
+    layout::{ padding.x::10, padding.y::6 }
+    paint::{ radius::8, color::@logo-text }
+    text-decoration::"none"
+    transition::"background .2s ease"
+    hover::{ background::@logo-hover }
+    font-family::"ui-rounded, -apple-system, BlinkMacSystemFont, sans-serif"
+    text::{22, bold, @logo-text}
+}
+
+style NavRight {
+    layout::{ direction::row, align::center, gap::18 }
+}
+
+style ThemeSwitchBase {
+    layout::{ direction::row, padding::3 }
+    paint::{ radius::full, border.b::{1, @nav-border}, background::@control-bg }
+}
+
+// Shared by the theme switch on every page that uses the landing chrome.
+style ThemeChoiceBase {
+    layout::{ padding.x::14, padding.y::6 }
+    paint::{ radius::full }
+    motion::{ transition::"background .15s ease" }
+}
+
+component ThemeButton {
+    use::ThemeChoiceBase
+    slot::content
+}
+
+component ThemeButtonInactive {
+    use::ThemeChoiceBase
+    motion::{ hover::{ background::@control-hover } }
+    slot::content
+}

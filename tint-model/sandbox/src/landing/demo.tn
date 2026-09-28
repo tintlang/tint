@@ -12,5 +12,5 @@ Demo {
         "No screenshot — the panel on the right is a live DomSession render of the source on the left."
     }
 
-    PongButton { route||"/pong" "Open Pong" }
+    PongButton { route||"/pong.html" "Open Pong" }
 }

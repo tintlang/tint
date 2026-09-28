@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
-import { readdir, stat } from "node:fs/promises";
+import { mkdtemp, readdir, rename, rm, stat } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -10,21 +11,43 @@ let building = false;
 let pending = false;
 let previousSnapshot = new Map();
 
-function runWasmBuild() {
+async function runWasmBuild() {
   if (building) {
     pending = true;
     return;
   }
   building = true;
+  const stagingDir = await mkdtemp(path.join(os.tmpdir(), "tint-sandbox-wasm-"));
+  const packageDir = path.join(sandboxDir, "pkg-web");
+  const oldPackageDir = `${packageDir}.previous`;
   const child = spawn("wasm-pack", [
-    "build", "crates/tint-wasm", "--dev", "--target", "web", "--out-dir", "../../sandbox/pkg-web",
+    "build", "crates/tint-wasm", "--dev", "--target", "web", "--out-dir", stagingDir,
   ], { cwd: modelDir, stdio: "inherit" });
   child.on("exit", (code) => {
     building = false;
-    if (code !== 0) console.error(`WASM build failed with exit code ${code}`);
+    void (async () => {
+      if (code !== 0) {
+        await rm(stagingDir, { recursive: true, force: true });
+        console.error(`WASM build failed with exit code ${code}`);
+      } else {
+        // Vite watches pkg-web while it imports the generated ESM glue. Build
+        // elsewhere first, then replace the complete directory in one rename
+        // so Vite never observes a half-written package.json/wasm pair.
+        await rm(oldPackageDir, { recursive: true, force: true });
+        try {
+          await rename(packageDir, oldPackageDir);
+        } catch (error) {
+          if (error.code !== "ENOENT") throw error;
+        }
+        await rename(stagingDir, packageDir);
+        await rm(oldPackageDir, { recursive: true, force: true });
+      }
+    })().catch((error) => {
+      console.error(`WASM output swap failed: ${error.message}`);
+    });
     if (pending) {
       pending = false;
-      runWasmBuild();
+      void runWasmBuild();
     }
   });
 }
@@ -44,14 +67,14 @@ async function pollRustSources() {
     const changed = next.size !== previousSnapshot.size
       || [...next].some(([file, mtime]) => previousSnapshot.get(file) !== mtime);
     previousSnapshot = next;
-    if (changed) runWasmBuild();
+    if (changed) void runWasmBuild();
   } catch (error) {
     console.error(`Rust watch failed: ${error.message}`);
   }
 }
 
 previousSnapshot = await snapshot(cratesDir);
-runWasmBuild();
+void runWasmBuild();
 const pollTimer = setInterval(pollRustSources, 1000);
 
 const vite = spawn("npm", ["run", "dev", "--", "--host"], { cwd: sandboxDir, stdio: "inherit" });

@@ -3,7 +3,7 @@ import "./landing-actions.tn";
 
 ui fn Landing() {
     state theme = "dark"
-    import "./tokens.tn";
+    import "./chrome.tn";
 
     style HeroLayout {
         layout::{ direction::column, align::center, gap::22, padding.x::40, padding.y::100 }
@@ -19,36 +19,6 @@ ui fn Landing() {
         layout::{ padding.x::@button-padding, padding.y::10 }
         paint::{ radius::full }
         motion::{ transition::"transform .2s ease", hover::{ scale::1.06 } }
-    }
-
-    style NavBase {
-        layout::{ direction::row, align::center, justify::space-between, position::sticky, top::0, z::10, width::"100%", padding.x::18, padding.y::10 }
-        paint::{ background::@nav-bg, backdrop-blur::14, border.b::{1, @nav-border} }
-    }
-
-    style LogoBase {
-        layout::{ padding.x::10, padding.y::6 }
-        paint::{ radius::8, color::@logo-text }
-        text-decoration::"none"
-        transition::"background .2s ease"
-        hover::{ background::@logo-hover }
-        font-family::"ui-rounded, -apple-system, BlinkMacSystemFont, sans-serif"
-        text::{22, bold, @logo-text}
-    }
-
-    style NavRight {
-        layout::{ direction::row, align::center, gap::18 }
-    }
-
-    style ThemeSwitchBase {
-        layout::{ direction::row, padding::3 }
-        paint::{ radius::full, border.b::{1, @nav-border}, background::@control-bg }
-    }
-
-    style ThemeChoiceBase {
-        layout::{ padding.x::14, padding.y::6 }
-        paint::{ radius::full }
-        motion::{ transition::"background .15s ease" }
     }
 
     style DemoBase {
@@ -105,11 +75,6 @@ ui fn Landing() {
         variant::outline {
             paint::{ background::transparent, color::@button-outline-text, border::{1, @button-border} }
         }
-        slot::content
-    }
-
-    component ThemeButton {
-        use::ThemeChoiceBase
         slot::content
     }
 

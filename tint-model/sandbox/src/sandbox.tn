@@ -5,6 +5,7 @@ fn run_code() {}
 
 ui fn Sandbox() {
     state theme = "dark"
+    import "./landing/chrome.tn";
 
     theme::dark {
         Page {

@@ -11,18 +11,32 @@ Nav {
         use::NavRight
         Caption { text::{12, @text-muted} if{viewport_width >= 640} "rendered straight into the DOM — no JS framework" }
 
-        ThemeSwitch {
-            use::ThemeSwitchBase
-            ThemeButton {
-                click||set_dark
-                paint::{ background::@theme-dark-bg, color::@theme-dark-text }
-                "Dark"
+            ThemeSwitch {
+                use::ThemeSwitchBase
+                ThemeButton {
+                    click||set_dark
+                    paint::{ background::@theme-dark-bg, color::@theme-dark-text }
+                    if{theme == "dark"}
+                    "Dark"
+                }
+                ThemeButtonInactive {
+                    click||set_dark
+                    paint::{ background::@theme-dark-bg, color::@theme-dark-text }
+                    if{theme == "light"}
+                    "Dark"
+                }
+                ThemeButton {
+                    click||set_light
+                    paint::{ background::@theme-light-bg, color::@theme-light-text }
+                    if{theme == "light"}
+                    "Light"
+                }
+                ThemeButtonInactive {
+                    click||set_light
+                    paint::{ background::@theme-light-bg, color::@theme-light-text }
+                    if{theme == "dark"}
+                    "Light"
+                }
             }
-            ThemeButton {
-                click||set_light
-                paint::{ background::@theme-light-bg, color::@theme-light-text }
-                "Light"
-            }
-        }
     }
 }

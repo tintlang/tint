@@ -193,7 +193,15 @@ function renderPreview(tree) {
 
 function logEvent(message) {
   const output = root.querySelector('[data-tag="OutputText"]');
-  if (output) output.textContent = message;
+  if (output) {
+    output.textContent = message;
+    return;
+  }
+  root.replaceChildren();
+  const error = document.createElement("pre");
+  error.style.cssText = "margin: 0; padding: 24px; color: #ff8a80; white-space: pre-wrap; font: 12px ui-monospace, Menlo, Consolas, monospace;";
+  error.textContent = message;
+  root.append(error);
 }
 
 function currentEditorSource() {

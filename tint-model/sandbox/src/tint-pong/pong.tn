@@ -222,6 +222,7 @@ ui fn PongGame() {
         cpu_score: 0,
         serve_seed: 417,
     }
+    import "../landing/chrome.tn";
 
     theme::dark {
         Page {
