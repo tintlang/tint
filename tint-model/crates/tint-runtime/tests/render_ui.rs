@@ -11,6 +11,7 @@
 
 use tint_lexer::{collect_tokens, Lexer};
 use tint_parser::Parser;
+use tint_runtime::ui_session::UiSession;
 use tint_runtime::vm::TintVM;
 
 #[test]
@@ -64,6 +65,114 @@ fn render_ui_fn_reports_unknown_ui_fn() {
     let mut vm = TintVM::new();
     let err = vm.render_ui_fn("DoesNotExist", &[]);
     assert!(err.is_err());
+}
+
+#[test]
+fn active_theme_tokens_resolve_inside_ui_modifier_tuples() {
+    let code = r#"
+ui fn Widget() {
+    state theme = "dark"
+    theme::dark {
+        tokens {
+            text-color::#ffffff
+            button-size::18
+            outline-text::#ffffff
+            outline-border::#ffffff
+        }
+    }
+    theme::light {
+        tokens {
+            text-color::#111111
+            button-size::16
+            outline-text::#111111
+            outline-border::#111111
+        }
+    }
+    Button {
+        text::{@button-size, @text-color}
+        layout::{ padding.x::@button-size }
+        "Open"
+    }
+    Outline {
+        paint::{ color::@outline-text, border::{1, @outline-border} }
+        "GitHub"
+    }
+}
+
+"#;
+
+    let mut session = UiSession::new(code, "Widget").expect("session creation failed");
+    let nodes = session.render().expect("render failed");
+    let button = &nodes[0];
+
+    assert!(button.style.contains(&("padding-left".to_string(), "18px".to_string())));
+    assert!(button.style.contains(&("padding-right".to_string(), "18px".to_string())));
+    assert!(button.style.contains(&("font-size".to_string(), "18px".to_string())));
+    assert!(button.style.contains(&("color".to_string(), "#ffffff".to_string())));
+    let outline = &nodes[1];
+    assert!(outline.style.contains(&("color".to_string(), "#ffffff".to_string())));
+    assert!(outline
+        .style
+        .contains(&("border".to_string(), "1px solid #ffffff".to_string())));
+}
+
+#[test]
+fn named_styles_are_composed_before_runtime_style_resolution() {
+    let code = r#"
+ui fn Widget() {
+    style ButtonBase {
+        layout::{ padding.x::12 }
+        motion::{ transition::"transform .2s ease", hover::{ scale::1.04 } }
+    }
+    Button {
+        use::ButtonBase
+        paint::{ background::#ffffff }
+        "Open"
+    }
+}
+
+"#;
+
+    let mut session = UiSession::new(code, "Widget").expect("session creation failed");
+    let nodes = session.render().expect("render failed");
+    let button = &nodes[0];
+
+    assert!(button.style.contains(&("padding-left".to_string(), "12px".to_string())));
+    assert!(button.style.contains(&("padding-right".to_string(), "12px".to_string())));
+    assert!(button
+        .hover_style
+        .contains(&("transform".to_string(), "scale(1.04)".to_string())));
+}
+
+#[test]
+fn components_expand_and_route_default_and_named_slots() {
+    let code = r#"
+ui fn Widget() {
+    component Card {
+        layout::{ direction::column }
+        variant::raised { paint::{ background::#ffffff } }
+        slot::header
+        slot::content
+    }
+    Card {
+        variant::raised
+        slot header { Text { "Title" } }
+        Text { "Body" }
+    }
+}
+"#;
+
+    let mut session = UiSession::new(code, "Widget").expect("session creation failed");
+    let nodes = session.render().expect("render failed");
+    let card = &nodes[0];
+
+    assert_eq!(card.tag, "Card");
+    assert!(card
+        .style
+        .contains(&("background-color".to_string(), "#ffffff".to_string())));
+    assert_eq!(card.children.len(), 2);
+    assert_eq!(card.children[0].children[0].text, Some("Title".to_string()));
+    assert_eq!(card.children[1].children[0].text, Some("Body".to_string()));
 }
 
 // `for{var in iterable}` used to be parsed and then completely ignored --

@@ -42,6 +42,38 @@ pub enum UiNode {
         span: Span,
     },
 
+    /// Reusable style declaration: `style ButtonBase { ... }`.
+    Style {
+        name: String,
+        modifiers: Vec<UiModifier>,
+        span: Span,
+    },
+
+    /// Reusable UI component declaration: `component Button { ... }`.
+    Component {
+        name: String,
+        modifiers: Vec<UiModifier>,
+        children: Vec<UiNodeOrExpr>,
+        span: Span,
+    },
+
+    /// Component variant declaration: `variant::outline { ... }`.
+    Variant {
+        name: String,
+        modifiers: Vec<UiModifier>,
+        children: Vec<UiNodeOrExpr>,
+        span: Span,
+    },
+
+    /// Slot declaration in a component or named slot content at a call site.
+    /// `slot::content` is the default slot placeholder; `slot header { ... }`
+    /// supplies a named slot's content when invoking a component.
+    Slot {
+        name: String,
+        children: Vec<UiNodeOrExpr>,
+        span: Span,
+    },
+
     /// A standalone repeated block: `for { var in iterable } { ...body... }`.
     /// Unlike the `for{}` modifier on `UiModifier` (attached to a single
     /// node, repeating THAT node's own children as if it were a template),
@@ -62,6 +94,10 @@ impl UiNode {
             UiNode::BlockElement { span, .. } => *span,
             UiNode::BlockSelfClosing { span, .. } => *span,
             UiNode::Theme { span, .. } => *span,
+            UiNode::Style { span, .. } => *span,
+            UiNode::Component { span, .. } => *span,
+            UiNode::Variant { span, .. } => *span,
+            UiNode::Slot { span, .. } => *span,
             UiNode::For { span, .. } => *span,
         }
     }

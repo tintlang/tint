@@ -53,6 +53,65 @@ fn unclosed_brace_in_ui_fn_body_errors_instead_of_hanging() {
 }
 
 #[test]
+fn ui_theme_tokens_and_references_parse() {
+    parse(
+        r##"
+        ui fn App() {
+            theme::dark {
+                tokens {
+                    text-main::#ffffff
+                    button-size::18
+                }
+            }
+            Button {
+                text::{16, @text-main}
+                layout::{ padding.x::@button-size }
+                "Open"
+            }
+        }
+        "##,
+    )
+    .expect("theme tokens and @ references should parse");
+}
+
+#[test]
+fn ui_style_declarations_and_use_parse() {
+    parse(
+        r##"
+        ui fn App() {
+            style ButtonBase {
+                layout::{ padding.x::12 }
+                motion::{ hover::{ scale::1.04 } }
+            }
+            Button { use::ButtonBase "Open" }
+        }
+        "##,
+    )
+    .expect("style declarations and use should parse");
+}
+
+#[test]
+fn ui_components_and_default_and_named_slots_parse() {
+    parse(
+        r#"
+        ui fn App() {
+            component Card {
+                layout::{ direction::column }
+                variant::raised { paint::{ background::#ffffff } }
+                slot::header
+                slot::content
+            }
+            Card {
+                slot header { Text { "Title" } }
+                Text { "Body" }
+            }
+        }
+        "#,
+    )
+    .expect("components and slots should parse");
+}
+
+#[test]
 fn unclosed_paren_in_plain_fn_errors() {
     let err = parse("fn foo(\n").expect_err("must error");
     assert!(err.contains("unclosed `(`"), "unexpected error: {err}");

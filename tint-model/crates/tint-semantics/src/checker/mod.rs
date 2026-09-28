@@ -1,9 +1,10 @@
 use crate::errors::{SemanticError, SemanticErrorKind};
 use crate::prelude::{CheckerContext, Mode};
+use crate::type_table::Type;
 use std::collections::{HashMap, HashSet};
 use tint_ast::{
     Block, EnumVariant, Expr, FnBody, Item, MatchArm, Pattern, PatternField, Program, Span, Stmt,
-    StructInitField, Type, UiAttrValue, UiAttribute, UiFnDecl, UiModifier, UiModifierBlock,
+    StructInitField, UiAttrValue, UiAttribute, UiFnDecl, UiModifier, UiModifierBlock,
     UiModifierItem, UiModifierValue, UiNode, UiNodeOrExpr, UiText, UiTextPart,
 };
 
@@ -75,22 +76,32 @@ impl Scopes {
         }
         false
     }
+
+    fn mark_mutable(&mut self, name: &str) {
+        for (scope, mutable) in self.scopes.iter().rev().zip(self.mutable.iter_mut().rev()) {
+            if scope.contains_key(name) {
+                mutable.insert(name.to_string());
+                return;
+            }
+        }
+    }
+
+    fn update_type(&mut self, name: &str, ty: Type) {
+        for scope in self.scopes.iter_mut().rev() {
+            if scope.contains_key(name) {
+                scope.insert(name.to_string(), ty);
+                return;
+            }
+        }
+    }
 }
 
-/// A first, deliberately narrow pass: undefined-variable and
-/// duplicate-binding checks over `fn` bodies (logic code), `ui fn` bodies
-/// (modifiers/attributes/text interpolations across the whole UI tree,
-/// including `if{}`/`for{}` control flow -- see `checker/ui.rs`), and
-/// `impl` method bodies (each method is a plain `FnDecl`, so it reuses
-/// `check_fn_body` unchanged -- `self` binds through the ordinary
-/// `Pattern::Ident("self", ..)` the parser already produces for it, no
-/// special-casing needed). It still does NOT do type checking (the
-/// `TypeMismatch` error kind exists in `errors.rs` for later, nothing
-/// constructs it yet): a method call (`x.foo()`), a namespaced call
-/// (`Type::foo()`), and a struct/enum declaration's own field/variant
-/// types are all left unchecked, since resolving any of those needs to
-/// know a value's TYPE, not just whether a name is in scope. Closing that
-/// is separate, larger work.
+/// Semantic checks over logic and UI bodies. The checker tracks names and
+/// inferred types together: operators, calls, fields, methods, assignments,
+/// returns, patterns, constructors and UI expressions all use the same type
+/// environment. Unknown types stay permissive so untyped legacy code remains
+/// usable while declarations and built-in contracts are gradually made more
+/// precise.
 pub struct SemanticChecker {
     ctx: CheckerContext,
     scopes: Scopes,
@@ -105,6 +116,15 @@ pub struct SemanticChecker {
     /// lookup for both is what would make this checker flag every
     /// ordinary function call as an unknown identifier.
     known_fns: HashSet<String>,
+    ui_tokens: HashSet<String>,
+    ui_styles: HashSet<String>,
+    ui_variants: HashSet<String>,
+    fn_types: HashMap<String, (Vec<Type>, Type)>,
+    struct_fields: HashMap<String, HashMap<String, Type>>,
+    methods: HashMap<(String, String), (Vec<Type>, Type)>,
+    enum_variants: HashMap<(String, String), Vec<Type>>,
+    type_names: HashSet<String>,
+    current_return: Option<Type>,
     errors: Vec<SemanticError>,
 }
 

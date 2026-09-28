@@ -45,6 +45,53 @@ fn assert_unknown_ident(source: &str, name: &str) {
     );
 }
 
+#[test]
+fn ui_rejects_unknown_theme_token() {
+    let errors = errors_for(
+        r##"
+        ui fn App() {
+            theme::dark { tokens { text-main::white } }
+            Text { text::{18, @missing-color} "Hello" }
+        }
+        "##,
+    );
+    assert!(errors.iter().any(|error| matches!(
+        error,
+        SemanticErrorKind::UnknownUiToken(name) if name == "missing-color"
+    )));
+}
+
+#[test]
+fn ui_rejects_unknown_style() {
+    let errors = errors_for(
+        r#"
+        ui fn App() {
+            Button { use::MissingStyle "Open" }
+        }
+        "#,
+    );
+    assert!(errors.iter().any(|error| matches!(
+        error,
+        SemanticErrorKind::UnknownUiStyle(name) if name == "MissingStyle"
+    )));
+}
+
+#[test]
+fn ui_rejects_unknown_variant() {
+    let errors = errors_for(
+        r#"
+        ui fn App() {
+            component Button { variant::solid { } slot::content }
+            Button { variant::ghost "Open" }
+        }
+        "#,
+    );
+    assert!(errors.iter().any(|error| matches!(
+        error,
+        SemanticErrorKind::UnknownUiVariant(name) if name == "ghost"
+    )));
+}
+
 fn assert_assign_to_immutable(source: &str, name: &str) {
     let errors = errors_for(source);
     assert!(
@@ -53,6 +100,28 @@ fn assert_assign_to_immutable(source: &str, name: &str) {
             .any(|e| matches!(e, SemanticErrorKind::AssignToImmutable(n) if n == name)),
         "expected an AssignToImmutable(\"{}\") among {:?}\n---\n{}",
         name,
+        errors,
+        source
+    );
+}
+
+fn assert_type_mismatch(source: &str) {
+    let errors = errors_for(source);
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, SemanticErrorKind::TypeMismatch { .. })),
+        "expected a TypeMismatch among {:?}\n---\n{}",
+        errors,
+        source
+    );
+}
+
+fn assert_error(source: &str, predicate: impl Fn(&SemanticErrorKind) -> bool) {
+    let errors = errors_for(source);
+    assert!(
+        errors.iter().any(predicate),
+        "expected matching semantic error among {:?}\n---\n{}",
         errors,
         source
     );
@@ -78,6 +147,123 @@ fn mutable_local_can_be_reassigned() {
         fn update() {
             let mut value = 1
             value = 2
+        }
+        "#,
+    );
+}
+
+#[test]
+fn type_checker_rejects_incompatible_assignment() {
+    assert_type_mismatch(
+        r#"
+        fn update() {
+            let mut value: i32 = 1
+            value = "wrong"
+        }
+        "#,
+    );
+}
+
+#[test]
+fn type_checker_rejects_wrong_function_argument() {
+    assert_type_mismatch(
+        r#"
+        fn takes_number(value: i32) {}
+        fn test() { takes_number("wrong") }
+        "#,
+    );
+}
+
+#[test]
+fn type_checker_rejects_non_boolean_condition() {
+    assert_type_mismatch(
+        r#"
+        fn test() { if 1 { "wrong" } }
+        "#,
+    );
+}
+
+#[test]
+fn type_checker_checks_explicit_return_type() {
+    assert_type_mismatch(
+        r#"
+        fn wrong() -> string { return 1 }
+        "#,
+    );
+}
+
+#[test]
+fn type_checker_checks_implicit_block_return_type() {
+    assert_type_mismatch(
+        r#"
+        fn wrong() -> string { 1 }
+        "#,
+    );
+}
+
+#[test]
+fn type_checker_checks_method_arguments_from_receiver_type() {
+    assert_type_mismatch(
+        r#"
+        struct Vec2 { x: f32, y: f32 }
+        impl Vec2 {
+            fn scale(self, factor: f32) -> Vec2 { self }
+        }
+        fn test() {
+            let value = Vec2 { x: 1, y: 2 }
+            value.scale("wrong")
+        }
+        "#,
+    );
+}
+
+#[test]
+fn type_checker_checks_enum_constructor_arguments() {
+    assert_type_mismatch(
+        r#"
+        enum Event { Tick(f32) }
+        fn test() { Event::Tick("wrong") }
+        "#,
+    );
+}
+
+#[test]
+fn type_checker_reports_non_exhaustive_enum_match() {
+    assert_error(
+        r#"
+        enum GameState { Playing, Paused }
+        fn label() { let mode = GameState::Playing; match mode { Playing => "playing" } }
+        "#,
+        |error| matches!(error, SemanticErrorKind::MissingMatchArms),
+    );
+}
+
+#[test]
+fn type_checker_rejects_a_pattern_with_the_wrong_type() {
+    assert_type_mismatch(
+        r#"
+        fn label(value: i32) { match value { "wrong" => "bad", _ => "ok" } }
+        "#,
+    );
+}
+
+#[test]
+fn type_checker_rejects_unknown_declaration_types() {
+    assert_error(
+        r#"
+        struct User { profile: MissingProfile }
+        "#,
+        |error| matches!(error, SemanticErrorKind::UnknownIdent(name) if name == "MissingProfile"),
+    );
+}
+
+#[test]
+fn type_checker_infers_lambda_return_types() {
+    assert_type_mismatch(
+        r#"
+        fn test() {
+            let add_one = |value| value + 1
+            let result: string = add_one(2)
         }
         "#,
     );
@@ -214,6 +400,25 @@ fn ui_fn_if_condition_is_checked_and_branch_still_renders_regardless() {
         }
         "#,
         "missing_flag",
+    );
+}
+
+#[test]
+fn ui_fn_rejects_non_boolean_if_modifier() {
+    assert_type_mismatch(
+        r#"
+        ui fn App() { Block { if{1} Text { "wrong" } } }
+        "#,
+    );
+}
+
+#[test]
+fn ui_fn_rejects_an_unknown_event_handler() {
+    assert_unknown_ident(
+        r#"
+        ui fn App() { Button { click||missing_handler "bad" } }
+        "#,
+        "missing_handler",
     );
 }
 

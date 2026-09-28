@@ -9,6 +9,9 @@ pub struct SemanticError {
 #[derive(Debug, Clone)]
 pub enum SemanticErrorKind {
     UnknownIdent(String),
+    UnknownUiToken(String),
+    UnknownUiStyle(String),
+    UnknownUiVariant(String),
     DuplicateIdent(String),
     AssignToImmutable(String),
     TypeMismatch { expected: String, found: String },

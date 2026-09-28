@@ -19,6 +19,16 @@ impl Parser {
                 && self.stream.peek_n_kind(3) == TokenKind::LBrace
             {
                 nodes.push(self.parse_theme_node()?);
+            } else if self.stream.peek().lexeme == "style"
+                && self.stream.peek2_kind() == TokenKind::Ident
+                && self.stream.peek_n_kind(2) == TokenKind::LBrace
+            {
+                nodes.push(self.parse_style_node()?);
+            } else if self.stream.peek().lexeme == "component"
+                && self.stream.peek2_kind() == TokenKind::Ident
+                && self.stream.peek_n_kind(2) == TokenKind::LBrace
+            {
+                nodes.push(self.parse_component_node()?);
             } else {
                 nodes.push(self.parse_block_node()?);
             }
@@ -45,6 +55,12 @@ impl Parser {
             }),
             TokenKind::Ident => {
                 if self.stream.peek2_kind() == TokenKind::LBrace
+                    || (self.stream.peek().lexeme == "style"
+                        && self.stream.peek2_kind() == TokenKind::Ident
+                        && self.stream.peek_n_kind(2) == TokenKind::LBrace)
+                    || (self.stream.peek().lexeme == "component"
+                        && self.stream.peek2_kind() == TokenKind::Ident
+                        && self.stream.peek_n_kind(2) == TokenKind::LBrace)
                     || (self.stream.peek().lexeme == "theme"
                         && self.stream.peek2_kind() == TokenKind::PathSep
                         && self.stream.peek_n_kind(2) == TokenKind::Ident

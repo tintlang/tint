@@ -19,6 +19,7 @@
 
 use tint_ast::{UiModifier, UiModifierValue};
 use tint_evaluator::{EvalHost, Value as EvalValue};
+use std::collections::HashMap;
 
 /// Reconstruct the Tint modifier syntax for browser Elements inspection.
 pub fn format_modifier_source(modifiers: &[UiModifier]) -> String {
@@ -162,18 +163,30 @@ pub fn resolve_style_with_host<H: EvalHost>(
     modifiers: &[UiModifier],
     host: &mut H,
 ) -> (StyleList, StyleList, Vec<(String, StyleList)>) {
+    resolve_style_with_host_and_tokens(modifiers, host, &HashMap::new())
+}
+
+pub fn resolve_style_with_host_and_tokens<H: EvalHost>(
+    modifiers: &[UiModifier],
+    host: &mut H,
+    tokens: &HashMap<String, UiModifierValue>,
+) -> (StyleList, StyleList, Vec<(String, StyleList)>) {
     let evaluated = modifiers
         .iter()
         .map(|modifier| UiModifier {
             path: modifier.path.clone(),
-            value: evaluate_modifier_value(&modifier.value, host),
+            value: evaluate_modifier_value(&modifier.value, host, tokens),
             span: modifier.span,
         })
         .collect::<Vec<_>>();
     resolve_style(&evaluated)
 }
 
-fn evaluate_modifier_value<H: EvalHost>(value: &UiModifierValue, host: &mut H) -> UiModifierValue {
+fn evaluate_modifier_value<H: EvalHost>(
+    value: &UiModifierValue,
+    host: &mut H,
+    tokens: &HashMap<String, UiModifierValue>,
+) -> UiModifierValue {
     match value {
         UiModifierValue::Expr(expr) => match host.eval_expr(expr) {
             EvalValue::Number(n) => UiModifierValue::Number(n),
@@ -181,12 +194,16 @@ fn evaluate_modifier_value<H: EvalHost>(value: &UiModifierValue, host: &mut H) -
             EvalValue::Bool(b) => UiModifierValue::Ident(b.to_string()),
             _ => UiModifierValue::Ident("auto".to_string()),
         },
+        UiModifierValue::Ident(name) if name.starts_with('@') => tokens
+            .get(&name[1..])
+            .map(|resolved| evaluate_modifier_value(resolved, host, tokens))
+            .unwrap_or_else(|| value.clone()),
         UiModifierValue::Block(items) => UiModifierValue::Block(
             items
                 .iter()
                 .map(|item| UiModifier {
                     path: item.path.clone(),
-                    value: evaluate_modifier_value(&item.value, host),
+                    value: evaluate_modifier_value(&item.value, host, tokens),
                     span: item.span,
                 })
                 .collect(),
@@ -194,12 +211,12 @@ fn evaluate_modifier_value<H: EvalHost>(value: &UiModifierValue, host: &mut H) -
         UiModifierValue::Tuple(items) => UiModifierValue::Tuple(
             items
                 .iter()
-                .map(|item| evaluate_modifier_value(item, host))
+                .map(|item| evaluate_modifier_value(item, host, tokens))
                 .collect(),
         ),
         UiModifierValue::MiniMod { key, value } => UiModifierValue::MiniMod {
             key: key.clone(),
-            value: Box::new(evaluate_modifier_value(value, host)),
+            value: Box::new(evaluate_modifier_value(value, host, tokens)),
         },
         other => other.clone(),
     }

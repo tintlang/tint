@@ -54,6 +54,40 @@ impl Parser {
                     out.push(UiNodeOrExpr::Node(self.parse_block_case_node()?));
                 }
 
+                TokenKind::Ident
+                    if self.stream.peek().lexeme == "style"
+                        && self.stream.peek2_kind() == TokenKind::Ident
+                        && self.stream.peek_n_kind(2) == TokenKind::LBrace =>
+                {
+                    out.push(UiNodeOrExpr::Node(self.parse_style_node()?));
+                }
+
+                TokenKind::Ident
+                    if self.stream.peek().lexeme == "component"
+                        && self.stream.peek2_kind() == TokenKind::Ident
+                        && self.stream.peek_n_kind(2) == TokenKind::LBrace =>
+                {
+                    out.push(UiNodeOrExpr::Node(self.parse_component_node()?));
+                }
+
+                TokenKind::Ident
+                    if self.stream.peek().lexeme == "variant"
+                        && self.stream.peek2_kind() == TokenKind::PathSep
+                        && self.stream.peek_n_kind(2) == TokenKind::Ident
+                        && self.stream.peek_n_kind(3) == TokenKind::LBrace =>
+                {
+                    out.push(UiNodeOrExpr::Node(self.parse_variant_node()?));
+                }
+
+                TokenKind::Ident
+                    if self.stream.peek().lexeme == "slot"
+                        && (self.stream.peek2_kind() == TokenKind::Ident
+                            || (self.stream.peek2_kind() == TokenKind::PathSep
+                                && self.stream.peek_n_kind(2) == TokenKind::Ident)) =>
+                {
+                    out.push(UiNodeOrExpr::Node(self.parse_slot_node()?));
+                }
+
                 TokenKind::Ident if self.stream.peek2_kind() == TokenKind::LBrace => {
                     out.push(UiNodeOrExpr::Node(self.parse_block_node()?));
                 }
@@ -87,7 +121,21 @@ impl Parser {
         let mut attrs = Vec::new();
         let mut mods = Vec::new();
 
-        while self.stream.peek().kind == TokenKind::Ident {
+        while matches!(self.stream.peek().kind, TokenKind::Ident | TokenKind::Use) {
+            if self.stream.peek().lexeme == "slot"
+                && (self.stream.peek2_kind() == TokenKind::Ident
+                    || (self.stream.peek2_kind() == TokenKind::PathSep
+                        && self.stream.peek_n_kind(2) == TokenKind::Ident))
+            {
+                break;
+            }
+            if self.stream.peek().lexeme == "variant"
+                && self.stream.peek2_kind() == TokenKind::PathSep
+                && self.stream.peek_n_kind(2) == TokenKind::Ident
+                && self.stream.peek_n_kind(3) == TokenKind::LBrace
+            {
+                break;
+            }
             // `theme::dark { ... }` is a themed child block, not the
             // `theme::dark` modifier followed by an unexpected brace.
             if self.stream.peek().lexeme == "theme"
@@ -199,6 +247,78 @@ impl Parser {
         }
 
         Ok((attrs, mods))
+    }
+
+    pub(crate) fn parse_style_node(&mut self) -> PResult<UiNode> {
+        let start = self.stream.next().span;
+        let name = self.parse_ident()?;
+        self.stream.expect(TokenKind::LBrace)?;
+        let (_, modifiers) = self.parse_modifier_list_block()?;
+        let end = self.stream.expect(TokenKind::RBrace)?.span;
+
+        Ok(UiNode::Style {
+            name,
+            modifiers,
+            span: Span::merge(start, end),
+        })
+    }
+
+    pub(crate) fn parse_component_node(&mut self) -> PResult<UiNode> {
+        let start = self.stream.next().span;
+        let name = self.parse_ident()?;
+        self.stream.expect(TokenKind::LBrace)?;
+        let (attributes, modifiers) = self.parse_modifier_list_block()?;
+        if !attributes.is_empty() {
+            return self.stream.error_here("Component declarations cannot have event attributes");
+        }
+        let children = self.parse_block_children()?;
+        let end = self.stream.expect(TokenKind::RBrace)?.span;
+
+        Ok(UiNode::Component {
+            name,
+            modifiers,
+            children,
+            span: Span::merge(start, end),
+        })
+    }
+
+    pub(crate) fn parse_slot_node(&mut self) -> PResult<UiNode> {
+        let start = self.stream.next().span;
+        self.stream.consume_if(TokenKind::PathSep);
+        let name = self.parse_ident()?;
+        let children = if self.stream.consume_if(TokenKind::LBrace) {
+            let children = self.parse_block_children()?;
+            self.stream.expect(TokenKind::RBrace)?;
+            children
+        } else {
+            Vec::new()
+        };
+
+        Ok(UiNode::Slot {
+            name,
+            children,
+            span: Span::merge(start, self.stream.last_span()),
+        })
+    }
+
+    pub(crate) fn parse_variant_node(&mut self) -> PResult<UiNode> {
+        let start = self.stream.next().span;
+        self.stream.expect(TokenKind::PathSep)?;
+        let name = self.parse_ident()?;
+        self.stream.expect(TokenKind::LBrace)?;
+        let (attributes, modifiers) = self.parse_modifier_list_block()?;
+        if !attributes.is_empty() {
+            return self.stream.error_here("Variant declarations cannot have event attributes");
+        }
+        let children = self.parse_block_children()?;
+        let end = self.stream.expect(TokenKind::RBrace)?.span;
+
+        Ok(UiNode::Variant {
+            name,
+            modifiers,
+            children,
+            span: Span::merge(start, end),
+        })
     }
     /// `for { var in iterable } { ...body... }` as a standalone child --
     /// see `UiNode::For`'s doc comment for how this differs from the

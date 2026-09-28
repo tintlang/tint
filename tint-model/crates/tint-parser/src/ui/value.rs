@@ -19,6 +19,15 @@ impl Parser {
                 Ok(UiModifierValue::Ident(tok.lexeme.clone()))
             }
 
+            // Theme token reference, e.g. `@text-main`. Keep it as an
+            // identifier at the AST boundary so token references remain
+            // usable anywhere an ordinary UI value is accepted.
+            TokenKind::At => {
+                self.stream.next();
+                let name = self.parse_ident()?;
+                Ok(UiModifierValue::Ident(format!("@{name}")))
+            }
+
             TokenKind::LBrace => {
                 let checkpoint = self.stream.checkpoint();
                 self.stream.expect(TokenKind::LBrace)?;
@@ -106,6 +115,12 @@ impl Parser {
                 }
 
                 return Ok(UiModifierValue::Ident(key.remove(0)));
+            }
+
+            TokenKind::At => {
+                self.stream.next();
+                let name = self.parse_ident()?;
+                return Ok(UiModifierValue::Ident(format!("@{name}")));
             }
 
             TokenKind::LBrace => {

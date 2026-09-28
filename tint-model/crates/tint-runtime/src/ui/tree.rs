@@ -1,6 +1,8 @@
 // ui/tree.rs
 
 use super::style::StyleList;
+use std::collections::HashMap;
+use tint_ast::UiModifierValue;
 
 pub type UiNodeId = usize;
 
@@ -130,6 +132,29 @@ impl UiTree {
         let id = self.create_node(tag.clone());
         let (mut style, hover_style, breakpoints) =
             super::style::resolve_style_with_host(modifiers, host);
+        super::style::apply_container_defaults(&tag, &mut style);
+        let node = &mut self.nodes[id];
+        node.tint_source = format!(
+            "{} {{ {} }}",
+            node.tag,
+            super::style::format_modifier_source(modifiers)
+        );
+        node.style = style;
+        node.hover_style = hover_style;
+        node.breakpoints = breakpoints;
+        id
+    }
+
+    pub fn create_styled_node_with_host_and_tokens<H: tint_evaluator::EvalHost>(
+        &mut self,
+        tag: String,
+        modifiers: &[tint_ast::UiModifier],
+        host: &mut H,
+        tokens: &HashMap<String, UiModifierValue>,
+    ) -> UiNodeId {
+        let id = self.create_node(tag.clone());
+        let (mut style, hover_style, breakpoints) =
+            super::style::resolve_style_with_host_and_tokens(modifiers, host, tokens);
         super::style::apply_container_defaults(&tag, &mut style);
         let node = &mut self.nodes[id];
         node.tint_source = format!(

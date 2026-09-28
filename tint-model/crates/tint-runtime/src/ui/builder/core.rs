@@ -5,6 +5,9 @@ impl UiBuilder {
     pub fn new() -> Self {
         Self {
             tree: UiTree::empty(),
+            tokens: std::collections::HashMap::new(),
+            styles: std::collections::HashMap::new(),
+            components: std::collections::HashMap::new(),
         }
     }
 
@@ -17,6 +20,8 @@ impl UiBuilder {
     /// which is why those constructs were previously inert.
     pub fn build_root<H: EvalHost>(&mut self, nodes: &Vec<UiNode>, host: &mut H) -> UiNodeId {
         let root = self.tree.create_node("Root".into());
+        self.collect_styles(nodes);
+        self.collect_components(nodes);
 
         for n in nodes {
             self.build_into(root, n, host);
@@ -30,7 +35,11 @@ impl UiBuilder {
     /// everything under it) simply isn't added to its parent.
     pub fn build<H: EvalHost>(&mut self, node: &UiNode, host: &mut H) -> Option<UiNodeId> {
         match node {
-            UiNode::Theme { .. } => None,
+            UiNode::Theme { .. }
+            | UiNode::Style { .. }
+            | UiNode::Component { .. }
+            | UiNode::Variant { .. } => None,
+            UiNode::Slot { .. } => None,
             // Splices into the parent instead of creating a node of its
             // own -- handled in `build_into` (nodes.rs), same as `Theme`.
             UiNode::For { .. } => None,
@@ -50,9 +59,15 @@ impl UiBuilder {
                 if !check_if(modifiers, host) {
                     return None;
                 }
+                let expanded = self.expand_styles(modifiers);
                 Some(
                     self.tree
-                        .create_styled_node_with_host(name.clone(), modifiers, host),
+                        .create_styled_node_with_host_and_tokens(
+                            name.clone(),
+                            &expanded,
+                            host,
+                            &self.tokens,
+                        ),
                 )
             }
         }

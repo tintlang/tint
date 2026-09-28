@@ -1,17 +1,26 @@
 // Existence/duplicate-binding checks over a `ui fn` body -- the UI-tree
 // counterpart to `statements.rs`/`expressions.rs`'s logic-code walk. Same
 // scope as everywhere else in this checker: is every identifier actually
-// in scope, are there no duplicate bindings -- NOT type checking, and NOT
-// resolution of anything that needs a value's type (a `click||handler`
+// in scope, are there no duplicate bindings, and do the typed UI control-flow
+// and event expressions make sense. Host-specific styling values remain
+// intentionally open (a `click||handler`
 // name, a `case label { ... }` arm's label, a modifier path like
 // `padding`/`hover` are all left alone here, exactly as they are at
 // runtime until something actually evaluates them).
 impl SemanticChecker {
     fn visit_ui_fn(&mut self, f: &UiFnDecl) {
         self.ctx.mode = Mode::UI;
+        self.ui_tokens.clear();
+        self.ui_styles.clear();
+        self.ui_variants.clear();
+        for node in &f.body {
+            self.collect_ui_tokens(node);
+            self.collect_ui_styles(node);
+            self.collect_ui_variants(node);
+        }
         self.scopes.push();
         for param in &f.params {
-            self.bind_pattern(&param.pattern);
+            self.bind_pattern_typed(&param.pattern, self.ast_type(param.ty.as_ref()));
         }
         // The `state` names themselves are already bound into the
         // PERSISTENT base scope by `collect_top_level_names` (see that
@@ -22,7 +31,11 @@ impl SemanticChecker {
         // visited yet is each state's own INIT expression -- `state count
         // = starting_value` should still flag an unknown `starting_value`.
         for state in &f.state {
-            self.visit_expr(&state.init);
+            let state_ty = self.infer_expr(&state.init);
+            self.scopes.update_type(&state.name, state_ty);
+        }
+        for node in &f.body {
+            self.visit_ui_style_declarations(node);
         }
         for node in &f.body {
             self.visit_ui_node(node);
@@ -48,6 +61,36 @@ impl SemanticChecker {
                 self.visit_ui_modifiers(modifiers);
             }
 
+            UiNode::Style { .. } => {}
+
+            UiNode::Component {
+                modifiers,
+                children,
+                ..
+            } => {
+                self.visit_ui_modifiers(modifiers);
+                for child in children {
+                    self.visit_ui_node_or_expr(child);
+                }
+            }
+
+            UiNode::Variant {
+                modifiers,
+                children,
+                ..
+            } => {
+                self.visit_ui_modifiers(modifiers);
+                for child in children {
+                    self.visit_ui_node_or_expr(child);
+                }
+            }
+
+            UiNode::Slot { children, .. } => {
+                for child in children {
+                    self.visit_ui_node_or_expr(child);
+                }
+            }
+
             UiNode::Theme { children, .. } => {
                 for child in children {
                     self.visit_ui_node_or_expr(child);
@@ -65,9 +108,23 @@ impl SemanticChecker {
                 body,
                 ..
             } => {
-                self.visit_expr(iterable);
+                let iterable_ty = self.infer_expr(iterable);
                 self.scopes.push();
-                self.scopes.define(var, Type::Unit);
+                let item_ty = match iterable_ty {
+                    Type::Array(item) => *item,
+                    Type::Unknown => Type::Unknown,
+                    found => {
+                        self.error(
+                            iterable.span(),
+                            SemanticErrorKind::TypeMismatch {
+                                expected: "array".into(),
+                                found: format!("{:?}", found),
+                            },
+                        );
+                        Type::Unknown
+                    }
+                };
+                self.scopes.define(var, item_ty);
                 for child in body {
                     self.visit_ui_node_or_expr(child);
                 }
@@ -87,7 +144,7 @@ impl SemanticChecker {
         match find_for_loop_var(modifiers) {
             Some(var) => {
                 self.scopes.push();
-                self.scopes.define(&var, Type::Unit);
+                self.scopes.define(&var, Type::Unknown);
                 for child in children {
                     self.visit_ui_node_or_expr(child);
                 }
@@ -126,14 +183,222 @@ impl SemanticChecker {
                 // dynamically at runtime (against `TintVM.logic_functions`
                 // or a case comparison), never a variable read this pass
                 // could meaningfully check.
-                UiAttrValue::Literal(_) | UiAttrValue::Ident(_) => {}
+                UiAttrValue::Literal(_) => {}
+                UiAttrValue::Ident(name) => {
+                    if matches!(
+                        attr.name.as_str(),
+                        "click"
+                            | "pointer_down"
+                            | "pointer_up"
+                            | "hover_in"
+                            | "hover_out"
+                            | "frame"
+                    ) && !self.known_fns.contains(name)
+                    {
+                        self.error(attr.span, SemanticErrorKind::UnknownIdent(name.clone()));
+                    }
+                }
             }
         }
     }
 
     fn visit_ui_modifiers(&mut self, modifiers: &[UiModifier]) {
         for m in modifiers {
+            if m.path == ["use".to_string()] {
+                if let UiModifierValue::Ident(name) = &m.value {
+                    if !self.ui_styles.contains(name) {
+                        self.error(m.span, SemanticErrorKind::UnknownUiStyle(name.clone()));
+                    }
+                }
+            }
+            if m.path == ["variant".to_string()] {
+                if let UiModifierValue::Ident(name) = &m.value {
+                    if !self.ui_variants.contains(name) {
+                        self.error(m.span, SemanticErrorKind::UnknownUiVariant(name.clone()));
+                    }
+                }
+            }
+            if m.path == ["if".to_string()] {
+                if let UiModifierValue::Expr(expr) = &m.value {
+                    let ty = self.infer_expr(expr);
+                    self.require_compatible(&Type::Bool, &ty, expr.span());
+                }
+            }
+            if m.path == ["for".to_string()] {
+                if let UiModifierValue::MiniMod { value, .. } = &m.value {
+                    if let UiModifierValue::Expr(expr) = value.as_ref() {
+                        let ty = self.infer_expr(expr);
+                        if !matches!(ty, Type::Array(_) | Type::Unknown) {
+                            self.error(
+                                expr.span(),
+                                SemanticErrorKind::TypeMismatch {
+                                    expected: "array".into(),
+                                    found: format!("{:?}", ty),
+                                },
+                            );
+                        }
+                    }
+                }
+            }
+            self.check_ui_token_refs(&m.value, m.span);
             self.visit_ui_modifier_value(&m.value);
+        }
+    }
+
+    fn collect_ui_tokens(&mut self, node: &UiNode) {
+        match node {
+            UiNode::Theme { children, .. } => {
+                for child in children {
+                    if let UiNodeOrExpr::Node(node) = child {
+                        self.collect_ui_tokens(node);
+                    }
+                }
+            }
+            UiNode::BlockElement {
+                name,
+                modifiers,
+                children,
+                ..
+            } => {
+                if name == "tokens" {
+                    for modifier in modifiers {
+                        if !modifier.path.is_empty() {
+                            self.ui_tokens.insert(modifier.path.join("."));
+                        }
+                    }
+                }
+                for child in children {
+                    if let UiNodeOrExpr::Node(node) = child {
+                        self.collect_ui_tokens(node);
+                    }
+                }
+            }
+            UiNode::BlockSelfClosing { .. } => {}
+            UiNode::Style { .. } => {}
+            UiNode::Component { children, .. }
+            | UiNode::Variant { children, .. }
+            | UiNode::Slot { children, .. } => {
+                for child in children {
+                    if let UiNodeOrExpr::Node(node) = child {
+                        self.collect_ui_tokens(node);
+                    }
+                }
+            }
+            UiNode::For { body, .. } => {
+                for child in body {
+                    if let UiNodeOrExpr::Node(node) = child {
+                        self.collect_ui_tokens(node);
+                    }
+                }
+            }
+        }
+    }
+
+    fn collect_ui_styles(&mut self, node: &UiNode) {
+        match node {
+            UiNode::Style { name, .. } => {
+                self.ui_styles.insert(name.clone());
+            }
+            UiNode::Theme { children, .. }
+            | UiNode::BlockElement { children, .. }
+            | UiNode::Component { children, .. }
+            | UiNode::Variant { children, .. }
+            | UiNode::Slot { children, .. } => {
+                for child in children {
+                    if let UiNodeOrExpr::Node(node) = child {
+                        self.collect_ui_styles(node);
+                    }
+                }
+            }
+            UiNode::For { body, .. } => {
+                for child in body {
+                    if let UiNodeOrExpr::Node(node) = child {
+                        self.collect_ui_styles(node);
+                    }
+                }
+            }
+            UiNode::BlockSelfClosing { .. } => {}
+        }
+    }
+
+    fn collect_ui_variants(&mut self, node: &UiNode) {
+        match node {
+            UiNode::Variant { name, children, .. } => {
+                self.ui_variants.insert(name.clone());
+                for child in children {
+                    if let UiNodeOrExpr::Node(node) = child {
+                        self.collect_ui_variants(node);
+                    }
+                }
+            }
+            UiNode::Theme { children, .. }
+            | UiNode::BlockElement { children, .. }
+            | UiNode::Component { children, .. }
+            | UiNode::Slot { children, .. } => {
+                for child in children {
+                    if let UiNodeOrExpr::Node(node) = child {
+                        self.collect_ui_variants(node);
+                    }
+                }
+            }
+            UiNode::For { body, .. } => {
+                for child in body {
+                    if let UiNodeOrExpr::Node(node) = child {
+                        self.collect_ui_variants(node);
+                    }
+                }
+            }
+            UiNode::Style { .. } | UiNode::BlockSelfClosing { .. } => {}
+        }
+    }
+
+    fn visit_ui_style_declarations(&mut self, node: &UiNode) {
+        match node {
+            UiNode::Style { modifiers, .. } => self.visit_ui_modifiers(modifiers),
+            UiNode::Theme { children, .. }
+            | UiNode::BlockElement { children, .. }
+            | UiNode::Component { children, .. }
+            | UiNode::Variant { children, .. }
+            | UiNode::Slot { children, .. } => {
+                for child in children {
+                    if let UiNodeOrExpr::Node(node) = child {
+                        self.visit_ui_style_declarations(node);
+                    }
+                }
+            }
+            UiNode::For { body, .. } => {
+                for child in body {
+                    if let UiNodeOrExpr::Node(node) = child {
+                        self.visit_ui_style_declarations(node);
+                    }
+                }
+            }
+            UiNode::BlockSelfClosing { .. } => {}
+        }
+    }
+
+    fn check_ui_token_refs(&mut self, value: &UiModifierValue, span: Span) {
+        match value {
+            UiModifierValue::Ident(name) if name.starts_with('@') => {
+                let token = &name[1..];
+                if !self.ui_tokens.contains(token) {
+                    self.error(span, SemanticErrorKind::UnknownUiToken(token.to_string()));
+                }
+            }
+            UiModifierValue::Block(items) => {
+                for item in items {
+                    self.check_ui_token_refs(&item.value, item.span);
+                }
+            }
+            UiModifierValue::Tuple(items) => {
+                for item in items {
+                    self.check_ui_token_refs(item, span);
+                }
+            }
+            UiModifierValue::MiniMod { value, .. } => {
+                self.check_ui_token_refs(value, span);
+            }
+            _ => {}
         }
     }
 
