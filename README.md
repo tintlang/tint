@@ -1,11 +1,5 @@
 # Tint
 
-The canonical project version is stored in [`VERSION`](VERSION). After changing it, run:
-
-```bash
-node scripts/sync-version.mjs
-```
-
 Tint is a small declarative UI DSL for Rust/WASM applications, with a direct
 Rust-to-DOM rendering path.
 
