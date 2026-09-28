@@ -34,7 +34,11 @@ older brace-default forms remain accepted. Calls such as `login { user: "Marek",
 password: "123" }` use the same known-type struct-initializer path rather than a
 separate named-argument grammar.
 
-**Lambdas:** the syntax parses, but lambda lowering is not complete in the IR VM.
+**Lambdas:** lambdas work end to end through the tree-walking evaluator,
+including lexical capture and calling a lambda stored in a local. Functions
+whose bodies contain lambdas are routed through that evaluator because the SSA
+IR still lacks closure values and indirect calls; direct lambda lowering in IR
+remains future work.
 
 **Control flow:** `if/else`, `while`, `loop`, `for x in 0..10`, `return`, `break`,
 `continue`.
@@ -79,18 +83,16 @@ parent, needs no wrapper, and can sit between static siblings. Unlike the
 modifier form, it requires explicit `{...}` braces around its body. See
 `ui/blocks.md`.
 
-**Semantic checker:** a basic pass (undefined-variable and
-duplicate-binding checks, not type checking -- `TypeMismatch` exists in
-`tint-semantics/src/errors.rs` for later, nothing constructs it yet) runs
-over `fn` bodies, `ui fn` bodies (modifiers, attributes, text
-interpolations, `if{}`/`for{}` control flow in both the modifier and
-standalone-block forms -- a loop's variable is correctly scoped to just its
-own body/children), and `impl` method bodies (`self` binds like any other
-parameter). `tint check`
-reports its errors as fatal; `tint run` reports them as non-fatal
-warnings and still executes. Method calls (`x.foo()`), namespaced calls
-(`Type::foo()`), and declarations' own field/variant types are not
-checked -- those need a value's type, which this pass doesn't track.
+**Semantic checker:** a typed pass now runs over `fn` bodies, `ui fn` bodies
+and `impl` methods. It infers primitive, array, tuple, map, struct, enum and
+function/lambda types; checks operators, conditions, assignments, explicit
+returns, function arguments, struct fields, method arguments and UI
+state/interpolation expressions; and reports `TypeMismatch` alongside the
+existing undefined-variable, duplicate-binding and immutability errors.
+Unknown types remain permissive where declarations are intentionally untyped;
+generic typing and every UI attribute's host-specific value contract remain
+future work. `tint check` reports errors as fatal;
+`tint run` reports them as non-fatal warnings and still executes.
 
 **Map literals:** `map { a{1}, b{2} }`.
 
@@ -119,9 +121,9 @@ no supported GPU/WebGPU runtime for them.
 
 ## Roadmap
 
-A basic end-to-end semantic checker (now covering `fn`, `ui fn`, and
-`impl` method bodies -- still existence/duplicate-binding checks only, no
-type checking), a real standalone build that embeds the WASM runtime, a
+A typed end-to-end semantic checker (now covering `fn`, `ui fn`, and
+`impl` method bodies with conservative handling for still-untyped features),
+a real standalone build that embeds the WASM runtime, a
 module system with grouped/aliased/wildcard `use` imports, and `match{}`
 evaluation in UI trees (`case label { ... }`/`case _ { ... }` children --
 see `tint-runtime/tests/render_ui.rs`) have all landed. The earlier XML
@@ -130,8 +132,7 @@ syntax (`Tag { ... }`) is now the only way to write UI, including
 `match{}`'s case arms, and a `children { ... }` grouping tag is available
 for separating a node's own children from its modifiers when both are
 present in the same block. The next useful milestones are a stable
-language reference, lambda lowering to SSA IR (lambdas parse and run
-today only through the tree-walking evaluator, not the IR-compiled path
--- see the "Lambdas" entry above and `tint-ir/src/compiler/expressions.rs`),
-and broader UI component semantics. GPU/WebGPU and async features remain
-future experiments.
+language reference, direct lambda lowering to SSA IR (the runtime fallback
+is documented above and `tint-ir/src/compiler/expressions.rs` still has
+the lowering placeholder), and broader UI component semantics. GPU/WebGPU
+and async features remain future experiments.

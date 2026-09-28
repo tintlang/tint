@@ -123,6 +123,7 @@ pub struct SemanticChecker {
     struct_fields: HashMap<String, HashMap<String, Type>>,
     methods: HashMap<(String, String), (Vec<Type>, Type)>,
     enum_variants: HashMap<(String, String), Vec<Type>>,
+    enum_names: HashSet<String>,
     type_names: HashSet<String>,
     current_return: Option<Type>,
     errors: Vec<SemanticError>,

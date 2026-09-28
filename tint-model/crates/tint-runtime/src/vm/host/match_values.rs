@@ -3,7 +3,11 @@ use super::super::*;
 impl TintVM {
     pub(super) fn host_capture_env(&mut self) -> std::rc::Rc<tint_evaluator::env::Env> {
         use tint_evaluator::env::Env;
-        std::rc::Rc::new(Env::new())
+        let mut env = Env::new();
+        for (name, value) in self.scopes.values() {
+            env.define(&name, Self::rt_to_eval(&value));
+        }
+        std::rc::Rc::new(env)
     }
 
     pub(super) fn host_match_pattern(

@@ -3,15 +3,22 @@ impl SemanticChecker {
         match stmt {
             Stmt::Let {
                 pattern,
-                ty: _,
+                ty,
                 init,
                 span: _,
             } => {
                 // Init is checked against the scope BEFORE the new
                 // binding exists, so `let x = x` correctly flags `x` as
                 // unknown instead of seeing its own not-yet-bound name.
-                self.visit_expr(init.expr());
-                self.bind_pattern(pattern);
+                let found = self.infer_expr(init.expr());
+                if let Some(declared) = ty {
+                    let expected = self.ast_type(Some(declared));
+                    self.require_compatible(&expected, &found, init.span());
+                    self.bind_pattern_typed(pattern, expected);
+                } else {
+                    self.bind_pattern_typed(pattern, found);
+                }
+                self.mark_pattern_mutable(pattern);
             }
             Stmt::Assign { lhs, rhs, span: _ } => {
                 if let Expr::Ident(name, span) = lhs {
@@ -19,8 +26,9 @@ impl SemanticChecker {
                         self.error(*span, SemanticErrorKind::AssignToImmutable(name.clone()));
                     }
                 }
-                self.visit_expr(lhs);
-                self.visit_expr(rhs);
+                let lhs_ty = self.infer_expr(lhs);
+                let rhs_ty = self.infer_expr(rhs);
+                self.require_compatible(&lhs_ty, &rhs_ty, rhs.span());
             }
             Stmt::CompoundAssign {
                 name,
@@ -33,7 +41,9 @@ impl SemanticChecker {
                 } else if !self.scopes.is_mutable(name) {
                     self.error(*span, SemanticErrorKind::AssignToImmutable(name.clone()));
                 }
-                self.visit_expr(expr);
+                let lhs_ty = self.scopes.lookup(name).unwrap_or(Type::Unknown);
+                let rhs_ty = self.infer_expr(expr);
+                self.require_compatible(&lhs_ty, &rhs_ty, *span);
             }
             Stmt::Expr(e) => {
                 self.visit_expr(e);
@@ -44,7 +54,8 @@ impl SemanticChecker {
                 else_,
                 span: _,
             } => {
-                self.visit_expr(cond);
+                let cond_ty = self.infer_expr(cond);
+                self.require_compatible(&Type::Bool, &cond_ty, cond.span());
                 self.visit_block(then);
                 if let Some(else_block) = else_ {
                     self.visit_block(else_block);
@@ -55,7 +66,8 @@ impl SemanticChecker {
                 body,
                 span: _,
             } => {
-                self.visit_expr(cond);
+                let cond_ty = self.infer_expr(cond);
+                self.require_compatible(&Type::Bool, &cond_ty, cond.span());
                 self.visit_block(body);
             }
             Stmt::Loop { body, span: _ } => {
@@ -68,8 +80,10 @@ impl SemanticChecker {
                 body,
                 span,
             } => {
-                self.visit_expr(start);
-                self.visit_expr(end);
+                let start_ty = self.infer_expr(start);
+                let end_ty = self.infer_expr(end);
+                self.require_compatible(&Type::Number, &start_ty, start.span());
+                self.require_compatible(&Type::Number, &end_ty, end.span());
                 self.scopes.push();
                 if !self.scopes.define(var, Type::Simple("i32".to_string())) {
                     self.error(*span, SemanticErrorKind::DuplicateIdent(var.clone()));
@@ -85,8 +99,11 @@ impl SemanticChecker {
                 self.visit_expr(expr);
                 self.check_match_arms(arms);
             }
-            Stmt::Return(e, _) => {
-                self.visit_expr(e);
+            Stmt::Return(e, span) => {
+                let found = self.infer_expr(e);
+                if let Some(expected) = self.current_return.clone() {
+                    self.require_compatible(&expected, &found, *span);
+                }
             }
             Stmt::Break(_) | Stmt::Continue(_) => {}
         }

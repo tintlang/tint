@@ -11,6 +11,7 @@ impl SemanticChecker {
             struct_fields: HashMap::new(),
             methods: HashMap::new(),
             enum_variants: HashMap::new(),
+            enum_names: HashSet::new(),
             type_names: HashSet::new(),
             current_return: None,
             errors: vec![],
@@ -70,6 +71,7 @@ impl SemanticChecker {
                 }
                 Item::Enum(e) | Item::ExportEnum(e) => {
                     self.type_names.insert(e.name.clone());
+                    self.enum_names.insert(e.name.clone());
                 }
                 Item::TypeAlias(alias) => {
                     self.type_names.insert(alias.name.clone());
@@ -186,6 +188,7 @@ impl SemanticChecker {
                 "string" | "str" => Type::String,
                 "bool" => Type::Bool,
                 "i32" | "i64" | "u32" | "u64" | "f32" | "f64" | "number" => Type::Number,
+                _ if self.enum_names.contains(name) => Type::Enum(name.clone()),
                 _ => Type::Struct(name.clone()),
             },
             tint_ast::Type::Generic(name, args) if name == "Vec" || name == "Array" => {

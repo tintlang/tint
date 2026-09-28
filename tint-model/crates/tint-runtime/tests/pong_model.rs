@@ -36,7 +36,9 @@ impl Game {
     }
 
     fn update(&mut self, dt) {
-        self.ball.position = self.ball.position.add(self.ball.velocity.scale(dt))
+        let advance = |velocity| velocity * dt;
+        self.ball.position.x = self.ball.position.x + advance(self.ball.velocity.x)
+        self.ball.position.y = self.ball.position.y + advance(self.ball.velocity.y)
     }
 
     fn handle(&mut self, event) {

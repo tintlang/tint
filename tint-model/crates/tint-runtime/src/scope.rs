@@ -56,4 +56,14 @@ impl RuntimeScopeStack {
         }
         None
     }
+
+    pub fn values(&self) -> Vec<(String, RuntimeValue)> {
+        let mut values = HashMap::new();
+        for frame in &self.frames {
+            for (name, value) in frame {
+                values.insert(name.clone(), value.clone());
+            }
+        }
+        values.into_iter().collect()
+    }
 }

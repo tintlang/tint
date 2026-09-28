@@ -151,7 +151,11 @@ impl Game {
     }
 
     fn update_ball(&mut self, dt) {
-        self.ball.position = self.ball.position + self.ball.velocity * dt
+        // Keep the per-axis step in a closure so the game loop exercises
+        // lexical capture in a real update path, not only in an isolated test.
+        let advance = |velocity| velocity * dt;
+        self.ball.position.x = self.ball.position.x + advance(self.ball.velocity.x)
+        self.ball.position.y = self.ball.position.y + advance(self.ball.velocity.y)
         self.bounce_from_walls();
         self.collide_with_player();
         self.collide_with_cpu();

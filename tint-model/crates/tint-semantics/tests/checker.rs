@@ -228,6 +228,17 @@ fn type_checker_checks_enum_constructor_arguments() {
 }
 
 #[test]
+fn enum_fields_accept_enum_constructors() {
+    assert_clean(
+        r#"
+        enum GameState { Menu, Playing }
+        struct Game { mode: GameState }
+        fn test() { Game { mode: GameState::Menu } }
+        "#,
+    );
+}
+
+#[test]
 fn type_checker_reports_non_exhaustive_enum_match() {
     assert_error(
         r#"

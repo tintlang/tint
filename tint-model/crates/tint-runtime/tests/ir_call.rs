@@ -65,6 +65,42 @@ fn expect_number(v: Value) -> f64 {
 }
 
 #[test]
+fn lambdas_work_for_top_level_calls_and_capture_locals() {
+    let mut vm = TintVM::new();
+    parse_and_run(
+        r#"
+fn lambda_math() {
+    let base = 10;
+    let add = |x| x + base;
+    add(5)
+}
+
+fn lambda_composition() {
+    let add1 = |x| x + 1;
+    let twice = |x| add1(add1(x));
+    twice(5)
+}
+"#,
+        &mut vm,
+    );
+
+    assert_eq!(
+        expect_number(
+            vm.call_fn("lambda_math", &[], tint_ast::Span::dummy())
+                .expect("lambda function should succeed")
+        ),
+        15.0
+    );
+    assert_eq!(
+        expect_number(
+            vm.call_fn("lambda_composition", &[], tint_ast::Span::dummy())
+                .expect("nested lambda calls should succeed")
+        ),
+        7.0
+    );
+}
+
+#[test]
 fn impl_method_can_mutate_self_and_write_back_to_the_receiver() {
     let mut vm = TintVM::new();
     parse_and_run(

@@ -2,6 +2,8 @@ use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
+    Simple(String),
+    Unit,
     Number,
     String,
     Bool,
@@ -21,6 +23,10 @@ pub enum Type {
     Struct(String),
     Enum(String),
     Fn(Box<Type>, Vec<Type>),
+
+    Array(Box<Type>),
+    Tuple(Vec<Type>),
+    Map(Box<Type>),
 
     Unknown,
 }

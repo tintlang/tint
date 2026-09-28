@@ -23,6 +23,12 @@ pub enum RuntimeValue {
 
     Map(std::collections::HashMap<String, RuntimeValue>),
 
+    Lambda {
+        params: Vec<String>,
+        body: Box<tint_ast::Expr>,
+        closure: std::rc::Rc<tint_evaluator::Env>,
+    },
+
     // low-level VM handles
     Struct(usize),
     Enum(usize, usize),

@@ -34,6 +34,13 @@ impl TintVM {
             return self.host_call_user_fn(name, args, span);
         }
 
+        // The IR backend currently has no closure value or indirect call.
+        // Route functions that actually contain a lambda through the
+        // evaluator, which already supports lexical capture and lambda calls.
+        if self.is_ir_function(name) && self.uses_lambda(name) {
+            return self.host_call_user_fn(name, args, span);
+        }
+
         // 3) Logic functions -> IR VM
         if self.is_ir_function(name) {
             let params: Vec<tint_ast::Pattern> = self
@@ -236,6 +243,23 @@ impl TintVM {
 
             // if the IR passed Unit: treat it as a no-op
             EvalValue::Unit => EvalValue::Unit,
+
+            EvalValue::Lambda {
+                params,
+                body,
+                closure,
+            } => {
+                self.scopes.push();
+                for (name, value) in closure.values() {
+                    self.host_define_var(&name, value);
+                }
+                for (param, arg) in params.iter().zip(args.iter()) {
+                    self.host_define_var(param, arg.clone());
+                }
+                let result = self.eval_expr(&body);
+                self.scopes.pop();
+                result
+            }
 
             other => panic!("host_call_value not supported: {:?}", other),
         }
