@@ -99,28 +99,20 @@ impl UiBuilder {
 
         if let Some(component) = self.components.get(name) {
             let component = component.clone();
-            return self.build_component(
-                name,
-                attributes,
-                modifiers,
-                children,
-                &component,
-                host,
-            );
+            return self.build_component(name, attributes, modifiers, children, &component, host);
         }
 
         let expanded = self.expand_styles(modifiers);
-        let id = self
-            .tree
-            .create_styled_node_with_host_and_tokens(
-                name.to_string(),
-                &expanded,
-                host,
-                &self.tokens,
-            );
+        let id = self.tree.create_styled_node_with_host_and_tokens(
+            name.to_string(),
+            &expanded,
+            host,
+            &self.tokens,
+        );
         apply_events(&mut self.tree, id, attributes);
         apply_svg(&mut self.tree, id, attributes);
         apply_route(&mut self.tree, id, attributes);
+        apply_target(&mut self.tree, id, attributes);
         apply_asset(&mut self.tree, id, attributes);
         apply_key(&mut self.tree, id, &expanded);
 
@@ -195,9 +187,7 @@ impl UiBuilder {
     fn collect_theme_tokens(&mut self, children: &[UiNodeOrExpr]) {
         for child in children {
             let UiNodeOrExpr::Node(UiNode::BlockElement {
-                name,
-                modifiers,
-                ..
+                name, modifiers, ..
             }) = child
             else {
                 continue;
@@ -219,7 +209,9 @@ impl UiBuilder {
     pub(super) fn collect_styles(&mut self, nodes: &[UiNode]) {
         for node in nodes {
             match node {
-                UiNode::Style { name, modifiers, .. } => {
+                UiNode::Style {
+                    name, modifiers, ..
+                } => {
                     self.styles.insert(name.clone(), modifiers.clone());
                 }
                 UiNode::Component { children, .. } => {
@@ -239,7 +231,12 @@ impl UiBuilder {
     pub(super) fn collect_components(&mut self, nodes: &[UiNode]) {
         for node in nodes {
             match node {
-                UiNode::Component { name, modifiers, children, .. } => {
+                UiNode::Component {
+                    name,
+                    modifiers,
+                    children,
+                    ..
+                } => {
                     let mut base_children = Vec::new();
                     let mut variants = HashMap::new();
                     for child in children {
@@ -250,7 +247,8 @@ impl UiBuilder {
                                 children,
                                 ..
                             }) => {
-                                variants.insert(name.clone(), (modifiers.clone(), children.clone()));
+                                variants
+                                    .insert(name.clone(), (modifiers.clone(), children.clone()));
                             }
                             other => base_children.push(other.clone()),
                         }
@@ -269,9 +267,8 @@ impl UiBuilder {
                     self.collect_components_from_children(children);
                 }
                 UiNode::For { body, .. } => self.collect_components_from_children(body),
-                UiNode::Style { .. }
-                | UiNode::Variant { .. }
-                | UiNode::BlockSelfClosing { .. } => {}
+                UiNode::Style { .. } | UiNode::Variant { .. } | UiNode::BlockSelfClosing { .. } => {
+                }
                 UiNode::Slot { children, .. } => self.collect_components_from_children(children),
             }
         }
@@ -326,6 +323,7 @@ impl UiBuilder {
         apply_events(&mut self.tree, id, attributes);
         apply_svg(&mut self.tree, id, attributes);
         apply_route(&mut self.tree, id, attributes);
+        apply_target(&mut self.tree, id, attributes);
         apply_asset(&mut self.tree, id, attributes);
         apply_key(&mut self.tree, id, &expanded);
 
@@ -333,11 +331,7 @@ impl UiBuilder {
         let mut default_children = Vec::new();
         for child in invocation_children {
             match child {
-                UiNodeOrExpr::Node(UiNode::Slot {
-                    name,
-                    children,
-                    ..
-                }) => {
+                UiNodeOrExpr::Node(UiNode::Slot { name, children, .. }) => {
                     named_slots.insert(name.clone(), children.clone());
                 }
                 other => default_children.push(other.clone()),
@@ -352,16 +346,13 @@ impl UiBuilder {
         for child in &template_children {
             match child {
                 UiNodeOrExpr::Node(UiNode::Slot { name, .. }) => {
-                    let content = named_slots
-                        .get(name)
-                        .cloned()
-                        .unwrap_or_else(|| {
-                            if name == "content" {
-                                default_children.clone()
-                            } else {
-                                Vec::new()
-                            }
-                        });
+                    let content = named_slots.get(name).cloned().unwrap_or_else(|| {
+                        if name == "content" {
+                            default_children.clone()
+                        } else {
+                            Vec::new()
+                        }
+                    });
                     self.build_children(id, &content, host);
                 }
                 other => self.build_children(id, std::slice::from_ref(other), host),

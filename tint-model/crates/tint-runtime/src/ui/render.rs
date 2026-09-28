@@ -37,6 +37,7 @@ pub struct UiRenderNode {
     pub sound: Option<String>,
     pub svg: Option<String>,
     pub route: Option<String>,
+    pub target: Option<String>,
     pub children: Vec<UiRenderNode>,
 }
 
@@ -64,6 +65,7 @@ pub fn to_render_tree(tree: &UiTree, id: UiNodeId) -> UiRenderNode {
         sound: node.sound.clone(),
         svg: node.svg.clone(),
         route: node.route.clone(),
+        target: node.target.clone(),
         children: node
             .children
             .iter()

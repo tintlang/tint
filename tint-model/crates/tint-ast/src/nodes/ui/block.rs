@@ -1,14 +1,14 @@
 use super::modifier::UiModifierValue;
 use crate::Span;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct UiModifierBlock {
     pub path: Vec<String>,
     pub items: Vec<UiModifierItem>,
     pub span: Span,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct UiModifierItem {
     pub key: String,
     pub value: Option<UiModifierValue>,

@@ -29,6 +29,37 @@ impl DomSession {
         }
     }
 
+    /// Creates a session from a versioned Tint bytecode blob. The browser
+    /// host can choose source mode for development and this mode for release
+    /// artifacts without changing the DOM/session API.
+    pub fn from_bytecode(bytes: &[u8], ui_fn_name: &str, container_id: &str) -> DomSession {
+        match InnerSession::from_bytecode(bytes, ui_fn_name) {
+            Ok(session) => {
+                let shared = Rc::new(Shared {
+                    session: RefCell::new(session),
+                    container_id: container_id.to_string(),
+                    resize_timeout: Cell::new(None),
+                    frame_handler: RefCell::new(None),
+                    raf_active: Cell::new(false),
+                    key_down_handler: RefCell::new(None),
+                    key_up_handler: RefCell::new(None),
+                    key_down_bound: Cell::new(false),
+                    key_up_bound: Cell::new(false),
+                    last_frame_time: Cell::new(None),
+                });
+                bind_resize_listener(&shared);
+                DomSession {
+                    shared: Some(shared),
+                    init_error: None,
+                }
+            }
+            Err(e) => DomSession {
+                shared: None,
+                init_error: Some(e),
+            },
+        }
+    }
+
     /// Re-renders the session's current tree into the container,
     /// replacing whatever was there. Returns `Some(error)` instead of
     /// throwing; `None` means it went fine.
@@ -179,6 +210,26 @@ impl DomSession {
             None => return self.init_error.clone(),
         };
         match InnerSession::new(source, ui_fn_name) {
+            Ok(session) => *shared.session.borrow_mut() = session,
+            Err(e) => return Some(e),
+        }
+        sync_viewport_width(&shared);
+        let tree = match shared.session.borrow_mut().render() {
+            Ok(tree) => tree,
+            Err(e) => return Some(e),
+        };
+        mount_tree(&tree, &shared)
+            .err()
+            .map(|e| js_error_to_string(&e))
+    }
+
+    /// Replaces the current program with a serialized Tint bytecode blob.
+    pub fn reload_bytecode(&mut self, bytes: &[u8], ui_fn_name: &str) -> Option<String> {
+        let shared = match &self.shared {
+            Some(s) => s.clone(),
+            None => return self.init_error.clone(),
+        };
+        match InnerSession::from_bytecode(bytes, ui_fn_name) {
             Ok(session) => *shared.session.borrow_mut() = session,
             Err(e) => return Some(e),
         }

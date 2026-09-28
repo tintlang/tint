@@ -488,9 +488,8 @@ fn resolve_use_wildcard(
     let exported: Vec<(String, Item)> = target_items
         .iter()
         .filter_map(|item| {
-            export_info(item).and_then(|(name, exported)| {
-                exported.then(|| (name.to_string(), item.clone()))
-            })
+            export_info(item)
+                .and_then(|(name, exported)| exported.then(|| (name.to_string(), item.clone())))
         })
         .collect();
 
@@ -794,7 +793,11 @@ mod tests {
         let names = item_names(&loaded.program.items);
         assert!(names.contains(&"add".to_string()), "{:?}", names);
         assert!(names.contains(&"sub".to_string()), "{:?}", names);
-        assert!(!names.contains(&"internal_helper".to_string()), "{:?}", names);
+        assert!(
+            !names.contains(&"internal_helper".to_string()),
+            "{:?}",
+            names
+        );
     }
 
     #[test]
@@ -811,7 +814,8 @@ mod tests {
             "mod math;\nuse math::{add, sub as minus,};\nfn main() { add(2, 3) }\n",
         );
 
-        let loaded = try_load(main.to_str().unwrap()).expect("trailing comma + alias in a group should resolve");
+        let loaded = try_load(main.to_str().unwrap())
+            .expect("trailing comma + alias in a group should resolve");
         let names = item_names(&loaded.program.items);
         assert!(names.contains(&"add".to_string()), "{:?}", names);
         assert!(

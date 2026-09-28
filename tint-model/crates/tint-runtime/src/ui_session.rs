@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
-use tint_ast::{Item, Span};
+use tint_ast::{Item, Program, Span};
 use tint_evaluator::errors::EvalResult;
 use tint_evaluator::{EvalHost, Value as EvalValue};
 use tint_lexer::{collect_tokens, Lexer};
@@ -42,6 +42,21 @@ impl UiSession {
         let mut parser = Parser::new(tokens);
         let program = parser.parse_program().map_err(|e| format!("{:?}", e))?;
 
+        Self::from_program(program, ui_fn_name)
+    }
+
+    /// Builds a session from a serialized Tint program. This uses the same
+    /// VM and state initialization path as source mode; only lexing/parsing
+    /// is skipped.
+    pub fn from_bytecode(bytes: &[u8], ui_fn_name: &str) -> Result<Self, String> {
+        let program = crate::bytecode::decode(bytes)?;
+        Self::from_program(program, ui_fn_name)
+    }
+
+    /// Builds a session from an already parsed program. Kept public so native
+    /// build tools and the WASM bytecode host share exactly one initialization
+    /// path.
+    pub fn from_program(program: Program, ui_fn_name: &str) -> Result<Self, String> {
         let semantic_errors = SemanticChecker::new(CheckerContext::default()).check(&program);
         if !semantic_errors.is_empty() {
             return Err(format!("semantic errors: {:?}", semantic_errors));

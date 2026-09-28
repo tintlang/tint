@@ -3,7 +3,7 @@ use crate::BorrowKind;
 use crate::MatchArm;
 use crate::Span;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum StructInitField {
     Assign {
         name: String,
@@ -26,20 +26,20 @@ impl StructInitField {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct StructInit {
     pub name: String,
     pub fields: Vec<StructInitField>,
     pub span: Span,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum StringPart {
     Text(String),
     Expr(Expr),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum Expr {
     Number(String, Span),
     String(String, Span), // raw literal (no interpolation)

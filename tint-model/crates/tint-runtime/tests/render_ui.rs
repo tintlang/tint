@@ -105,12 +105,22 @@ ui fn Widget() {
     let nodes = session.render().expect("render failed");
     let button = &nodes[0];
 
-    assert!(button.style.contains(&("padding-left".to_string(), "18px".to_string())));
-    assert!(button.style.contains(&("padding-right".to_string(), "18px".to_string())));
-    assert!(button.style.contains(&("font-size".to_string(), "18px".to_string())));
-    assert!(button.style.contains(&("color".to_string(), "#ffffff".to_string())));
+    assert!(button
+        .style
+        .contains(&("padding-left".to_string(), "18px".to_string())));
+    assert!(button
+        .style
+        .contains(&("padding-right".to_string(), "18px".to_string())));
+    assert!(button
+        .style
+        .contains(&("font-size".to_string(), "18px".to_string())));
+    assert!(button
+        .style
+        .contains(&("color".to_string(), "#ffffff".to_string())));
     let outline = &nodes[1];
-    assert!(outline.style.contains(&("color".to_string(), "#ffffff".to_string())));
+    assert!(outline
+        .style
+        .contains(&("color".to_string(), "#ffffff".to_string())));
     assert!(outline
         .style
         .contains(&("border".to_string(), "1px solid #ffffff".to_string())));
@@ -137,8 +147,12 @@ ui fn Widget() {
     let nodes = session.render().expect("render failed");
     let button = &nodes[0];
 
-    assert!(button.style.contains(&("padding-left".to_string(), "12px".to_string())));
-    assert!(button.style.contains(&("padding-right".to_string(), "12px".to_string())));
+    assert!(button
+        .style
+        .contains(&("padding-left".to_string(), "12px".to_string())));
+    assert!(button
+        .style
+        .contains(&("padding-right".to_string(), "12px".to_string())));
     assert!(button
         .hover_style
         .contains(&("transform".to_string(), "scale(1.04)".to_string())));

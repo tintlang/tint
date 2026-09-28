@@ -4,6 +4,7 @@ pub mod vm;
 
 pub mod ui;
 
+pub mod bytecode;
 pub mod errors;
 pub mod repl;
 pub mod ui_session;

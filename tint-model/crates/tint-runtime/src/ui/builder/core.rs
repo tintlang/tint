@@ -60,15 +60,12 @@ impl UiBuilder {
                     return None;
                 }
                 let expanded = self.expand_styles(modifiers);
-                Some(
-                    self.tree
-                        .create_styled_node_with_host_and_tokens(
-                            name.clone(),
-                            &expanded,
-                            host,
-                            &self.tokens,
-                        ),
-                )
+                Some(self.tree.create_styled_node_with_host_and_tokens(
+                    name.clone(),
+                    &expanded,
+                    host,
+                    &self.tokens,
+                ))
             }
         }
     }

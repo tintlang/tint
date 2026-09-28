@@ -57,6 +57,8 @@ pub struct UiElement {
     /// Internal route target from `route||"/path"`. Renderers expose this
     /// as a normal browser link instead of inventing navigation in the host.
     pub route: Option<String>,
+    /// Optional link target from target||"_blank".
+    pub target: Option<String>,
 }
 
 impl UiElement {
@@ -81,6 +83,7 @@ impl UiElement {
             sound: None,
             svg: None,
             route: None,
+            target: None,
         }
     }
 }
@@ -222,6 +225,12 @@ impl UiTree {
     pub fn set_route(&mut self, id: UiNodeId, route: Option<String>) {
         if let Some(node) = self.nodes.get_mut(id) {
             node.route = route;
+        }
+    }
+
+    pub fn set_target(&mut self, id: UiNodeId, target: Option<String>) {
+        if let Some(node) = self.nodes.get_mut(id) {
+            node.target = target;
         }
     }
 

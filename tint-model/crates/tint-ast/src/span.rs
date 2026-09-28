@@ -3,7 +3,7 @@ use crate::Position;
 /// A source range bounded by two positions.
 ///
 /// Spans are normalized on construction so `start.offset <= end.offset`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Span {
     pub start: Position,
     pub end: Position,

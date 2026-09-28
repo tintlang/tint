@@ -1,6 +1,6 @@
 use super::{BorrowKind, LifetimeId};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct BorrowAnnotation {
     pub kind: BorrowKind,
 

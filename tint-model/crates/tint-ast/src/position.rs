@@ -3,7 +3,9 @@
 /// `offset` is zero-based and measured in UTF-8 bytes. `line` and `column`
 /// are one-based for real source locations; `(0, 0)` is reserved for dummy
 /// positions when no source location is available.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, serde::Serialize, serde::Deserialize,
+)]
 pub struct Position {
     /// Zero-based UTF-8 byte offset from the start of the source file.
     pub offset: usize,

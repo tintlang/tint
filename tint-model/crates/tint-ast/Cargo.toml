@@ -6,3 +6,4 @@ description = "TintLang AST"
 license.workspace = true
 
 [dependencies]
+serde = { version = "1.0", features = ["derive"] }

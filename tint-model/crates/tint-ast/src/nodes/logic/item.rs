@@ -6,7 +6,7 @@ use crate::UiNode;
 
 use super::{expr::Expr, stmt::Block, types::Type};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct UseDecl {
     pub path: Vec<String>, // ["math", "vec3"] -- a module path (`wildcard`) or module::item path
     /// `use a::b as c;` -- import `b` under the local name `c` instead of
@@ -19,13 +19,13 @@ pub struct UseDecl {
     pub span: Span,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ImportDecl {
     pub path: String,
     pub span: Span,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ModDecl {
     pub name: String,
     /// `mod name { ... }` (inline): populated directly by the parser.
@@ -39,14 +39,14 @@ pub struct ModDecl {
     pub span: Span,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TypeAliasDecl {
     pub name: String,
     pub ty: Type, // union(i32 | f32 | f64)
     pub span: Span,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct KernelDecl {
     pub name: String,
     pub params: Vec<Param>,
@@ -55,7 +55,7 @@ pub struct KernelDecl {
     pub span: Span,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ImplBlock {
     pub span: Span,
     pub generics: Vec<String>, // <T, U>
@@ -63,7 +63,7 @@ pub struct ImplBlock {
     pub methods: Vec<FnDecl>,  // fn foo() {}
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy, serde::Serialize, serde::Deserialize)]
 pub enum SpaceKind {
     Auto,
     All,
@@ -72,7 +72,7 @@ pub enum SpaceKind {
     Logic,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SpaceDecl {
     pub name: String,
     pub kind: SpaceKind,  // Auto until items parsed
@@ -80,7 +80,7 @@ pub struct SpaceDecl {
     pub span: Span,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum Item {
     Fn(FnDecl),
     UiFn(UiFnDecl),
@@ -100,7 +100,7 @@ pub enum Item {
 }
 
 // FUNCTION DECLARATIONS
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct FnDecl {
     pub attributes: AttributeList,
     pub name: String,
@@ -113,13 +113,13 @@ pub struct FnDecl {
     pub span: Span,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum FnBody {
     Block(Block),
     Expr(Expr),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct UiFnDecl {
     pub attributes: AttributeList,
     pub name: String,
@@ -136,27 +136,27 @@ pub struct UiFnDecl {
     pub span: Span,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct UiStateDecl {
     pub name: String,
     pub init: Expr,
     pub span: Span,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum DefaultValue {
     Single(Expr),    // x {10}
     Broadcast(Expr), // (a,b,c) {10}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Param {
     pub pattern: Pattern,
     pub ty: Option<Type>,
     pub default: Option<DefaultValue>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct KitRef {
     pub path: Vec<String>, // ["kit", "position2d"]
     pub body: Option<Vec<StructMember>>,
@@ -173,13 +173,13 @@ impl StructMember {
 }
 
 // STRUCTS & ENUMS
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum StructMember {
     Field(StructField),
     Kit(KitRef),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct StructDecl {
     pub name: String,
     pub members: Vec<StructMember>,
@@ -187,7 +187,7 @@ pub struct StructDecl {
     pub span: Span,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum StructField {
     // Column style: name: Type
     Typed {
@@ -210,7 +210,7 @@ pub enum StructField {
     },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct EnumDecl {
     pub name: String,
     pub generics: Vec<String>,
@@ -219,7 +219,7 @@ pub struct EnumDecl {
     pub span: Span,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum EnumVariant {
     Unit(String),
     Tuple(String, Vec<Type>),

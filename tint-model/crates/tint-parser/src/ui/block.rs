@@ -269,7 +269,9 @@ impl Parser {
         self.stream.expect(TokenKind::LBrace)?;
         let (attributes, modifiers) = self.parse_modifier_list_block()?;
         if !attributes.is_empty() {
-            return self.stream.error_here("Component declarations cannot have event attributes");
+            return self
+                .stream
+                .error_here("Component declarations cannot have event attributes");
         }
         let children = self.parse_block_children()?;
         let end = self.stream.expect(TokenKind::RBrace)?.span;
@@ -308,7 +310,9 @@ impl Parser {
         self.stream.expect(TokenKind::LBrace)?;
         let (attributes, modifiers) = self.parse_modifier_list_block()?;
         if !attributes.is_empty() {
-            return self.stream.error_here("Variant declarations cannot have event attributes");
+            return self
+                .stream
+                .error_here("Variant declarations cannot have event attributes");
         }
         let children = self.parse_block_children()?;
         let end = self.stream.expect(TokenKind::RBrace)?.span;

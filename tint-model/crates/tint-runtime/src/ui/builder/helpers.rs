@@ -136,6 +136,11 @@ pub(super) fn apply_route(tree: &mut UiTree, id: UiNodeId, attributes: &[UiAttri
     tree.set_route(id, find_literal(attributes, "route"));
 }
 
+/// Reads target||"_blank" for a routed UI node.
+pub(super) fn apply_target(tree: &mut UiTree, id: UiNodeId, attributes: &[UiAttribute]) {
+    tree.set_target(id, find_literal(attributes, "target"));
+}
+
 pub(super) fn apply_asset(tree: &mut UiTree, id: UiNodeId, attributes: &[UiAttribute]) {
     tree.set_asset(id, find_literal(attributes, "asset"));
     tree.set_sound(id, find_literal(attributes, "sound"));

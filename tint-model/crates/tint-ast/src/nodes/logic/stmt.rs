@@ -2,13 +2,13 @@ use super::pattern::Pattern;
 use super::{expr::Expr, pattern::MatchArm, types::Type};
 use crate::Span;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Block {
     pub stmts: Vec<Stmt>,
     pub span: Span,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum LetInit {
     Assign(Expr), // let a = expr
     Tint(Expr),   // let a{expr}
@@ -30,7 +30,7 @@ impl LetInit {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum Stmt {
     Let {
         pattern: Pattern,

@@ -36,3 +36,4 @@ include!("api/core.rs");
 include!("api/ui.rs");
 include!("api/repl.rs");
 include!("api/session.rs");
+include!("api/bytecode.rs");

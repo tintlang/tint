@@ -1,0 +1,23 @@
+{
+  "name": "@tintlang/runtime",
+  "version": "0.1.1",
+  "description": "The prebuilt Tint browser runtime.",
+  "type": "module",
+  "scripts": {
+    "assemble": "node ../../scripts/assemble-runtime.mjs"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "files": [
+    "src",
+    "tint_wasm.js",
+    "tint_wasm_bg.wasm",
+    "tint_wasm.d.ts"
+  ],
+  "peerDependencies": {},
+  "sideEffects": false
+}

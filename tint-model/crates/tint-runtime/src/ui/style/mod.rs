@@ -17,9 +17,9 @@
 // `UiNode::modifiers` doesn't have access to (see builder.rs). That's a
 // separate, later piece of work, not a limitation of this resolver.
 
+use std::collections::HashMap;
 use tint_ast::{UiModifier, UiModifierValue};
 use tint_evaluator::{EvalHost, Value as EvalValue};
-use std::collections::HashMap;
 
 /// Reconstruct the Tint modifier syntax for browser Elements inspection.
 pub fn format_modifier_source(modifiers: &[UiModifier]) -> String {
@@ -79,9 +79,10 @@ pub type StyleList = Vec<(String, String)>;
 /// containers for child spacing (`gap`) and their conventional axis to work.
 /// An explicit `direction::...` or `display::...` modifier always wins.
 pub fn apply_container_defaults(tag: &str, style: &mut StyleList) {
-    if style.iter().any(|(property, _)| {
-        property == "display" || property == "flex-direction"
-    }) {
+    if style
+        .iter()
+        .any(|(property, _)| property == "display" || property == "flex-direction")
+    {
         return;
     }
 

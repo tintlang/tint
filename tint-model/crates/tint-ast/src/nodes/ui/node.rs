@@ -2,7 +2,7 @@ use super::{UiAttribute, UiModifier, UiText};
 use crate::logic::expr::Expr;
 use crate::Span;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum UiNode {
     // BLOCK-style Tag { ... }
     //
@@ -103,7 +103,7 @@ impl UiNode {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum UiNodeOrExpr {
     Node(UiNode),
     Text(UiText),

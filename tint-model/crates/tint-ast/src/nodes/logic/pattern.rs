@@ -2,7 +2,7 @@ use super::expr::Expr;
 use crate::Span;
 use crate::Type;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum Pattern {
     Ident(String, Span),
     Number(String, Span),
@@ -48,7 +48,7 @@ pub enum Pattern {
     },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum PatternField {
     // field
     Shorthand {
@@ -67,7 +67,7 @@ pub enum PatternField {
     Rest(Span),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct MatchArm {
     pub pattern: Pattern,
     pub guard: Option<Expr>,

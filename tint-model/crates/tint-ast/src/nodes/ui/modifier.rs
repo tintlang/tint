@@ -1,14 +1,14 @@
 use crate::logic::expr::Expr;
 use crate::Span;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct UiModifier {
     pub path: Vec<String>,
     pub value: UiModifierValue,
     pub span: Span,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum UiModifierValue {
     Number(f64),
     String(String),

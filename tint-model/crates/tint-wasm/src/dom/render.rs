@@ -31,6 +31,12 @@ fn build_node(
     }
     if let Some(route) = &node.route {
         el.set_attribute("href", route)?;
+        if let Some(target) = &node.target {
+            el.set_attribute("target", target)?;
+            if target == "_blank" {
+                el.set_attribute("rel", "noopener noreferrer")?;
+            }
+        }
     }
     if let Some(asset) = &node.asset {
         el.set_attribute("src", asset)?;
@@ -112,10 +118,11 @@ fn build_node(
     }
 
     if let Some(handler) = node.on_click.clone() {
-        // Dispatch immediately on press. A late click can arrive after a
-        // keyed DOM patch replaced the event target, which made controls feel
-        // like they required a double-click in fast-moving UIs.
-        bind_dispatch(&el, "pointerdown", handler, shared, node.sound.clone());
+        // Use the browser's normal click activation here. The render tree
+        // currently normalizes `click||` and `pointer_down||` into one
+        // handler field, and a click listener is the reliable common
+        // denominator across browser hosts.
+        bind_dispatch(&el, "click", handler, shared, node.sound.clone());
     }
     if let Some(handler) = node.on_hover_enter.clone() {
         bind_dispatch(&el, "mouseenter", handler, shared, None);

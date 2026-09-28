@@ -1,12 +1,12 @@
 // ui/builder.rs
 
 use super::tree::{UiNodeId, UiTree};
+use std::collections::HashMap;
 use tint_ast::{
     Expr, Span, UiAttrValue, UiAttribute, UiModifier, UiModifierValue, UiNode, UiNodeOrExpr,
     UiText, UiTextPart,
 };
 use tint_evaluator::{EvalHost, Value as EvalValue};
-use std::collections::HashMap;
 
 #[derive(Clone)]
 pub struct UiComponent {
