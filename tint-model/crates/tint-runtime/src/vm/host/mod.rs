@@ -9,6 +9,37 @@ mod patterns;
 mod vars;
 
 impl EvalHost for TintVM {
+    fn lookup_var(&mut self, name: &str) -> Option<EvalValue> {
+        self.scopes.lookup(name).map(|v| Self::rt_to_eval(&v))
+    }
+
+    fn resolve_function(&mut self, name: &str) -> Option<EvalValue> {
+        let f = self.logic_functions.get(name)?.clone();
+        let params = f
+            .params
+            .iter()
+            .map(|p| match &p.pattern {
+                tint_ast::Pattern::Ident(name, _) => name.clone(),
+                tint_ast::Pattern::Typed { pat, .. }
+                | tint_ast::Pattern::Mut { inner: pat, .. } => match pat.as_ref() {
+                    tint_ast::Pattern::Ident(name, _) => name.clone(),
+                    _ => "_".into(),
+                },
+                _ => "_".into(),
+            })
+            .collect();
+        Some(EvalValue::Function {
+            name: f.name,
+            params,
+            body: match f.body {
+                tint_ast::FnBody::Block(block) => tint_evaluator::eval_fn::FnBodyKind::Block(block),
+                tint_ast::FnBody::Expr(expr) => tint_evaluator::eval_fn::FnBodyKind::Expr(expr),
+            },
+            env: self.host_capture_env(),
+            async_: f.async_,
+        })
+    }
+
     fn load_var(&mut self, name: &str, span: Span) -> EvalValue {
         self.host_load_var(name, span)
     }

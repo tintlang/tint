@@ -9,10 +9,18 @@ impl SemanticChecker {
             Expr::String(_, _) => Type::String,
             Expr::Bool(_, _) => Type::Bool,
             Expr::Unit(_) => Type::Unit,
-            Expr::Ident(id, span) => self.scopes.lookup(id).unwrap_or_else(|| {
-                self.error(*span, SemanticErrorKind::UnknownIdent(id.clone()));
-                Type::Unknown
-            }),
+            Expr::Ident(id, span) => self
+                .scopes
+                .lookup(id)
+                .or_else(|| {
+                    self.fn_types
+                        .get(id)
+                        .map(|(params, ret)| Type::Fn(Box::new(ret.clone()), params.clone()))
+                })
+                .unwrap_or_else(|| {
+                    self.error(*span, SemanticErrorKind::UnknownIdent(id.clone()));
+                    Type::Unknown
+                }),
             Expr::SelfKw(span) => self.scopes.lookup("self").unwrap_or_else(|| {
                 self.error(*span, SemanticErrorKind::UnknownIdent("self".into()));
                 Type::Unknown
@@ -154,6 +162,16 @@ impl SemanticChecker {
                 }
                 self.check_match_exhaustiveness(&scrutinee_ty, arms);
                 result
+            }
+            Expr::If {
+                cond, then, else_, ..
+            } => {
+                let cond_ty = self.infer_expr(cond);
+                self.require_compatible(&Type::Bool, &cond_ty, cond.span());
+                let then_ty = self.infer_block_type(then);
+                let else_ty = self.infer_block_type(else_);
+                self.require_compatible(&then_ty, &else_ty, else_.span);
+                then_ty
             }
             Expr::Lambda { params, body, .. } => {
                 self.scopes.push();
@@ -403,7 +421,18 @@ fn compatible(expected: &Type, found: &Type) -> bool {
             ("f32" | "f64" | "i32" | "i64" | "u32" | "u64", Type::Number)
         );
     }
-    expected == found
+    if let (Type::Fn(expected_ret, expected_params), Type::Fn(found_ret, found_params)) =
+        (expected, found)
+    {
+        expected_params.len() == found_params.len()
+            && expected_params
+                .iter()
+                .zip(found_params)
+                .all(|(e, f)| compatible(e, f))
+            && compatible(expected_ret, found_ret)
+    } else {
+        expected == found
+    }
 }
 fn type_name(ty: &Type) -> String {
     match ty {

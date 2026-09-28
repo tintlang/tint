@@ -15,6 +15,33 @@ fn lerp(a: f32, b: f32, t: f32) -> f32 {
 
 Functions and variables use camelCase. UI node names use PascalCase.
 
+## Function types and predicates
+
+Functions can be passed as values. A function type lists its parameter types
+and return type with `fn(...) -> ...`:
+
+```tn
+fn isPositive(value: i32) -> bool {
+    value > 0
+}
+
+fn check(predicate: fn(i32) -> bool, value: i32) -> bool {
+    predicate(value)
+}
+
+fn example() -> bool {
+    check(isPositive, 10)
+}
+```
+
+There is no separate `condition` type or keyword: a predicate is an ordinary
+function whose return type is `bool`. Lambdas can be used in the same position:
+
+```tn
+let positive = |value| value > 0
+check(positive, 10)
+```
+
 ## UI event handlers
 
 UI connects to named functions through `||` attributes:

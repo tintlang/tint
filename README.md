@@ -51,7 +51,8 @@ slots, and variants without duplicating the UI tree for each theme.
 - **Compiler pipeline**: Lexer → Parser → AST → Semantic Checker → SSA IR → Optimizer → WASM
 - **UI as a first-class value**: Tint owns the UI tree and rendering semantics, while CSS and JavaScript remain available for styling and host/browser integration
 - **Semantic modifier groups**: `layout::{...}`, `paint::{...}`, and `motion::{...}`; flat modifiers remain accepted for compatibility
-- **Control flow**: `if/else`, `for` loops, functions with persistence, full comparison operators (`< > <= >= == !=`) alongside `&& ||`
+- **Control flow**: `if/else` statements and expressions, `for` loops, functions with persistence, full comparison operators (`< > <= >= == !=`) alongside `&& ||`
+- **First-class functions**: typed function values such as `fn(i32, f32, bool) -> bool`, named-function callbacks, and lambdas
 - **Real state + events**: `state`, `click||`, `hover_in||`/`hover_out||` drive a persistent, re-rendering session
 - **Responsive design**: `mobile::{}`/`tablet::{}`/`laptop::{}`/`desktop::{}` style breakpoints, plus a host-exposed `viewport_width` variable for structural `if{}` layout swaps (see `tint-model/sandbox/src/landing/`)
 - **Layout primitives**: flex direction and a typed `grid::{ columns, rows, gap }` modifier with `minmax(0, 1fr)`-friendly tracks
@@ -145,8 +146,8 @@ covering the UI runtime, sessions, layout, and rendering.
 
 ✅ Proper compiler architecture (not hacked)
 ✅ UI grammar with modifiers
-✅ Control flow (if/else, for loops, comparison operators)
-✅ Function definitions & calls
+✅ Control flow (if/else statements and expressions, for loops, comparison operators)
+✅ Function definitions, typed function values & calls
 ✅ Persistent REPL sessions
 ✅ WASM compilation & rendering
 ✅ Real state + click/hover handlers (`state`, `click||`, `hover_in||`/`hover_out||`) via a persistent `UiSession`

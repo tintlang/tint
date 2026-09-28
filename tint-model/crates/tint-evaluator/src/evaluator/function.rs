@@ -5,7 +5,7 @@ use crate::eval_pattern::bind_pattern;
 use crate::{value::Value, EvalHost};
 use tint_ast::{Block, Expr, FnBody, FnDecl, Span};
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum FnBodyKind {
     Block(Block),
     Expr(Expr),

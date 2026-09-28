@@ -4,6 +4,11 @@ pub enum Type {
     Generic(String, Vec<Type>),
     Unit,
     Union(Vec<Type>),
+    /// A first-class function type: `fn(i32, f32) -> bool`.
+    Function {
+        params: Vec<Type>,
+        ret: Box<Type>,
+    },
 }
 
 use crate::Span;

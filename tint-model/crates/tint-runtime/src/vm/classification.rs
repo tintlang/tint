@@ -42,6 +42,23 @@ impl TintVM {
         }
     }
 
+    /// Function values cannot cross the current SSA/IR boundary. Any
+    /// function accepting an explicit function type therefore stays on the
+    /// evaluator path, where indirect calls are supported.
+    pub(super) fn uses_function_value(&self, name: &str) -> bool {
+        self.logic_functions.get(name).is_some_and(|f| {
+            f.params
+                .iter()
+                .any(|p| matches!(p.ty, Some(tint_ast::Type::Function { .. })))
+        })
+    }
+
+    pub(super) fn has_function_values(&self) -> bool {
+        self.logic_functions
+            .values()
+            .any(|f| f.params.iter().any(|p| p.ty.is_some()))
+    }
+
     // Eval helpers
     pub(super) fn eval_to_rt(v: EvalValue) -> RuntimeValue {
         match v {
@@ -85,6 +102,9 @@ impl TintVM {
                 body,
                 closure,
             },
+            EvalValue::Function {
+                params, body, env, ..
+            } => RuntimeValue::FunctionValue { params, body, env },
             other => panic!("Unsupported EvalValue: {:?}", other),
         }
     }
@@ -129,6 +149,13 @@ impl TintVM {
                 params: params.clone(),
                 body: body.clone(),
                 closure: Rc::clone(closure),
+            },
+            RuntimeValue::FunctionValue { params, body, env } => EvalValue::Function {
+                name: "<function>".into(),
+                params: params.clone(),
+                body: body.clone(),
+                env: Rc::clone(env),
+                async_: false,
             },
             _ => EvalValue::Unit,
         }
@@ -223,6 +250,7 @@ fn expr_contains_lambda(expr: &Expr) -> bool {
                         || expr_contains_lambda(&arm.expr)
                 })
         }
+        Expr::If { .. } => true,
         Expr::StructInit { fields, .. } | Expr::VariantInit { fields, .. } => {
             fields.iter().any(|field| match field {
                 tint_ast::StructInitField::Assign { expr, .. }

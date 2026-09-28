@@ -2,6 +2,9 @@
 *.tar
 *.tar.gz
 
+# Local scratch projects and generated verification artifacts.
+/tmp/
+
 # Draft documentation for language features that are not supported end to end.
 # Keep these notes locally while keeping the public docs limited to the current
 # runtime and browser implementation.

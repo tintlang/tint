@@ -103,6 +103,14 @@ pub enum Expr {
         span: Span,
     },
 
+    /// Conditional expression: `if condition { value } else { value }`.
+    If {
+        cond: Box<Expr>,
+        then: Block,
+        else_: Block,
+        span: Span,
+    },
+
     Lambda {
         params: Vec<String>,
         body: Box<Expr>,
@@ -187,7 +195,8 @@ impl Expr {
             | Expr::NamedArg { span, .. }
             | Expr::Tuple { span, .. }
             | Expr::Block(_, span)
-            | Expr::Match { span, .. } => *span,
+            | Expr::Match { span, .. }
+            | Expr::If { span, .. } => *span,
             Expr::TupleIndex { span, .. } => *span,
             Expr::VariantInit { span, .. } => *span,
             Expr::MapInit { span, .. } => *span,

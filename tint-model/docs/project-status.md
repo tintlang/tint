@@ -28,7 +28,10 @@ Tuple-style variants are parser-level only and are not supported end to end.
 **Arrays:** `[1, 2, 3]`, nested (`[[1,2], [3,4]]`).
 
 **Functions:** `fn add(a: i32, b: i32) -> i32 { return a + b; }`, implicit return,
-and the short expression form `fn add(a: i32, b: i32) = a + b`. Default parameters
+the short expression form `fn add(a: i32, b: i32) = a + b`, first-class function
+types such as `fn(i32, f32, bool) -> bool`, and passing named functions as values.
+Conditional expressions use `if condition { value } else { value }`; a separate
+`condition` keyword is not needed. Default parameters
 use `=` canonically (`fn greet(name: string, prefix: string = "Hello")`); the
 older brace-default forms remain accepted. Calls such as `login { user: "Marek",
 password: "123" }` use the same known-type struct-initializer path rather than a

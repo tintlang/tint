@@ -33,6 +33,11 @@ pub enum RuntimeValue {
     Struct(usize),
     Enum(usize, usize),
     Function(usize),
+    FunctionValue {
+        params: Vec<String>,
+        body: tint_evaluator::eval_fn::FnBodyKind,
+        env: std::rc::Rc<tint_evaluator::Env>,
+    },
     UiNode(usize),
     Resource(usize),
     Future(usize),

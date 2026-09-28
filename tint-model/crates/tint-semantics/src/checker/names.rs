@@ -197,6 +197,10 @@ impl SemanticChecker {
             tint_ast::Type::Union(types) => {
                 Type::Tuple(types.iter().map(|t| self.ast_type(Some(t))).collect())
             }
+            tint_ast::Type::Function { params, ret } => Type::Fn(
+                Box::new(self.ast_type(Some(ret))),
+                params.iter().map(|p| self.ast_type(Some(p))).collect(),
+            ),
             tint_ast::Type::Unit => Type::Unit,
             tint_ast::Type::Generic(name, _) => Type::Struct(name.clone()),
         }
@@ -258,6 +262,12 @@ impl SemanticChecker {
                 for member in types {
                     self.validate_decl_type(member);
                 }
+            }
+            tint_ast::Type::Function { params, ret } => {
+                for param in params {
+                    self.validate_decl_type(param);
+                }
+                self.validate_decl_type(ret);
             }
             tint_ast::Type::Unit => {}
         }

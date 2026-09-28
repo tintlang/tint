@@ -37,7 +37,11 @@ impl TintVM {
         // The IR backend currently has no closure value or indirect call.
         // Route functions that actually contain a lambda through the
         // evaluator, which already supports lexical capture and lambda calls.
-        if self.is_ir_function(name) && self.uses_lambda(name) {
+        if self.is_ir_function(name)
+            && (self.uses_lambda(name)
+                || self.uses_function_value(name)
+                || self.has_function_values())
+        {
             return self.host_call_user_fn(name, args, span);
         }
 
@@ -257,6 +261,29 @@ impl TintVM {
                     self.host_define_var(param, arg.clone());
                 }
                 let result = self.eval_expr(&body);
+                self.scopes.pop();
+                result
+            }
+
+            EvalValue::Function {
+                params, body, env, ..
+            } => {
+                self.scopes.push();
+                for (name, value) in env.values() {
+                    self.host_define_var(&name, value);
+                }
+                for (param, arg) in params.iter().zip(args.iter()) {
+                    self.host_define_var(param, arg.clone());
+                }
+                let result = match body {
+                    tint_evaluator::eval_fn::FnBodyKind::Block(block) => {
+                        match self.eval_block(&block) {
+                            Flow::Value(v) | Flow::Return(v) => v,
+                            Flow::Break | Flow::Continue => EvalValue::Unit,
+                        }
+                    }
+                    tint_evaluator::eval_fn::FnBodyKind::Expr(expr) => self.eval_expr(&expr),
+                };
                 self.scopes.pop();
                 result
             }

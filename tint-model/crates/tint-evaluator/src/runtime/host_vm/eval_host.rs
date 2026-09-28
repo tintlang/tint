@@ -12,6 +12,37 @@ use crate::{
 };
 
 impl EvalHost for HostVM {
+    fn lookup_var(&mut self, name: &str) -> Option<Value> {
+        self.env.lookup(name)
+    }
+
+    fn resolve_function(&mut self, name: &str) -> Option<Value> {
+        let f = self.functions.get(name)?.clone();
+        let params = f
+            .params
+            .iter()
+            .map(|p| match &p.pattern {
+                tint_ast::Pattern::Ident(name, _) => name.clone(),
+                tint_ast::Pattern::Typed { pat, .. }
+                | tint_ast::Pattern::Mut { inner: pat, .. } => match pat.as_ref() {
+                    tint_ast::Pattern::Ident(name, _) => name.clone(),
+                    _ => "_".into(),
+                },
+                _ => "_".into(),
+            })
+            .collect();
+        Some(Value::Function {
+            name: f.name,
+            params,
+            body: match f.body {
+                tint_ast::FnBody::Block(block) => crate::eval_fn::FnBodyKind::Block(block),
+                tint_ast::FnBody::Expr(expr) => crate::eval_fn::FnBodyKind::Expr(expr),
+            },
+            env: Rc::new(self.env.clone()),
+            async_: f.async_,
+        })
+    }
+
     fn load_var(&mut self, name: &str, span: Span) -> Value {
         self.env
             .lookup(name)

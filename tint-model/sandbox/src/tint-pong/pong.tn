@@ -36,6 +36,17 @@ struct Game {
     serve_seed: i32,
 }
 
+// Predicates are ordinary function values. Keeping the range check separate
+// makes the paddle collision code read like the rule it implements and gives
+// Pong a real example of `fn(...) -> ...` in application code.
+fn is_between(value: f32, low: f32, high: f32) -> bool {
+    value >= low && value <= high
+}
+
+fn paddle_contains(ball_y: f32, paddle_y: f32, contains: fn(f32, f32, f32) -> bool) -> bool {
+    contains(ball_y, paddle_y, paddle_y + 3)
+}
+
 impl Game {
     fn reset_ball(&mut self, direction) {
         self.ball.position = vec2(11.5, 5.5)
@@ -117,24 +128,20 @@ impl Game {
 
     fn collide_with_player(&mut self) {
         if self.ball.position.x <= 2 && self.ball.velocity.x < 0 {
-            if self.ball.position.y + 0.5 >= self.player.position.y {
-                if self.ball.position.y + 0.5 <= self.player.position.y + 3 {
-                    self.ball.position.x = 2
-                    self.ball.velocity.x = abs(self.ball.velocity.x)
-                    self.ball.velocity.y = (self.ball.position.y + 0.5 - self.player.position.y - 1.5) / 1.5 * 6
-                }
+            if paddle_contains(self.ball.position.y + 0.5, self.player.position.y, is_between) {
+                self.ball.position.x = 2
+                self.ball.velocity.x = abs(self.ball.velocity.x)
+                self.ball.velocity.y = (self.ball.position.y + 0.5 - self.player.position.y - 1.5) / 1.5 * 6
             }
         }
     }
 
     fn collide_with_cpu(&mut self) {
         if self.ball.position.x >= 21 && self.ball.velocity.x > 0 {
-            if self.ball.position.y + 0.5 >= self.cpu.position.y {
-                if self.ball.position.y + 0.5 <= self.cpu.position.y + 3 {
-                    self.ball.position.x = 21
-                    self.ball.velocity.x = 0 - abs(self.ball.velocity.x)
-                    self.ball.velocity.y = (self.ball.position.y + 0.5 - self.cpu.position.y - 1.5) / 1.5 * 6
-                }
+            if paddle_contains(self.ball.position.y + 0.5, self.cpu.position.y, is_between) {
+                self.ball.position.x = 21
+                self.ball.velocity.x = 0 - abs(self.ball.velocity.x)
+                self.ball.velocity.y = (self.ball.position.y + 0.5 - self.cpu.position.y - 1.5) / 1.5 * 6
             }
         }
     }

@@ -23,7 +23,8 @@ subject.
 - [`02-core-model.md`](02-core-model.md) — the one rule everything else follows: Logic Mode vs UI Mode
 
 **Guide** (`guide/`) — narrative, one topic per file, with rationale and examples
-- `basics.md`, `control-flow.md`, `functions.md`, `types.md` — core TintLogic
+- `basics.md`, `control-flow.md`, `functions.md`, `types.md` — core TintLogic,
+  including `if` expressions and first-class function types
 - `events.md` — current UI events and handlers
 
 **UI** (`ui/`) — the declarative UI layer
@@ -36,6 +37,8 @@ subject.
 - `guide/storage.md` — host storage primitives and browser persistence bridge
 - `guide/http.md` — queued HTTP requests and completion callbacks
 - [`guide/vite.md`](guide/vite.md) — Vite plugin, `.tn` imports, and browser mounting
+- [`guide/frameworks.md`](guide/frameworks.md) — React component and Svelte action adapters
+- [`guide/escape-hatches.md`](guide/escape-hatches.md) — DOM refs and JavaScript callbacks
 - `blocks.md` — UI block control flow currently supported by the parser
 
 The browser sandbox is a Tint-rendered app. Run `npm run dev:all` from

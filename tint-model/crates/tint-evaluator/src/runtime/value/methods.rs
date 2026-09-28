@@ -105,6 +105,13 @@ impl Value {
 
             // Generic type arguments are not enforced by the runtime yet.
             (_, Type::Generic(_, _)) => true,
+            // Function signatures are compile-time contracts. The evaluator
+            // already receives a callable Value here, so accepting the
+            // value is the correct runtime check.
+            (_, Type::Function { .. }) => matches!(
+                self,
+                Value::Lambda { .. } | Value::Function { .. } | Value::HostFunction(_)
+            ),
 
             _ => false,
         }

@@ -14,6 +14,12 @@ pub enum Flow {
 }
 
 pub trait EvalHost {
+    fn lookup_var(&mut self, _name: &str) -> Option<Value> {
+        None
+    }
+    fn resolve_function(&mut self, _name: &str) -> Option<Value> {
+        None
+    }
     fn load_var(&mut self, name: &str, span: Span) -> Value;
     fn define_var(&mut self, name: &str, value: Value);
 

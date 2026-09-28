@@ -82,6 +82,7 @@ impl Parser {
         }
 
         match tok.kind {
+            TokenKind::If => self.parse_if_expr(),
             TokenKind::Number => self.parse_number(),
             TokenKind::String => self.parse_string_or_interpolated(),
             TokenKind::True | TokenKind::False => self.parse_bool(),
@@ -217,5 +218,20 @@ impl Parser {
                 span: tok.span,
             }),
         }
+    }
+
+    fn parse_if_expr(&mut self) -> PResult<Expr> {
+        let start = self.stream.next().span;
+        let cond = self.parse_expr()?;
+        let then = self.parse_block()?;
+        self.stream.expect(TokenKind::Else)?;
+        let else_ = self.parse_block()?;
+        let span = Span::merge(start, else_.span);
+        Ok(Expr::If {
+            cond: Box::new(cond),
+            then,
+            else_,
+            span,
+        })
     }
 }

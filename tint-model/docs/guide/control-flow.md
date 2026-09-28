@@ -13,6 +13,20 @@ if x > 10 {
 }
 ```
 
+`if` with an `else` can also be used as an expression. Both branches must
+produce compatible values:
+
+```tn
+fn label(active: bool) -> string {
+    if active { "enabled" } else { "disabled" }
+}
+
+let status = if ready { "ready" } else { "waiting" }
+```
+
+The `else` branch is required when `if` is used as a value. An `if` without an
+`else` remains a statement for side effects and control flow.
+
 ## Match
 
 `=>` is used **only** in `match`.

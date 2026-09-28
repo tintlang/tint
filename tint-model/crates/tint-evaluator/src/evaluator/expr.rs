@@ -14,7 +14,10 @@ pub fn eval_expr<H: EvalHost>(host: &mut H, expr: &Expr) -> Value {
             eval_expr(host, target)
         }
         Expr::SelfKw(_) => host.load_var("self", expr.span()),
-        Expr::Ident(name, span) => host.load_var(name, *span),
+        Expr::Ident(name, span) => host
+            .lookup_var(name)
+            .or_else(|| host.resolve_function(name))
+            .unwrap_or_else(|| host.load_var(name, *span)),
 
         Expr::InterpolatedString { parts, .. } => {
             let mut out = String::new();
@@ -145,6 +148,19 @@ pub fn eval_expr<H: EvalHost>(host: &mut H, expr: &Expr) -> Value {
             }
 
             Value::Unit
+        }
+        Expr::If {
+            cond, then, else_, ..
+        } => {
+            let block = if eval_expr(host, cond).force_bool() {
+                then
+            } else {
+                else_
+            };
+            match host.eval_block_flow(block) {
+                Flow::Value(v) | Flow::Return(v) => v,
+                Flow::Break | Flow::Continue => Value::Unit,
+            }
         }
         Expr::Field { target, field, .. } => {
             let obj = eval_expr(host, target);

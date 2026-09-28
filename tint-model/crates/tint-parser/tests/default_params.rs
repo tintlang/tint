@@ -29,3 +29,16 @@ fn typed_and_tint_parameter_styles_cannot_be_mixed() {
         "unexpected error: {err:?}"
     );
 }
+
+#[test]
+fn function_types_and_if_expressions_parse() {
+    parse(
+        r#"
+        fn apply(predicate: fn(i32) -> bool, value: i32) -> bool {
+            predicate(value)
+        }
+        fn choose(flag: bool) -> i32 { if flag { 1 } else { 2 } }
+    "#,
+    )
+    .expect("function types and if expressions should parse");
+}

@@ -318,6 +318,11 @@ impl SsaCompiler {
                 println!("TODO: lambda lowering");
                 self.builder.emit_const(block, Value::Unit)
             }
+
+            // Conditional expressions currently execute through the
+            // tree-walking evaluator; keep IR compilation total for tools
+            // that still inspect the whole program.
+            Expr::If { .. } => self.builder.emit_const(block, Value::Unit),
         }
     }
 }

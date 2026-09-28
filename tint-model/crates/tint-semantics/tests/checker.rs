@@ -184,6 +184,22 @@ fn type_checker_rejects_non_boolean_condition() {
 }
 
 #[test]
+fn function_types_and_if_expressions_are_type_checked() {
+    assert_clean(
+        r#"
+        fn is_positive(value: i32) -> bool { value > 0 }
+        fn apply(predicate: fn(i32) -> bool, value: i32) -> bool {
+            predicate(value)
+        }
+        fn choose(flag: bool) -> i32 {
+            if flag { 1 } else { 2 }
+        }
+        fn test() { apply(is_positive, choose(true)) }
+        "#,
+    );
+}
+
+#[test]
 fn type_checker_checks_explicit_return_type() {
     assert_type_mismatch(
         r#"

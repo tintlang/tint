@@ -56,6 +56,23 @@ type UserId = i32;
 type Pair = vec2;
 ```
 
+## Function types
+
+Function types use the form `fn(ParameterType, ...) -> ReturnType` and can be
+used for callbacks and predicates:
+
+```tn
+type Predicate = fn(i32, f32, bool) -> bool;
+
+fn accepts(predicate: Predicate, value: i32) -> bool {
+    predicate(value, 0.5, true)
+}
+```
+
+Named functions and lambdas are both callable values. Function values are
+checked by parameter count/types and return type; there are no implicit
+conversions.
+
 ## Guarantees
 
 No implicit conversions, no dynamic typing, no nullable values (`Option<T>`

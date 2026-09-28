@@ -232,6 +232,7 @@ impl<'a> IrVM<'a> {
             // same as the evaluator.
             Type::Generic(_, _) => true,
             Type::Union(_) => true,
+            Type::Function { .. } => false,
         }
     }
 }

@@ -28,10 +28,23 @@ impl Parser {
             .map(|b| b.span)
             .unwrap_or(then_block.span);
 
+        // An `if` with an `else` is also a value-producing expression. In
+        // statement position it is harmless to represent it as an expression
+        // statement, and this lets a function's trailing `if` return the
+        // selected branch value naturally.
+        if let Some(else_) = else_block {
+            return Ok(Stmt::Expr(Expr::If {
+                cond: Box::new(cond),
+                then: then_block,
+                else_,
+                span: Span::merge(start, end),
+            }));
+        }
+
         Ok(Stmt::If {
             cond,
             then: then_block,
-            else_: else_block,
+            else_: None,
             span: Span::merge(start, end),
         })
     }

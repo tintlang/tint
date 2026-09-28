@@ -7,6 +7,27 @@ impl Parser {
     ///   - Simple: MyType
     ///   - Generic: Vec<T>, Map<K,V>, Option<Result<T,E>>
     pub(crate) fn parse_type(&mut self) -> PResult<Type> {
+        // First-class function type: `fn(T, U) -> R`.
+        if self.stream.consume_if(TokenKind::Fn) {
+            self.stream.expect(TokenKind::LParen)?;
+            let mut params = Vec::new();
+            if !self.stream.consume_if(TokenKind::RParen) {
+                loop {
+                    params.push(self.parse_type()?);
+                    if self.stream.consume_if(TokenKind::RParen) {
+                        break;
+                    }
+                    self.stream.expect(TokenKind::Comma)?;
+                }
+            }
+            self.stream.expect(TokenKind::Arrow)?;
+            let ret = self.parse_type()?;
+            return Ok(Type::Function {
+                params,
+                ret: Box::new(ret),
+            });
+        }
+
         // parse ()
         if self.stream.consume_if(TokenKind::LParen) {
             self.stream.expect(TokenKind::RParen)?;
