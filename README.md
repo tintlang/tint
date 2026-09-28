@@ -56,7 +56,10 @@ slots, and variants without duplicating the UI tree for each theme.
 - **Responsive design**: `mobile::{}`/`tablet::{}`/`laptop::{}`/`desktop::{}` style breakpoints, plus a host-exposed `viewport_width` variable for structural `if{}` layout swaps (see `tint-model/sandbox/src/landing/`)
 - **Layout primitives**: flex direction and a typed `grid::{ columns, rows, gap }` modifier with `minmax(0, 1fr)`-friendly tracks
 - **Internal routing**: `route||"/path"` renders as a normal browser link, including `/` and `/sandbox`
+- **New-tab links**: add `target||"_blank"` to routed links; the DOM renderer adds `rel="noopener noreferrer"`
 - **Direct DOM rendering**: `DomSession` renders Tint through Rust/`web-sys`, without a UI framework
+- **Prebuilt browser runtime**: `@tintlang/runtime` ships the Rust/WASM runtime and JS/TS host API; application authors do not rebuild WASM
+- **Vite integration**: `@tintlang/vite` imports `.tn` files as HMR-friendly source modules with `source` and `entry` exports
 - **Interactive sandbox**: Edit, compile, and preview in the browser with Tint, CodeMirror 6, and WASM
 - **CLI tools**: Check syntax, run, and generate a prototype HTML shell
 - **Native Rust interop**: `TintVM::register_native("name", |args| ...)` registers a real Rust closure that `.tn` source calls directly by name -- no Rust syntax inside the language, no reimplementing rustc's borrow checker, just an ordinary Rust function called across the boundary (see `tint run <file> now_ms`, a demo native in `tint-cli`)
@@ -104,6 +107,11 @@ npm run dev:all
 ```
 
 Open browser to `http://localhost:5173` and edit code live.
+
+For using Tint in an existing Vite application, see
+[`tint-model/docs/guide/vite.md`](tint-model/docs/guide/vite.md). Runtime
+assembly and contributor-only build commands are documented in
+[`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 > **Status:** the sandbox is a deliberately small workbench, not a full IDE.
 > It currently uses `sandbox/src/sandbox.tn`, CodeMirror, a live WASM preview,

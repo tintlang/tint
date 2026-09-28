@@ -104,6 +104,13 @@ semantics are not a supported end-to-end feature.
 **Kits and GPU kernels:** syntax experiments exist in the parser, but there is
 no supported GPU/WebGPU runtime for them.
 
+**Browser runtime package:** a prebuilt `@tintlang/runtime` package now owns
+WASM initialization and exposes source and serialized-program loading through
+the same `mount`/session API. Application authors do not run `wasm-pack`.
+
+**Vite integration:** `@tintlang/vite` makes `.tn` files importable as JS
+modules and preserves the same source/entry contract for development and HMR.
+
 ## Not yet implemented or not supported end to end
 
 - A settled `Option`/`Result` DSL (`throw`, `try`, `catch`) — several shapes have
@@ -118,6 +125,8 @@ no supported GPU/WebGPU runtime for them.
   future work.
 - The browser sandbox is a working prototype. `npm run dev:all` watches nested
   `.tn` imports and rebuilds Rust/WASM changes automatically.
+- The serialized program format is versioned and functional, but its first
+  payload is still a serialized Tint program rather than compact SSA bytecode.
 
 ## Roadmap
 

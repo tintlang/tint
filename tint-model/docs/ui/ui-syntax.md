@@ -221,8 +221,16 @@ Logo { route||"/" "Tint" }
 SandboxLink { route||"/sandbox" "Open sandbox" }
 ```
 
-`route||` is for application paths. External URLs should remain ordinary
-host/browser links rather than being treated as Tint routes.
+External URLs use the same syntax. Add `target||"_blank"` to open the link in
+a new browser tab; the DOM renderer also adds `rel="noopener noreferrer"`:
+
+```tn
+GithubLink {
+    route||"https://github.com/tintlang/tint"
+    target||"_blank"
+    "GitHub"
+}
+```
 
 ## Themes and imports
 

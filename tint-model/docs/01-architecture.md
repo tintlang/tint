@@ -11,6 +11,7 @@ tooling; the browser target runs the runtime through WASM.
 3. **TintIR** — the intermediate representation used by the runtime
 4. **TintVM** — native/WASM execution and UI state
 5. **DomSession** — the current direct-DOM browser adapter
+6. **Tint runtime package** — the prebuilt WASM runtime and JS/TS host API
 
 ## Compile pipeline
 
@@ -21,7 +22,7 @@ Tint source (*.tn)
       │
      AST
       │
-   TintIR (stable bytecode IR)
+    TintIR (stable bytecode IR)
       │
     TintVM
       │
@@ -39,6 +40,11 @@ to optimize, and guarantees identical behavior on WASM and native builds.
 TintVM executes TintIR and owns the current runtime behavior: logic evaluation,
 UI state, layout/style resolution, and event dispatch. It runs natively or
 through WASM in the browser.
+
+The browser package ships one prebuilt `tint-runtime.wasm`. Application authors
+provide Tint source or a serialized Tint program; they do not compile WASM
+themselves. Development can load source directly, while production tooling can
+load the versioned program format through the same VM and session API.
 
 **TintUI** lays out and renders the declarative tree: named nodes, text, layout,
 paint, transitions, hover states, and events. The current browser backend is a
@@ -63,7 +69,8 @@ DOM elements
 Tint UI is written as named block nodes and rendered directly by the active
 backend. In the browser, `DomSession` maps nodes to DOM elements, applies the
 resolved `layout`/`paint`/`motion` styles, and binds named event attributes.
-`route||"/path"` becomes a normal browser link.
+`route||"/path"` becomes a normal browser link. Optional
+`target||"_blank"` opens routed links in a new browser tab.
 
 ## Current boundaries
 

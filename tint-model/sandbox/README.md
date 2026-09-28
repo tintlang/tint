@@ -32,14 +32,5 @@ The preview recompiles the current editor contents automatically. It keeps a
 persistent `UiSession`, so `state` and `click||handler` interactions survive
 between renders. Invalid source is shown in the preview pane.
 
-## Rebuild WASM
-
-After changing the Tint parser or runtime:
-
-```bash
-cd ../
-wasm-pack build crates/tint-wasm --target web --out-dir ../sandbox/pkg-web
-```
-
-If the local `wasm-opt` binary is unavailable, use `--dev`; the generated
-bindings are still valid for the sandbox.
+Contributor setup, runtime rebuilds, generated artifacts, and release checks
+are documented in the repository [`CONTRIBUTING.md`](../../CONTRIBUTING.md).
