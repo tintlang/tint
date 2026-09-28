@@ -1,0 +1,18 @@
+{
+  "name": "@tintlang/react",
+  "version": "0.1.1",
+  "description": "React adapter for the Tint browser runtime.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.tsx",
+      "default": "./src/index.tsx"
+    }
+  },
+  "files": ["src"],
+  "peerDependencies": {
+    "@tintlang/runtime": "^0.1.1",
+    "react": ">=18"
+  },
+  "sideEffects": false
+}
