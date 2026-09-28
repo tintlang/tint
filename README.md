@@ -11,14 +11,41 @@ Rust-to-DOM rendering path.
 
 ```tint
 ui fn App() {
-    Column {
-        layout::{ padding::24, gap::12 }
-        paint::{ background::#12141a }
-        Text { text::{24, bold, white} "Hello Tint" }
-        Button { paint::{ radius::8, color::white } "Click me" }
+    theme::dark { tokens {
+        page-bg::#12141a
+        button-bg::#ffffff
+        button-text::#12141a
+    } }
+    theme::light { tokens {
+        page-bg::#ffffff
+        button-bg::#12141a
+        button-text::#ffffff
+    } }
+
+    style ButtonBase {
+        layout::{ padding.x::18, padding.y::10 }
+        paint::{ radius::full }
+        motion::{ transition::"transform .2s ease", hover::{ scale::1.04 } }
+    }
+
+    component Button {
+        use::ButtonBase
+        variant::solid {
+            paint::{ background::@button-bg, color::@button-text }
+        }
+        slot::content
+    }
+
+    Page {
+        layout::{ direction::column, padding::24, gap::12 }
+        paint::{ background::@page-bg }
+        Button { variant::solid "Hello Tint" }
     }
 }
 ```
+
+This small example demonstrates theme tokens, reusable styles, components,
+slots, and variants without duplicating the UI tree for each theme.
 
 ## Demo
 
