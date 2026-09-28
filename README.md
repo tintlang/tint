@@ -1,5 +1,11 @@
 # Tint
 
+The canonical project version is stored in [`VERSION`](VERSION). After changing it, run:
+
+```bash
+node scripts/sync-version.mjs
+```
+
 Tint is a small declarative UI DSL for Rust/WASM applications, with a direct
 Rust-to-DOM rendering path.
 
@@ -62,7 +68,7 @@ tint repl
    ```bash
    cd vscode-tint
    npm install && npm run compile
-   code --install-extension ./tint-lang-0.1.0.vsix
+   code --install-extension ./tint-lang-0.1.1.vsix
    ```
 
 2. Open a `.tn` file

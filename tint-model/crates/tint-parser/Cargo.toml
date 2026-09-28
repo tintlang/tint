@@ -1,9 +1,9 @@
 [package]
 name = "tint-parser"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 description = "TintLang Lexer"
-license = "MIT"
+license.workspace = true
 
 [dependencies]
 tint-ast   = { path = "../tint-ast" }

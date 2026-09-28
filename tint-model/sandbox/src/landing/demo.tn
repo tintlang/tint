@@ -1,28 +1,16 @@
-theme::dark {
-    Demo {
-        layout::{ direction::column, gap::20, padding::64 }
-        mobile::{ padding::28 }
-        SourceRender {
-            layout::{ grid::{ columns::"minmax(0, 2fr) minmax(0, 1fr)", gap::24 }, min-width::0 }
-            mobile::{ grid::{ columns::"1fr" } }
-            CodePanel { layout::{ grow::1, direction::column, padding::24, min-width::0, overflow::hidden } paint::{ radius::16, background::#141414, border::{1, #2b2b2b}, color::#d0d0d0 } font-family::"ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" size::13 }
-            PreviewPanel { layout::{ grow::1, direction::column, align::center, justify::center, padding::24, min-width::0, overflow::hidden } paint::{ radius::16, background::#161616, border::{1, #2b2b2b} } }
-        }
-        Caption2 { layout::{ width::"100%", align::center } text-align::center text::{13, #9a9a9a} "No screenshot — the panel on the right is a live DomSession render of the source on the left." }
-        PongBtn { route||"/pong" layout::{ align::center, padding.x::34, padding.y::18 } paint::{ radius::full, background::#ffffff, color::#0a0a0a } size::18 font-weight::bold motion::{ transition::"transform .2s ease, background .2s ease", hover::{ scale::1.04, background::#e8e8e8 } } "Open Pong" }
+Demo {
+    use::DemoBase
+
+    SourceRender {
+        use::SourceRenderBase
+        CodePanel { use::CodePanelBase }
+        PreviewPanel { use::PreviewPanelBase }
     }
-}
-theme::light {
-    Demo {
-        layout::{ direction::column, gap::20, padding::64 }
-        mobile::{ padding::28 }
-        SourceRender {
-            layout::{ grid::{ columns::"minmax(0, 2fr) minmax(0, 1fr)", gap::24 }, min-width::0 }
-            mobile::{ grid::{ columns::"1fr" } }
-            CodePanel { layout::{ grow::1, direction::column, padding::24, min-width::0, overflow::hidden } paint::{ radius::16, background::#f5f5f5, border::{1, #e0e0e0}, color::#353535 } font-family::"ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" size::13 }
-            PreviewPanel { layout::{ grow::1, direction::column, align::center, justify::center, padding::24, min-width::0, overflow::hidden } paint::{ radius::16, background::#f5f5f5, border::{1, #e0e0e0} } }
-        }
-        Caption2 { layout::{ width::"100%", align::center } text-align::center text::{13, #6a6a6a} "No screenshot — the panel on the right is a live DomSession render of the source on the left." }
-        PongBtn { route||"/pong" layout::{ align::center, padding.x::34, padding.y::18 } paint::{ radius::full, background::#0a0a0a, color::#ffffff } size::18 font-weight::bold motion::{ transition::"transform .2s ease, background .2s ease", hover::{ scale::1.04, background::#252525 } } "Open Pong" }
+
+    Caption2 {
+        use::CaptionBase
+        "No screenshot — the panel on the right is a live DomSession render of the source on the left."
     }
+
+    PongButton { route||"/pong" "Open Pong" }
 }

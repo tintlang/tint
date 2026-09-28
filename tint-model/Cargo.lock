@@ -303,11 +303,11 @@ dependencies = [
 
 [[package]]
 name = "tint-ast"
-version = "0.1.0"
+version = "0.1.1"
 
 [[package]]
 name = "tint-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "base64",
  "tint-ast",
@@ -320,7 +320,7 @@ dependencies = [
 
 [[package]]
 name = "tint-evaluator"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "thiserror",
  "tint-ast",
@@ -328,21 +328,21 @@ dependencies = [
 
 [[package]]
 name = "tint-ir"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "tint-ast",
 ]
 
 [[package]]
 name = "tint-lexer"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "tint-ast",
 ]
 
 [[package]]
 name = "tint-parser"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "tint-ast",
  "tint-lexer",
@@ -350,7 +350,7 @@ dependencies = [
 
 [[package]]
 name = "tint-runtime"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
  "futures",
@@ -367,7 +367,7 @@ dependencies = [
 
 [[package]]
 name = "tint-semantics"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "tint-ast",
  "tint-lexer",
@@ -376,7 +376,7 @@ dependencies = [
 
 [[package]]
 name = "tint-wasm"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
  "serde-wasm-bindgen",

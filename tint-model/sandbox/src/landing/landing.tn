@@ -5,24 +5,189 @@ ui fn Landing() {
     state theme = "dark"
 
     theme::dark {
-        Page {
-            layout::{ direction::column }
-            paint::{ background::#0a0a0a }
-            import "./topbar.tn";
-            import "./hero.tn";
-            import "./demo.tn";
-            import "./footer.tn";
+        tokens {
+            page-bg::#0a0a0a
+            nav-bg::"rgba(255,255,255,0.08)"
+            nav-border::#2b2b2b
+            logo-text::white
+            logo-hover::#2b2b2b
+            text-main::white
+            text-muted::#9a9a9a
+            control-bg::#161616
+            control-hover::#2b2b2b
+            panel-bg::#141414
+            panel-alt::#161616
+            panel-border::#2b2b2b
+            panel-text::#d0d0d0
+            footer-border::#2b2b2b
+            button-bg::#ffffff
+            button-text::#0a0a0a
+            button-outline-text::#ffffff
+            button-border::#ffffff
+            button-padding::18
+            button-hover::#f0f0f0
+            pong-hover::#e8e8e8
+            theme-dark-bg::#ffffff
+            theme-dark-text::#0a0a0a
+            theme-light-bg::transparent
+            theme-light-text::#9a9a9a
         }
     }
 
     theme::light {
-        Page {
-            layout::{ direction::column }
-            paint::{ background::#ffffff }
-            import "./topbar.tn";
-            import "./hero.tn";
-            import "./demo.tn";
-            import "./footer.tn";
+        tokens {
+            page-bg::#ffffff
+            nav-bg::"rgba(255,255,255,0.72)"
+            nav-border::#e0e0e0
+            logo-text::#0a0a0a
+            logo-hover::#eaeaea
+            text-main::#0a0a0a
+            text-muted::#6a6a6a
+            control-bg::#f5f5f5
+            control-hover::#e2e2e2
+            panel-bg::#f5f5f5
+            panel-alt::#f5f5f5
+            panel-border::#e0e0e0
+            panel-text::#353535
+            footer-border::#e0e0e0
+            button-bg::#0a0a0a
+            button-text::#ffffff
+            button-outline-text::#0a0a0a
+            button-border::#0a0a0a
+            button-padding::16
+            button-hover::#202020
+            pong-hover::#252525
+            theme-dark-bg::transparent
+            theme-dark-text::#6a6a6a
+            theme-light-bg::#0a0a0a
+            theme-light-text::#ffffff
         }
+    }
+
+    style HeroLayout {
+        layout::{ direction::column, align::center, gap::22, padding.x::40, padding.y::100 }
+        mobile::{ padding.y::40, gap::18 }
+    }
+
+    style CenteredOnSmall {
+        mobile::{ width::"100%", text-align::center }
+        tablet::{ width::"100%", text-align::center }
+    }
+
+    style ButtonBase {
+        layout::{ padding.x::@button-padding, padding.y::10 }
+        paint::{ radius::full }
+        motion::{ transition::"transform .2s ease", hover::{ scale::1.06 } }
+    }
+
+    style NavBase {
+        layout::{ direction::row, align::center, justify::space-between, position::sticky, top::0, z::10, width::"100%", padding.x::18, padding.y::10 }
+        paint::{ background::@nav-bg, backdrop-blur::14, border.b::{1, @nav-border} }
+    }
+
+    style LogoBase {
+        layout::{ padding.x::10, padding.y::6 }
+        paint::{ radius::8, color::@logo-text }
+        text-decoration::"none"
+        transition::"background .2s ease"
+        hover::{ background::@logo-hover }
+        font-family::"ui-rounded, -apple-system, BlinkMacSystemFont, sans-serif"
+        text::{22, bold, @logo-text}
+    }
+
+    style NavRight {
+        layout::{ direction::row, align::center, gap::18 }
+    }
+
+    style ThemeSwitchBase {
+        layout::{ direction::row, padding::3 }
+        paint::{ radius::full, border.b::{1, @nav-border}, background::@control-bg }
+    }
+
+    style ThemeChoiceBase {
+        layout::{ padding.x::14, padding.y::6 }
+        paint::{ radius::full }
+        motion::{ transition::"background .15s ease" }
+    }
+
+    style DemoBase {
+        layout::{ direction::column, gap::20, padding::64 }
+        mobile::{ padding::28 }
+    }
+
+    style SourceRenderBase {
+        layout::{ grid::{ columns::"minmax(0, 2fr) minmax(0, 1fr)", gap::24 }, min-width::0 }
+        mobile::{ grid::{ columns::"1fr" } }
+    }
+
+    style CodePanelBase {
+        layout::{ grow::1, direction::column, padding::24, min-width::0, overflow::hidden }
+        paint::{ radius::16, background::@panel-bg, border::{1, @panel-border}, color::@panel-text }
+        font-family::"ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+        size::13
+    }
+
+    style PreviewPanelBase {
+        layout::{ grow::1, direction::column, align::center, justify::center, padding::24, min-width::0, overflow::hidden }
+        paint::{ radius::16, background::@panel-alt, border::{1, @panel-border} }
+    }
+
+    style CaptionBase {
+        layout::{ width::"100%", align::center }
+        text-align::center
+        text::{13, @text-muted}
+    }
+
+    style PongButtonBase {
+        layout::{ align::center, padding.x::34, padding.y::18 }
+        paint::{ radius::full, background::@button-bg, color::@button-text }
+        size::18
+        font-weight::bold
+        motion::{ transition::"transform .2s ease, background .2s ease", hover::{ scale::1.04, background::@pong-hover } }
+    }
+
+    style FooterBase {
+        layout::{ padding.y::26, align::center, justify::center, direction::row, gap::6 }
+        paint::{ border::{1, @footer-border} }
+    }
+
+    style RepoLinkBase {
+        text::{12, @text-muted}
+        motion::{ hover::{ text-decoration::"underline" } }
+    }
+
+    component ActionButton {
+        use::ButtonBase
+        variant::solid {
+            paint::{ background::@button-bg, color::@button-text }
+        }
+        variant::outline {
+            paint::{ background::transparent, color::@button-outline-text, border::{1, @button-border} }
+        }
+        slot::content
+    }
+
+    component ThemeButton {
+        use::ThemeChoiceBase
+        slot::content
+    }
+
+    component PongButton {
+        use::PongButtonBase
+        slot::content
+    }
+
+    component RepoLink {
+        use::RepoLinkBase
+        slot::content
+    }
+
+    Page {
+        layout::{ direction::column }
+        paint::{ background::@page-bg }
+        import "./topbar.tn";
+        import "./hero.tn";
+        import "./demo.tn";
+        import "./footer.tn";
     }
 }

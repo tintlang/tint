@@ -26,7 +26,7 @@ Then install this extension from VSCode marketplace (or manually).
 1. Clone the [tintlang/tint](https://github.com/tintlang/tint) repository
 2. Navigate to `vscode-tint` directory
 3. Run `npm install` && `npm run compile`
-4. Run `code --install-extension tint-lang-0.1.0.vsix`
+4. Run `code --install-extension tint-lang-0.1.1.vsix`
 
 ## Commands
 

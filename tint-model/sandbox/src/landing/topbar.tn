@@ -1,53 +1,27 @@
-theme::dark {
-    Nav {
-        layout::{ direction::row, align::center, justify::space-between, position::sticky, top::0, z::10, width::"100%", padding.x::18, padding.y::10 }
-        paint::{ background::"rgba(255,255,255,0.08)", backdrop-blur::14, border.b::{1, #2b2b2b} }
-        Logo {
-            route||"/"
-            layout::{ padding.x::10, padding.y::6 }
-            paint::{ radius::8, color::white }
-            text-decoration::"none"
-            transition::"background .2s ease"
-            hover::{ background::#2b2b2b }
-            font-family::"ui-rounded, -apple-system, BlinkMacSystemFont, sans-serif"
-            text::{22, bold, white}
-            "tint"
-        }
-        NavRight {
-            layout::{ direction::row, align::center, gap::18 }
-            Caption { text::{12, #9a9a9a} if{viewport_width >= 640} "rendered straight into the DOM — no JS framework" }
-            ThemeSwitch {
-                layout::{ direction::row, padding::3 }
-                paint::{ radius::full, border.b::{1, #2b2b2b}, background::#161616 }
-                DarkBtn { click||set_dark layout::{ padding.x::14, padding.y::6 } paint::{ radius::full, background::#ffffff, color::#0a0a0a } motion::{ transition::"background .15s ease", hover::{ background::#f0f0f0 } } "Dark" }
-                LightBtn { click||set_light layout::{ padding.x::14, padding.y::6 } paint::{ radius::full, background::transparent, color::#9a9a9a } motion::{ transition::"background .15s ease", hover::{ background::#2b2b2b } } "Light" }
-            }
-        }
+Nav {
+    use::NavBase
+
+    Logo {
+        use::LogoBase
+        route||"/"
+        "tint"
     }
-}
-theme::light {
-    Nav {
-        layout::{ direction::row, align::center, justify::space-between, position::sticky, top::0, z::10, width::"100%", padding.x::18, padding.y::10 }
-        paint::{ background::"rgba(255,255,255,0.72)", backdrop-blur::14, border.b::{1, #e0e0e0} }
-        Logo {
-            route||"/"
-            layout::{ padding.x::10, padding.y::6 }
-            paint::{ radius::8, color::#0a0a0a }
-            text-decoration::"none"
-            transition::"background .2s ease"
-            hover::{ background::#eaeaea }
-            font-family::"ui-rounded, -apple-system, BlinkMacSystemFont, sans-serif"
-            text::{22, bold, #0a0a0a}
-            "tint"
-        }
-        NavRight {
-            layout::{ direction::row, align::center, gap::18 }
-            Caption { text::{12, #6a6a6a} if{viewport_width >= 640} "rendered straight into the DOM — no JS framework" }
-            ThemeSwitch {
-                layout::{ direction::row, padding::3 }
-                paint::{ radius::full, border.b::{1, #e0e0e0}, background::#f5f5f5 }
-                DarkBtn { click||set_dark layout::{ padding.x::14, padding.y::6 } paint::{ radius::full, background::transparent, color::#6a6a6a } motion::{ transition::"background .15s ease", hover::{ background::#e2e2e2 } } "Dark" }
-                LightBtn { click||set_light layout::{ padding.x::14, padding.y::6 } paint::{ radius::full, background::#0a0a0a, color::#ffffff } motion::{ transition::"background .15s ease", hover::{ background::#202020 } } "Light" }
+
+    NavRight {
+        use::NavRight
+        Caption { text::{12, @text-muted} if{viewport_width >= 640} "rendered straight into the DOM — no JS framework" }
+
+        ThemeSwitch {
+            use::ThemeSwitchBase
+            ThemeButton {
+                click||set_dark
+                paint::{ background::@theme-dark-bg, color::@theme-dark-text }
+                "Dark"
+            }
+            ThemeButton {
+                click||set_light
+                paint::{ background::@theme-light-bg, color::@theme-light-text }
+                "Light"
             }
         }
     }

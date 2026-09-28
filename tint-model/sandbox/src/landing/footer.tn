@@ -1,17 +1,5 @@
-theme::dark {
-    Footer {
-        layout::{ padding.y::26, align::center, justify::center, direction::row, gap::6 }
-        paint::{ border::{1, #2b2b2b} }
-        Text { text::{12, #9a9a9a} "MIT ·" }
-        RepoLink { click||open_github text::{12, #9a9a9a} motion::{ hover::{ text-decoration::"underline" } } "github.com/tintlang/tint" }
-    }
+Footer {
+    use::FooterBase
+    Text { text::{12, @text-muted} "MIT ·" }
+    RepoLink { click||open_github "github.com/tintlang/tint" }
 }
-theme::light {
-    Footer {
-        layout::{ padding.y::26, align::center, justify::center, direction::row, gap::6 }
-        paint::{ border::{1, #e0e0e0} }
-        Text { text::{12, #6a6a6a} "MIT ·" }
-        RepoLink { click||open_github text::{12, #6a6a6a} motion::{ hover::{ text-decoration::"underline" } } "github.com/tintlang/tint" }
-    }
-}
-

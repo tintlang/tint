@@ -1,9 +1,9 @@
 [package]
 name = "tint-semantics"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 description = "TintLang AST"
-license = "MIT"
+license.workspace = true
 
 [dependencies]
 tint-ast   = { path = "../tint-ast" }
