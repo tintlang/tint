@@ -11,3 +11,9 @@ All notable changes to Tint are documented here.
 - Added checks for operators, conditions, assignments, returns, function and method arguments, struct fields, enum constructors and patterns, UI state, interpolation, and UI control flow.
 - Added regression coverage for lambdas, semantic type checking, and enum-typed fields.
 - Added UI tokens, reusable styles, components, slots, and variants with theme-aware resolution.
+- Added first-class function types and function-valued runtime behavior.
+- Added the shared prebuilt `@tintlang/runtime` package with source and versioned bytecode loading through one browser runtime.
+- Added `@tintlang/vite` for importing `.tn` files as HMR-friendly JS modules with `source` and `entry` exports.
+- Added `target||"_blank"` for new-tab links, with automatic `rel="noopener noreferrer"` in the DOM renderer.
+- Added `ref||"name"` DOM escape hatches and `js||callback` host callbacks through the runtime mount API.
+- Added `@tintlang/react` and `@tintlang/svelte` adapters for mounting Tint inside existing framework applications.
