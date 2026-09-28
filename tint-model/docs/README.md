@@ -35,6 +35,7 @@ subject.
 - `guide/audio.md` — event sounds and the current audio boundary
 - `guide/storage.md` — host storage primitives and browser persistence bridge
 - `guide/http.md` — queued HTTP requests and completion callbacks
+- [`guide/vite.md`](guide/vite.md) — Vite plugin, `.tn` imports, and browser mounting
 - `blocks.md` — UI block control flow currently supported by the parser
 
 The browser sandbox is a Tint-rendered app. Run `npm run dev:all` from
