@@ -34,7 +34,19 @@ trap 'rm -rf "${tmp_dir}"' EXIT
 
 curl -fsSL "${base_url}/${archive}" -o "${tmp_dir}/${archive}"
 curl -fsSL "${base_url}/${archive}.sha256" -o "${tmp_dir}/${archive}.sha256"
-(cd "${tmp_dir}" && sha256sum -c "${archive}.sha256")
+expected="$(awk '{ print $1; exit }' "${tmp_dir}/${archive}.sha256")"
+if command -v sha256sum >/dev/null 2>&1; then
+  actual="$(sha256sum "${tmp_dir}/${archive}" | awk '{ print $1 }')"
+elif command -v shasum >/dev/null 2>&1; then
+  actual="$(shasum -a 256 "${tmp_dir}/${archive}" | awk '{ print $1 }')"
+else
+  echo "Neither sha256sum nor shasum is available for checksum verification" >&2
+  exit 1
+fi
+if [[ "${actual}" != "${expected}" ]]; then
+  echo "Checksum verification failed" >&2
+  exit 1
+fi
 
 mkdir -p "${install_dir}"
 tar -xzf "${tmp_dir}/${archive}" -C "${tmp_dir}"

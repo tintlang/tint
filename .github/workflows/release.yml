@@ -61,7 +61,7 @@ jobs:
         run: |
           mkdir -p release
           cp target/${{ matrix.target }}/release/${{ matrix.binary }} release/${{ matrix.binary }}
-          tar -C release -czf ../${{ matrix.archive }} ${{ matrix.binary }}
+          tar -C release -czf "${{ matrix.archive }}" ${{ matrix.binary }}
 
       - name: Package Windows binary
         if: runner.os == 'Windows'
@@ -69,21 +69,26 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force release | Out-Null
           Copy-Item "target/${{ matrix.target }}/release/${{ matrix.binary }}" "release/${{ matrix.binary }}"
-          Compress-Archive -Path "release/${{ matrix.binary }}" -DestinationPath "../${{ matrix.archive }}"
+          Compress-Archive -Path "release/${{ matrix.binary }}" -DestinationPath "${{ matrix.archive }}"
 
       - name: Create checksum
         if: runner.os != 'Windows'
         working-directory: tint-model
         shell: bash
-        run: sha256sum "../${{ matrix.archive }}" > "../${{ matrix.archive }}.sha256"
+        run: |
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "${{ matrix.archive }}" > "${{ matrix.archive }}.sha256"
+          else
+            shasum -a 256 "${{ matrix.archive }}" > "${{ matrix.archive }}.sha256"
+          fi
 
       - name: Create checksum (Windows)
         if: runner.os == 'Windows'
         working-directory: tint-model
         shell: pwsh
         run: |
-          $hash = (Get-FileHash "../${{ matrix.archive }}" -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  ${{ matrix.archive }}" | Out-File "../${{ matrix.archive }}.sha256" -Encoding ascii
+          $hash = (Get-FileHash "${{ matrix.archive }}" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  ${{ matrix.archive }}" | Out-File "${{ matrix.archive }}.sha256" -Encoding ascii
 
       - name: Upload CLI artifact
         uses: actions/upload-artifact@v4
