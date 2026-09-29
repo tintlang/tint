@@ -543,3 +543,48 @@ ui fn Widget() {
          wrapper node in between"
     );
 }
+
+#[test]
+fn ui_text_interpolation_accepts_string_literals_and_non_ascii_text() {
+    let code = r#"
+ui fn Widget() {
+    Column {
+        Text { "é {["a", "b"].join(" + ")} é" }
+    }
+}
+"#;
+    let tokens = collect_tokens(&mut Lexer::new(code));
+    let program = Parser::new(tokens).parse_program().expect("parse failed");
+    let mut vm = TintVM::new();
+    vm.run_program(&program);
+    let nodes = vm.render_ui_fn("Widget", &[]).expect("render_ui_fn failed");
+    let text = nodes[0].children[0].children[0].text.as_deref();
+    assert_eq!(text, Some("é a + b é"));
+}
+
+#[test]
+fn tick_and_every_reach_the_render_tree() {
+    let code = r#"
+ui fn Widget() {
+    Column {
+        Fast { tick||step every||180 }
+        Slow { tick||clock }
+        Idle { every||50 }
+    }
+}
+fn step() {}
+fn clock() {}
+"#;
+    let tokens = collect_tokens(&mut Lexer::new(code));
+    let program = Parser::new(tokens).parse_program().expect("parse failed");
+    let mut vm = TintVM::new();
+    vm.run_program(&program);
+    let nodes = vm.render_ui_fn("Widget", &[]).expect("render_ui_fn failed");
+    let kids = &nodes[0].children;
+    assert_eq!(kids[0].on_tick.as_deref(), Some("step"));
+    assert_eq!(kids[0].every_ms, Some(180.0));
+    assert_eq!(kids[1].on_tick.as_deref(), Some("clock"));
+    assert_eq!(kids[1].every_ms, Some(1000.0), "default interval");
+    assert_eq!(kids[2].on_tick, None);
+    assert_eq!(kids[2].every_ms, None, "every|| alone does nothing");
+}

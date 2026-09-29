@@ -190,6 +190,14 @@ pub struct SemanticChecker {
     generic_params_by_type: HashMap<String, Vec<String>>,
     generic_params: HashSet<String>,
     current_return: Option<Type>,
+    /// Set while inferring the return type of an unannotated function:
+    /// collects the type of every `return` expression seen in the body.
+    observed_returns: Option<Vec<Type>>,
+    /// Argument types seen at call sites of functions/methods whose
+    /// parameters are unannotated; keyed by fn name or (Type, method).
+    /// Only filled while inferring (`record_calls`).
+    call_args: HashMap<(String, String), Vec<Vec<Type>>>,
+    record_calls: bool,
     errors: Vec<SemanticError>,
     inferred: HashMap<(usize, usize), TypedExpr>,
     references: Vec<Reference>,
@@ -201,4 +209,5 @@ include!("names.rs");
 include!("patterns.rs");
 include!("statements.rs");
 include!("expressions.rs");
+include!("collections.rs");
 include!("ui.rs");

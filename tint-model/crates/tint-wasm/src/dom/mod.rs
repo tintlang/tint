@@ -1,8 +1,10 @@
 //! Direct-DOM rendering backend for `UiSession`.
 //!
-//! Each render rebuilds the container subtree instead of diffing it. Event
-//! closures are intentionally leaked by `Closure::forget`, which is acceptable
-//! for the sandbox but should be addressed before using this in a long-lived app.
+//! Each render is diffed in Rust against the retained previous tree (`Retained`),
+//! and only real differences touch the DOM; subtrees that are the same `Rc` as
+//! last time are skipped without being compared. Event closures are
+//! intentionally leaked by `Closure::forget`, which is acceptable for the
+//! sandbox but should be addressed before using this in a long-lived app.
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -47,6 +49,20 @@ struct Shared {
     /// `frame||` handler. `None` on the very first frame, which reports
     /// `dt = 0` rather than a bogus jump from page load.
     last_frame_time: Cell<Option<f64>>,
+    /// Running `tick||`/`every||` intervals, reconciled against the
+    /// mounted tree on every render (see `sync_tick_timers`).
+    timers: RefCell<Vec<TickTimer>>,
+    /// The tree currently on screen and its DOM elements (see `Retained`).
+    retained: RefCell<Option<Retained>>,
+}
+
+/// One `setInterval` started for a `tick||handler` / `every||ms` pair.
+struct TickTimer {
+    handler: String,
+    every_ms: i32,
+    id: i32,
+    /// Kept alive while the interval runs.
+    callback: Closure<dyn FnMut()>,
 }
 
 /// Direct-DOM counterpart to `UiSession` in lib.rs. Wraps the exact same

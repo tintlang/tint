@@ -16,14 +16,16 @@ impl Parser {
                 }
                 i += 1;
 
-                let mut expr_buf = String::new();
-                while i < chars.len() && chars[i] != '}' {
-                    expr_buf.push(chars[i]);
-                    i += 1;
-                }
-                i += 1;
+                let start = i;
+                i = Self::interpolation_end(&chars, i);
+                let end = if i > start && chars[i - 1] == '}' {
+                    i - 1
+                } else {
+                    i
+                };
+                let expr_buf: String = chars[start..end].iter().collect();
 
-                let mut p = Parser::new_expr_only(expr_buf.clone(), span);
+                let mut p = Parser::new_expr_only(expr_buf, span);
                 let expr = p.parse_expr()?;
 
                 parts.push(UiTextPart::Interpolation(expr, span));

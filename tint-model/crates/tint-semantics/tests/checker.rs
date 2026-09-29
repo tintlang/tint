@@ -591,3 +591,87 @@ fn impl_method_params_besides_self_are_bound_normally() {
         "#,
     );
 }
+
+#[test]
+fn list_string_and_map_methods_are_typed() {
+    assert_clean(
+        r#"
+fn test() {
+    let mut xs = [1, 2, 3]
+    xs.push(4)
+    let n: i32 = xs.len()
+    let last = xs.pop().unwrap_or(0)
+    let names = xs.map(|x| "n{x}")
+    let joined: string = names.join(",")
+    let parts = joined.split(",")
+    let evens = xs.filter(|x| x % 2 == 0)
+    let m = map { a{1} }
+    let keys = m.keys().join("|")
+    let v = m.get("a").unwrap_or(0)
+    let ok = joined.trim().to_upper().contains("N") && !parts.is_empty() && evens.contains(2)
+    if ok && n == 3 && last == 4 && v == 1 && keys.len() == 1 { 1 } else { 0 }
+}
+"#,
+    );
+}
+
+#[test]
+fn unknown_collection_method_is_reported() {
+    assert_unknown_ident("fn test() { let xs = [1, 2] xs.nope() }", "List.nope");
+    assert_unknown_ident("fn test() { \"a\".nope() }", "String.nope");
+}
+
+#[test]
+fn collection_method_arguments_are_checked() {
+    let errors = errors_for("fn test() { let mut xs = [1, 2] xs.push(\"a\") }");
+    assert!(errors
+        .iter()
+        .any(|error| matches!(error, SemanticErrorKind::TypeMismatch { .. })));
+    let errors = errors_for("fn test() { \"a\".split() }");
+    assert!(!errors.is_empty());
+}
+
+#[test]
+fn string_plus_number_or_bool_is_allowed_but_not_plus_list() {
+    assert_clean("fn test() { let n = 3 let ok = true \"n = \" + n + \", \" + ok + 1.5 }");
+    let errors = errors_for("fn test() { \"a\" + [1, 2] }");
+    assert!(errors
+        .iter()
+        .any(|error| matches!(error, SemanticErrorKind::TypeMismatch { .. })));
+}
+
+#[test]
+fn sort_reverse_slice_find_are_typed() {
+    assert_clean(
+        r#"
+fn test() {
+    let xs = [3, 1, 2]
+    let a = xs.sort().reverse().slice(1)
+    let b = xs.slice(0, 2)
+    let f = xs.find(|x| x > 1).unwrap_or(0)
+    let s = "hello".slice(1, 3)
+    let t: string = s + a.join(",") + b.len() + f
+    t
+}
+"#,
+    );
+    let errors = errors_for("fn test() { [1, 2].slice(\"a\") }");
+    assert!(!errors.is_empty());
+    let errors = errors_for("fn test() { [1, 2].slice() }");
+    assert!(!errors.is_empty());
+}
+
+#[test]
+fn unannotated_return_and_param_types_are_inferred() {
+    // `double` has no `-> T` and `n` no type: both come from the body / call site.
+    let bad = "fn double(n) { n * 2 }\nfn main() { let s: string = double(3) }";
+    assert!(!errors_for(bad).is_empty(), "number result must not fit a string");
+    let ok = "fn double(n) { n * 2 }\nfn main() { let s: f64 = double(3) }";
+    assert!(errors_for(ok).is_empty());
+    // Recursion converges.
+    let fib = "fn fib(n) { if n < 2 { n } else { fib(n - 1) + fib(n - 2) } }\nfn main() { let x = fib(10) }";
+    assert!(errors_for(fib).is_empty());
+    // Call sites that disagree leave the parameter open instead of erroring.
+    let mixed = "fn show(x) { x }\nfn main() { show(1)\nshow(\"a\") }";
+    assert!(errors_for(mixed).is_empty());
+}

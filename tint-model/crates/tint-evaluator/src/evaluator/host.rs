@@ -21,6 +21,29 @@ pub trait EvalHost {
     fn resolve_function(&mut self, _name: &str) -> Option<Value> {
         None
     }
+
+    // --- Read tracking (optional) -------------------------------------
+    // A host that can report which outer variables an evaluation read lets
+    // the UI builder reuse a subtree whose inputs did not change. Hosts
+    // that do not override these simply never get subtree reuse.
+
+    /// Whether `track_begin`/`track_end`/`reads_unchanged` are implemented.
+    fn tracking_supported(&self) -> bool {
+        false
+    }
+    /// Starts recording reads of variables bound OUTSIDE the current scope.
+    fn track_begin(&mut self) {}
+    /// Stops the innermost recording and returns what it read; the reads are
+    /// also folded into the enclosing recording, if any.
+    fn track_end(&mut self) -> Vec<(String, Option<Value>)> {
+        Vec::new()
+    }
+    /// Folds reads of an already-validated cached subtree into the current recording.
+    fn track_merge(&mut self, _reads: &[(String, Option<Value>)]) {}
+    /// True if every recorded variable still holds the recorded value.
+    fn reads_unchanged(&mut self, _reads: &[(String, Option<Value>)]) -> bool {
+        false
+    }
     fn load_var(&mut self, name: &str, span: Span) -> Value;
     fn define_var(&mut self, name: &str, value: Value);
 

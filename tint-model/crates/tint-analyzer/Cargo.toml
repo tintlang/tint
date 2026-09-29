@@ -1,0 +1,17 @@
+[package]
+name = "tint-analyzer"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "tint-analyzer"
+path = "src/main.rs"
+
+[dependencies]
+serde_json = "1"
+tint-ast = { path = "../tint-ast" }
+tint-compiler = { path = "../tint-compiler" }
+tint-lexer = { path = "../tint-lexer" }
+tint-parser = { path = "../tint-parser" }
+tint-semantics = { path = "../tint-semantics" }

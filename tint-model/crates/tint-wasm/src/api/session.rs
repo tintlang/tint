@@ -1,7 +1,7 @@
 #[derive(Serialize, Default)]
 pub struct UiSessionResult {
     pub ok: bool,
-    pub tree: Vec<tint_runtime::ui::render::UiRenderNode>,
+    pub tree: Vec<std::rc::Rc<tint_runtime::ui::render::UiRenderNode>>,
     pub error: Option<String>,
 }
 

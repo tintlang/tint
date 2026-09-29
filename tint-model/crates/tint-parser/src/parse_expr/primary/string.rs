@@ -12,6 +12,30 @@ impl Parser {
         self.parse_interpolated_string(t.lexeme, t.span)
     }
 
+    /// Index just past the `}` closing an interpolation whose body starts at
+    /// `i`. Braces inside a nested string literal don't count.
+    pub(crate) fn interpolation_end(chars: &[char], mut i: usize) -> usize {
+        let mut depth = 1;
+        while i < chars.len() && depth > 0 {
+            match chars[i] {
+                '"' => {
+                    i += 1;
+                    while i < chars.len() && chars[i] != '"' {
+                        if chars[i] == '\\' {
+                            i += 1;
+                        }
+                        i += 1;
+                    }
+                }
+                '{' => depth += 1,
+                '}' => depth -= 1,
+                _ => {}
+            }
+            i += 1;
+        }
+        i.min(chars.len())
+    }
+
     pub(crate) fn parse_interpolated_string(&mut self, raw: String, span: Span) -> PResult<Expr> {
         use tint_ast::StringPart::{Expr as PartExpr, Text};
 
@@ -31,21 +55,15 @@ impl Parser {
 
                     i += 1;
                     let start = i;
-                    let mut depth = 1;
+                    i = Self::interpolation_end(&chars, i);
+                    let end = if i > start && chars[i - 1] == '}' {
+                        i - 1
+                    } else {
+                        i
+                    };
+                    let expr_src: String = chars[start..end].iter().collect();
 
-                    while i < chars.len() && depth > 0 {
-                        if chars[i] == '{' {
-                            depth += 1;
-                        }
-                        if chars[i] == '}' {
-                            depth -= 1;
-                        }
-                        i += 1;
-                    }
-
-                    let expr_src = &raw[start..i - 1];
-
-                    let mut parser = Parser::new_expr_only(expr_src.into(), span);
+                    let mut parser = Parser::new_expr_only(expr_src, span);
                     let expr = parser.parse_expr()?;
 
                     parts.push(PartExpr(expr));

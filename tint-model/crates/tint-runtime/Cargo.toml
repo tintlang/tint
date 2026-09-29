@@ -4,10 +4,16 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[features]
+# Optional SSA/IR second execution tier. Off by default: the tree-walking
+# evaluator is the single execution engine.
+default = []
+ir = ["dep:tint-ir"]
+
 [dependencies]
 tint-ast = { path = "../tint-ast" }
 tint-parser = { path = "../tint-parser" }
-tint-ir = { path = "../tint-ir" }
+tint-ir = { path = "../tint-ir", optional = true }
 tint-lexer = { path = "../tint-lexer" }
 tint-evaluator = { path = "../tint-evaluator" }
 tint-semantics = { path = "../tint-semantics" }
@@ -15,6 +21,6 @@ tint-semantics = { path = "../tint-semantics" }
 thiserror = "1.0"
 async-trait = "0.1"
 futures = "0.3"
-serde = { version = "1.0", features = ["derive"] }
+serde = { version = "1.0", features = ["derive", "rc"] }
 serde_json = "1.0"
 taffy = "0.14.0"

@@ -101,6 +101,9 @@ impl SemanticChecker {
             }
             Stmt::Return(e, span) => {
                 let found = self.infer_expr(e);
+                if let Some(seen) = self.observed_returns.as_mut() {
+                    seen.push(found.clone());
+                }
                 if let Some(expected) = self.current_return.clone() {
                     self.require_compatible(&expected, &found, *span);
                 }

@@ -1,0 +1,37 @@
+// expect: 2
+fn len() {
+    let m = map { a{1}, b{2} }
+    m.len()
+}
+
+// expect: 1
+fn get() {
+    let m = map { a{1}, b{2} }
+    m.get("a").unwrap()
+}
+
+// expect: true
+fn get_missing_is_none() {
+    let m = map { a{1} }
+    m.get("zzz").is_none()
+}
+
+// expect: "a,c"
+fn set_remove_keys() {
+    let mut m = map { b{2}, a{1} }
+    m.set("c", 3)
+    m.remove("b")
+    m.keys().join(",")
+}
+
+// expect: true
+fn has() {
+    let m = map { a{1} }
+    m.has("a") && !m.has("b")
+}
+
+// expect: [1, 2]
+fn values_are_sorted_by_key() {
+    let m = map { b{2}, a{1} }
+    m.values()
+}

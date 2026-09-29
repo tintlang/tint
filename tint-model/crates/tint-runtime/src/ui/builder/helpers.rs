@@ -129,6 +129,19 @@ pub(super) fn apply_svg(tree: &mut UiTree, id: UiNodeId, attributes: &[UiAttribu
     tree.set_svg(id, find_literal(attributes, "svg"));
 }
 
+/// Reads `tick||handler` with an optional `every||ms` interval (default
+/// 1000). The renderer owns the clock; the tree only records the request.
+pub(super) fn apply_tick(tree: &mut UiTree, id: UiNodeId, attributes: &[UiAttribute]) {
+    let handler = find_handler(attributes, "tick");
+    let every_ms = handler.as_ref().map(|_| {
+        find_literal(attributes, "every")
+            .and_then(|text| text.parse::<f64>().ok())
+            .filter(|ms| ms.is_finite() && *ms > 0.0)
+            .unwrap_or(1000.0)
+    });
+    tree.set_tick(id, handler, every_ms);
+}
+
 /// Reads `route||"/path"` and leaves navigation as a renderer concern.
 /// Keeping this as a first-class field makes the syntax portable to DOM,
 /// native, and future renderers without treating the route as CSS.

@@ -1,0 +1,12 @@
+// expect: 255u8
+fn u8_const() -> u8 { LIMIT }
+const LIMIT: u8 = 255
+
+// expect: 3i32
+fn cast_integral_float_to_i32() { 3.0 as i32 }
+
+// expect-error: cast
+fn cast_fractional_float_to_i32_is_an_error() { 3.9 as i32 }
+
+// expect: -5i32
+fn negation_then_cast() { let x = 5; -x as i32 }

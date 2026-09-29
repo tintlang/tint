@@ -143,9 +143,22 @@ impl SemanticChecker {
                         self.require_compatible(&Type::Bool, &r, right.span());
                         Type::Bool
                     }
+                    // String `+` appends the other side's display text, so
+                    // numbers and bools are fine next to a string; lists,
+                    // structs and the like are not.
                     "+" if matches!(l, Type::String) || matches!(r, Type::String) => {
-                        self.require_compatible(&Type::String, &l, left.span());
-                        self.require_compatible(&Type::String, &r, right.span());
+                        for (ty, side) in [(&l, left.span()), (&r, right.span())] {
+                            if !matches!(
+                                ty,
+                                Type::String
+                                    | Type::Number
+                                    | Type::Bool
+                                    | Type::Unknown
+                                    | Type::Simple(_)
+                            ) {
+                                self.require_compatible(&Type::String, ty, side);
+                            }
+                        }
                         Type::String
                     }
                     _ => {
@@ -437,8 +450,17 @@ impl SemanticChecker {
         } = target
         {
             let receiver_ty = self.infer_expr(receiver);
+            if let Some(ty) = self.infer_collection_method(&receiver_ty, method, &arg_types, span) {
+                return ty;
+            }
             if let Type::Struct(name) = receiver_ty {
-                if let Some((params, ret)) = self.methods.get(&(name, method.clone())).cloned() {
+                if let Some((params, ret)) = self.methods.get(&(name.clone(), method.clone())).cloned() {
+                    if self.record_calls {
+                        self.call_args
+                            .entry((name, method.clone()))
+                            .or_default()
+                            .push(arg_types.clone());
+                    }
                     self.check_args(&params, &arg_types, span);
                     return ret;
                 }
@@ -489,6 +511,12 @@ impl SemanticChecker {
         }
         if let Expr::Ident(name, _) = target {
             if let Some((params, ret)) = self.fn_types.get(name).cloned() {
+                if self.record_calls && self.scopes.lookup(name).is_none_or(|t| matches!(t, Type::Fn(..))) {
+                    self.call_args
+                        .entry((String::new(), name.clone()))
+                        .or_default()
+                        .push(arg_types.clone());
+                }
                 self.check_args(&params, &arg_types, span);
                 return ret;
             }

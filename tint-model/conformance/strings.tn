@@ -1,0 +1,51 @@
+// expect: "ab"
+fn concat() { "a" + "b" }
+
+// expect: "n = 5"
+fn concat_number() { "n = " + 5 }
+
+// expect: "x=3 y=4"
+fn interpolation() {
+    let x = 3
+    let y = 4
+    "x={x} y={y}"
+}
+
+// expect: "a b"
+fn interpolation_with_string_literal() {
+    let xs = ["a", "b"]
+    "{xs.join(" ")}"
+}
+
+// expect: "1+2=3"
+fn interpolation_with_expression() { "1+2={1 + 2}" }
+
+// expect: "a\nb"
+fn newline_escape() { "a\nb" }
+
+// expect: 5
+fn len_counts_chars() { "héllo".len() }
+
+// expect: "hello, world"
+fn trim_lower() { "  Hello, World ".trim().to_lower() }
+
+// expect: "HELLO"
+fn upper() { "hello".to_upper() }
+
+// expect: true
+fn predicates() { "hello".contains("ell") && "hello".starts_with("he") && "hello".ends_with("lo") && !"hello".contains("z") }
+
+// expect: ["a", "b", "c"]
+fn split() { "a,b,c".split(",") }
+
+// expect: ["a", "b", "c"]
+fn split_empty_separator() { "abc".split("") }
+
+// expect: "heLLo"
+fn replace() { "hello".replace("l", "L") }
+
+// expect: "él"
+fn slice_is_char_based() { "héllo".slice(1, 3) }
+
+// expect: true
+fn is_empty() { "".is_empty() && !"a".is_empty() }

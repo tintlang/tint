@@ -1,0 +1,72 @@
+struct Point { x: i32, y: i32 }
+
+enum Shape {
+    Circle { r },
+    Square { side },
+    Empty,
+}
+
+impl Point {
+    fn sum(self) { self.x + self.y }
+}
+
+fn area(shape) {
+    match shape {
+        Circle { r } => r * r * 3,
+        Square { side } => side * side,
+        _ => 0,
+    }
+}
+
+// expect: 7
+fn struct_field() {
+    let p = Point { x: 3, y: 4 }
+    p.x + p.y
+}
+
+// expect: 7
+fn impl_method() {
+    let p = Point { x: 3, y: 4 }
+    p.sum()
+}
+
+// expect: 12
+fn enum_struct_variant() { area(Shape::Circle { r: 2 }) }
+
+// expect: 16
+fn enum_second_variant() { area(Shape::Square { side: 4 }) }
+
+// expect: 0
+fn enum_unit_variant() { area(Shape::Empty) }
+
+// expect: 5
+fn tuple_index() {
+    let t = (1, 4)
+    t.0 + t.1
+}
+
+// expect: 6
+fn tuple_destructure() {
+    let (a, b) = (2, 4)
+    a + b
+}
+
+// expect: "menu"
+fn unit_enum_match() {
+    let s = Screen::Menu
+    match s {
+        Menu => "menu",
+        Playing => "playing",
+    }
+}
+enum Screen { Menu, Playing }
+
+// expect: 25
+fn tuple_enum_variant() {
+    let e = Event::Move(3, 4)
+    match e {
+        Move(x, y) => x * x + y * y,
+        Quit => 0,
+    }
+}
+enum Event { Move(i32, i32), Quit }

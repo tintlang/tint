@@ -36,6 +36,7 @@ subject.
 - `animations.md` — current transition and hover behavior
 - `guide/assets.md` — URL-backed image assets and the resource boundary
 - `guide/audio.md` — event sounds and the current audio boundary
+- [`guide/collections.md`](guide/collections.md) — methods on lists, strings, and maps
 - `guide/storage.md` — host storage primitives and browser persistence bridge
 - `guide/http.md` — queued HTTP requests and completion callbacks
 - [`guide/vite.md`](guide/vite.md) — Vite plugin, `.tn` imports, and browser mounting

@@ -100,7 +100,7 @@ fn bind_resize_listener(shared: &Rc<Shared>) {
                 },
                 Err(_) => return,
             };
-            if let Err(e) = mount_tree(&tree, &shared_for_timeout) {
+            if let Err(e) = mount_tree(tree, &shared_for_timeout) {
                 web_sys::console::error_1(&e);
             }
         }) as Box<dyn FnMut()>);
@@ -121,7 +121,7 @@ fn bind_resize_listener(shared: &Rc<Shared>) {
 /// Clears `shared.container_id`'s children and rebuilds them from
 /// `tree`. Whole-subtree teardown/rebuild, not a diff -- see this
 /// module's doc comment.
-fn mount_tree(tree: &[UiRenderNode], shared: &Rc<Shared>) -> Result<(), JsValue> {
+fn mount_tree(tree: Vec<Rc<UiRenderNode>>, shared: &Rc<Shared>) -> Result<(), JsValue> {
     let document = document()?;
     let container = document
         .get_element_by_id(&shared.container_id)
@@ -142,7 +142,19 @@ fn mount_tree(tree: &[UiRenderNode], shared: &Rc<Shared>) -> Result<(), JsValue>
     // container only ever goes from "old tree" to "new tree" in the two
     // tight calls below, with no empty state in between for the browser
     // to ever paint.
-    patch_children(&document, &container, tree, shared, &breakpoint)?;
+    let previous = shared.retained.borrow_mut().take().filter(|r| {
+        r.breakpoint == breakpoint && container.child_element_count() as usize == r.mounts.len()
+    });
+    let (old_nodes, old_mounts) = match previous {
+        Some(r) => (r.nodes, r.mounts),
+        None => {
+            // First mount, a breakpoint change, or someone else touched the
+            // container: start from a clean slate.
+            container.set_text_content(None);
+            (Vec::new(), Vec::new())
+        }
+    };
+    let mounts = patch_list(&document, &container, &old_nodes, old_mounts, &tree, shared, &breakpoint)?;
 
     // `frame||` (see docs/guide/events.md) drives its own clock instead of
     // waiting for a click/hover/key event: refresh which handler (if any)
@@ -151,7 +163,7 @@ fn mount_tree(tree: &[UiRenderNode], shared: &Rc<Shared>) -> Result<(), JsValue>
     // that appears/changes/disappears on a later render is picked up
     // without the host needing to do anything -- this is what replaces
     // pong.js's/pacman.js's hand-rolled `window.setInterval(..., tick)`.
-    *shared.frame_handler.borrow_mut() = find_frame_handler(tree);
+    *shared.frame_handler.borrow_mut() = find_frame_handler(&tree);
     // Bound to a local first (not `if shared.frame_handler.borrow().is_some() { .. }`)
     // so the `Ref` guard drops here, before `start_frame_loop` runs --
     // otherwise it stays alive for the whole `if` block under Rust's
@@ -163,7 +175,107 @@ fn mount_tree(tree: &[UiRenderNode], shared: &Rc<Shared>) -> Result<(), JsValue>
         start_frame_loop(shared);
     }
 
+    // `tick||`/`every||` intervals follow the tree the same way: a timer
+    // starts when a node asking for it is rendered and stops when that node
+    // is gone (an `if{running}` that turned false, say).
+    sync_tick_timers(shared, &tree);
+
+    *shared.retained.borrow_mut() = Some(Retained {
+        nodes: tree,
+        mounts,
+        breakpoint,
+    });
+
     Ok(())
+}
+
+/// Collects the distinct `(handler, interval_ms)` pairs the tree asks for.
+fn find_ticks(nodes: &[Rc<UiRenderNode>], out: &mut Vec<(String, i32)>) {
+    for node in nodes {
+        if let Some(handler) = &node.on_tick {
+            let ms = node.every_ms.unwrap_or(1000.0).clamp(10.0, 86_400_000.0) as i32;
+            let key = (handler.clone(), ms);
+            if !out.contains(&key) {
+                out.push(key);
+            }
+        }
+        find_ticks(&node.children, out);
+    }
+}
+
+/// Starts intervals the tree newly asks for and stops the ones it no longer
+/// does. A stopped timer's closure is leaked on purpose (same convention as
+/// the rest of this module): the stop can happen from inside that very
+/// timer's own callback, and dropping a running closure would trap.
+fn sync_tick_timers(shared: &Rc<Shared>, tree: &[Rc<UiRenderNode>]) {
+    let Some(window) = web_sys::window() else {
+        return;
+    };
+    let mut wanted = Vec::new();
+    find_ticks(tree, &mut wanted);
+
+    let mut timers = shared.timers.borrow_mut();
+    let mut kept = Vec::new();
+    for timer in timers.drain(..) {
+        if wanted
+            .iter()
+            .any(|(handler, ms)| *handler == timer.handler && *ms == timer.every_ms)
+        {
+            kept.push(timer);
+        } else {
+            window.clear_interval_with_handle(timer.id);
+            std::mem::forget(timer.callback);
+        }
+    }
+    *timers = kept;
+
+    for (handler, every_ms) in wanted {
+        if timers
+            .iter()
+            .any(|t| t.handler == handler && t.every_ms == every_ms)
+        {
+            continue;
+        }
+        let shared_for_tick = shared.clone();
+        let handler_for_tick = handler.clone();
+        let callback = Closure::wrap(Box::new(move || {
+            run_tick(&shared_for_tick, &handler_for_tick);
+        }) as Box<dyn FnMut()>);
+        if let Ok(id) = window.set_interval_with_callback_and_timeout_and_arguments_0(
+            callback.as_ref().unchecked_ref(),
+            every_ms,
+        ) {
+            timers.push(TickTimer {
+                handler,
+                every_ms,
+                id,
+                callback,
+            });
+        }
+    }
+}
+
+/// One `tick||` interval firing: run the handler, re-render.
+fn run_tick(shared: &Rc<Shared>, handler: &str) {
+    sync_viewport_width(shared);
+    // Bound to a local first so the `RefMut` drops before `mount_tree`
+    // (which reconciles timers and may touch the session again).
+    let result = match shared.session.try_borrow_mut() {
+        Ok(mut session) => Some(session.dispatch(handler)),
+        Err(_) => None,
+    };
+    match result {
+        None => {}
+        Some(Ok(tree)) => {
+            if let Err(e) = mount_tree(tree, shared) {
+                web_sys::console::error_1(&e);
+            }
+        }
+        Some(Err(e)) => web_sys::console::error_1(&JsValue::from_str(&format!(
+            "tint: tick dispatch({}) failed: {}",
+            handler, e
+        ))),
+    }
 }
 
 /// Depth-first search for the first node in `nodes` (or its descendants)
@@ -171,7 +283,7 @@ fn mount_tree(tree: &[UiRenderNode], shared: &Rc<Shared>) -> Result<(), JsValue>
 /// node (see docs/guide/events.md's `GameRoot` example), so "first found"
 /// is enough -- this isn't trying to support multiple independent frame
 /// loops in one tree.
-fn find_frame_handler(nodes: &[UiRenderNode]) -> Option<String> {
+fn find_frame_handler(nodes: &[Rc<UiRenderNode>]) -> Option<String> {
     for node in nodes {
         if node.on_frame.is_some() {
             return node.on_frame.clone();
@@ -253,7 +365,7 @@ fn start_frame_loop(shared: &Rc<Shared>) {
             match dispatch_result {
                 None => {}
                 Some(Ok(tree)) => {
-                    if let Err(e) = mount_tree(&tree, &shared_for_loop) {
+                    if let Err(e) = mount_tree(tree, &shared_for_loop) {
                         web_sys::console::error_1(&e);
                     }
                 }
@@ -285,173 +397,273 @@ fn start_frame_loop(shared: &Rc<Shared>) {
     );
 }
 
-/// Keyed DOM patching. Keyed children are moved and updated in place instead
-/// of being destroyed, preserving focus, media playback and CSS animation
-/// state. Unkeyed children keep the simple positional behavior.
-fn patch_children(
+/// One mounted DOM element plus its mounted children, mirroring the shape of
+/// the `UiRenderNode` it was built from. Diffing against the retained
+/// previous tree happens in Rust, so an unchanged node costs no DOM calls.
+struct MNode {
+    el: Element,
+    children: Vec<MNode>,
+    has_hover: bool,
+}
+
+/// What is currently on screen: the previous render tree and its elements.
+struct Retained {
+    nodes: Vec<Rc<UiRenderNode>>,
+    mounts: Vec<MNode>,
+    breakpoint: String,
+}
+
+/// The HTML tag `build_node` picks for a render node.
+fn dom_tag_name(node: &UiRenderNode) -> &'static str {
+    let is_link = node.route.is_some();
+    if is_link {
+        "a"
+    } else if node.tag == "Inline" || node.tag == "Text" {
+        "span"
+    } else if node.asset.is_some() && node.tag == "Image" {
+        "img"
+    } else if node.asset.is_some() && node.tag == "Audio" {
+        "audio"
+    } else if node.tag == "Button"
+        || node.tag == "MenuItem"
+        || node.on_click.is_some()
+        || node.on_js.is_some()
+    {
+        "button"
+    } else {
+        "div"
+    }
+}
+
+/// Keyed DOM patching against the retained previous tree. Keyed children are
+/// matched by key, unkeyed ones by position; a match must keep both the
+/// Tint tag and the HTML tag. Matched elements are patched in place (focus,
+/// media playback and CSS animation state survive), unmatched old elements
+/// are removed, new ones are inserted. No DOM reads are needed to decide.
+fn patch_list(
     document: &Document,
     parent: &Element,
-    nodes: &[UiRenderNode],
+    old_nodes: &[Rc<UiRenderNode>],
+    old_mounts: Vec<MNode>,
+    nodes: &[Rc<UiRenderNode>],
     shared: &Rc<Shared>,
     breakpoint: &str,
-) -> Result<(), JsValue> {
-    let parent_node: web_sys::Node = parent.clone().into();
-    let old: Vec<Element> = (0..parent_node.child_nodes().length())
-        .filter_map(|i| parent_node.child_nodes().item(i))
-        .filter_map(|node| node.dyn_into::<Element>().ok())
-        .collect();
-    let mut used = Vec::new();
+) -> Result<Vec<MNode>, JsValue> {
+    let mut old: Vec<Option<MNode>> = old_mounts.into_iter().map(Some).collect();
+    // (mounted node, index it had in the old list if it was reused)
+    let mut plan: Vec<(MNode, Option<usize>)> = Vec::with_capacity(nodes.len());
 
     for (index, node) in nodes.iter().enumerate() {
-        let mut candidate = None;
-        if let Some(key) = &node.key {
-            for (i, child) in old.iter().enumerate() {
-                if child.get_attribute("data-tint-key").as_deref() == Some(key)
-                    && !used.contains(&i)
-                {
-                    candidate = Some((i, child.clone()));
-                    break;
-                }
-            }
-        } else if let Some(child) = old.get(index) {
-            candidate = Some((index, child.clone()));
-        }
-
-        // Only a same-tag candidate is safe to hand to `patch_node`.
-        // `patch_node` itself falls back to `build_node` on a tag
-        // mismatch, but if it were still marked `used` below, the cleanup
-        // pass at the end of this function would never remove it -- the
-        // stale old element (e.g. a Slot's "PlayerTop" after the paddle
-        // moves down into "PlayerMid") would stay in the DOM forever,
-        // orphaned alongside the freshly built replacement. Filtering it
-        // out here instead makes a tag mismatch behave like any other
-        // no-longer-present old child: cleaned up below like normal.
-        let candidate = candidate.filter(|(_, child)| {
-            child.get_attribute("data-tag").as_deref() == Some(node.tag.as_str())
-        });
-
-        let element = if let Some((old_index, child)) = candidate {
-            used.push(old_index);
-            patch_node(document, &child, node, shared, breakpoint)?
+        let candidate = if let Some(key) = &node.key {
+            old_nodes
+                .iter()
+                .enumerate()
+                .position(|(i, o)| o.key.as_deref() == Some(key.as_str()) && old[i].is_some())
+        } else if index < old.len() && old[index].is_some() {
+            Some(index)
         } else {
-            build_node(document, node, shared, breakpoint)?
+            None
         };
-        // append_child moves an existing node, giving keyed reorder semantics --
-        // but calling it when `element` is ALREADY this parent's child at
-        // `index` still removes-and-reinserts it per spec, just to land back
-        // in the same place. That happens synchronously inside every
-        // dispatch (including the `pointerdown` handler `bind_dispatch`
-        // binds for `click||`), and a synchronous detach/reattach of the
-        // event target cancels the browser's own pending `click` on it --
-        // which is what native `<a href>` navigation (`route::`) fires on.
-        // A Sandbox/GitHub link with a `click||` handler stopped navigating
-        // for exactly this reason: pressing it dispatched, dispatch
-        // rebuilt/re-appended the whole tree including the link itself, and
-        // that reinsertion swallowed the click that would have followed.
-        let element_node: &web_sys::Node = element.as_ref();
-        let already_placed = parent_node
-            .child_nodes()
-            .item(index as u32)
-            .map(|existing| existing.is_same_node(Some(element_node)))
-            .unwrap_or(false);
-        if !already_placed {
-            parent.append_child(&element)?;
+        let candidate = candidate.filter(|&i| {
+            old_nodes[i].tag == node.tag && dom_tag_name(&old_nodes[i]) == dom_tag_name(node)
+        });
+        match candidate {
+            Some(i) => {
+                let mounted = old[i].take().expect("candidate is unused");
+                let mounted = patch_node(document, &old_nodes[i], node, mounted, shared, breakpoint)?;
+                plan.push((mounted, Some(i)));
+            }
+            None => plan.push((build_node(document, node, shared, breakpoint)?, None)),
         }
     }
 
-    for i in (0..old.len()).rev() {
-        if !used.contains(&i) {
-            parent.remove_child(&old[i])?;
+    // Unmatched old elements go away.
+    for leftover in old.into_iter().flatten() {
+        parent.remove_child(&leftover.el)?;
+    }
+
+    // Place elements. Reused elements already sit in their old relative
+    // order; if that order still holds we only insert the new ones (and never
+    // detach a reused element, which would swallow a pending `click`).
+    // Otherwise (keyed reorder) fall back to re-appending everything in order.
+    let mut last_reused: Option<usize> = None;
+    let mut ordered = true;
+    for (_, reused) in &plan {
+        if let Some(i) = reused {
+            if last_reused.is_some_and(|l| *i < l) {
+                ordered = false;
+                break;
+            }
+            last_reused = Some(*i);
         }
     }
-    Ok(())
+    if ordered {
+        let mut next: Option<web_sys::Node> = None;
+        for (mounted, reused) in plan.iter().rev() {
+            if reused.is_none() {
+                parent.insert_before(&mounted.el, next.as_ref())?;
+            }
+            next = Some(mounted.el.clone().into());
+        }
+    } else {
+        for (mounted, _) in &plan {
+            parent.append_child(&mounted.el)?;
+        }
+    }
+
+    Ok(plan.into_iter().map(|(m, _)| m).collect())
+}
+
+fn same_children(a: &[Rc<UiRenderNode>], b: &[Rc<UiRenderNode>]) -> bool {
+    a.len() == b.len() && a.iter().zip(b).all(|(x, y)| Rc::ptr_eq(x, y) || **x == **y)
 }
 
 fn patch_node(
     document: &Document,
-    element: &Element,
-    node: &UiRenderNode,
+    old: &Rc<UiRenderNode>,
+    new: &Rc<UiRenderNode>,
+    mut m: MNode,
     shared: &Rc<Shared>,
     breakpoint: &str,
-) -> Result<Element, JsValue> {
-    if element.get_attribute("data-tag").as_deref() != Some(node.tag.as_str()) {
-        return build_node(document, node, shared, breakpoint);
+) -> Result<MNode, JsValue> {
+    // Nothing changed anywhere below: no DOM work at all. Hoverable nodes
+    // below still need their pointer state reconciled, so they opt out.
+    if !m.has_hover && (Rc::ptr_eq(old, new) || **old == **new) {
+        return Ok(m);
     }
-    // Every write below is skipped when the value hasn't actually changed.
-    // `set_attribute`/`set_text_content` record a DOM mutation -- and flash
-    // the element in DevTools -- even when writing back the same value it
-    // already holds, and `patch_node` runs on every render (including the
-    // pong demo's 120ms game tick) for every node in a mostly-static tree,
-    // so without these guards nearly everything appears to flicker for no
-    // reason.
-    if element.get_attribute("data-tint-source").as_deref() != Some(node.tint_source.as_str()) {
-        element.set_attribute("data-tint-source", &node.tint_source)?;
+    let el = m.el.clone();
+
+    if old.tint_source != new.tint_source {
+        el.set_attribute("data-tint-source", &new.tint_source)?;
     }
-    if let Some(key) = &node.key {
-        if element.get_attribute("data-tint-key").as_deref() != Some(key.as_str()) {
-            element.set_attribute("data-tint-key", key)?;
+    if old.key != new.key {
+        match &new.key {
+            Some(key) => el.set_attribute("data-tint-key", key)?,
+            None => el.remove_attribute("data-tint-key")?,
         }
     }
-    if let Some(asset) = &node.asset {
-        if element.get_attribute("src").as_deref() != Some(asset.as_str()) {
-            element.set_attribute("src", asset)?;
+    if old.asset != new.asset {
+        if let Some(asset) = &new.asset {
+            el.set_attribute("src", asset)?;
         }
     }
-    if let Some(svg) = &node.svg {
-        element.set_inner_html(svg);
-    } else if let Some(text) = &node.text {
-        if element.text_content().as_deref() != Some(text.as_str()) {
-            element.set_text_content(Some(text));
+    if old.route != new.route || old.target != new.target {
+        if let Some(route) = &new.route {
+            el.set_attribute("href", route)?;
+            match &new.target {
+                Some(target) => {
+                    el.set_attribute("target", target)?;
+                    if target == "_blank" {
+                        el.set_attribute("rel", "noopener noreferrer")?;
+                    } else {
+                        el.remove_attribute("rel")?;
+                    }
+                }
+                None => {
+                    el.remove_attribute("target")?;
+                    el.remove_attribute("rel")?;
+                }
+            }
         }
+    }
+    if old.reference != new.reference {
+        match &new.reference {
+            Some(r) => el.set_attribute("data-tint-ref", r)?,
+            None => el.remove_attribute("data-tint-ref")?,
+        }
+    }
+    if old.on_js != new.on_js {
+        match &new.on_js {
+            Some(r) => el.set_attribute("data-tint-js", r)?,
+            None => el.remove_attribute("data-tint-js")?,
+        }
+    }
+
+    let old_had_leaf = old.svg.is_some() || old.text.is_some();
+    if let Some(svg) = &new.svg {
+        if old.svg.as_ref() != Some(svg) {
+            el.set_inner_html(svg);
+        }
+        m.children.clear();
+    } else if let Some(text) = &new.text {
+        if old.text.as_ref() != Some(text) || old.svg.is_some() || !m.children.is_empty() {
+            el.set_text_content(Some(text));
+        }
+        m.children.clear();
     } else {
-        patch_children(document, element, &node.children, shared, breakpoint)?;
-    }
-    let is_button = element.tag_name().eq_ignore_ascii_case("button");
-    let mut props = Vec::new();
-    if is_button { props.extend(BUTTON_RESET.iter().map(|(k, v)| (k.to_string(), v.to_string()))); }
-    props.extend(node.style.iter().cloned());
-    if let Some((_, styles)) = node.breakpoints.iter().find(|(name, _)| name == breakpoint) {
-        props.extend(styles.iter().cloned());
-    }
-    // Keep the hover closures bound in `build_node` current: they read
-    // these two attributes at event time instead of a string captured once
-    // when the element was first built, which otherwise went stale the
-    // moment a patch (a theme switch, e.g.) resolved a different style for
-    // this same reused element -- see the comment in `build_node`.
-    if !node.hover_style.is_empty() {
-        let base_css = style_to_css_text(&props);
-        let mut hover_props = props.clone();
-        hover_props.extend(node.hover_style.iter().cloned());
-        let hover_css = style_to_css_text(&hover_props);
-        if element.get_attribute("data-tint-base-css").as_deref() != Some(base_css.as_str()) {
-            let _ = element.set_attribute("data-tint-base-css", &base_css);
-        }
-        if element.get_attribute("data-tint-hover-css").as_deref() != Some(hover_css.as_str()) {
-            let _ = element.set_attribute("data-tint-hover-css", &hover_css);
+        let (old_kids, old_mounts): (&[Rc<UiRenderNode>], Vec<MNode>) = if old_had_leaf {
+            el.set_text_content(None);
+            (&[], Vec::new())
+        } else {
+            (&old.children, std::mem::take(&mut m.children))
+        };
+        if !old_mounts.iter().any(|c| c.has_hover) && same_children(old_kids, &new.children) {
+            m.children = old_mounts;
+        } else {
+            m.children = patch_list(
+                document,
+                &el,
+                old_kids,
+                old_mounts,
+                &new.children,
+                shared,
+                breakpoint,
+            )?;
         }
     }
-    // Reconcile hover from the browser's actual pointer state on every patch.
-    // The attribute is only a fast path between events; trusting it forever
-    // leaves a stale hover after a missed mouseleave (and causes flicker when
-    // a game tick patches the node while the pointer is over it).
-    let is_hovered = !node.hover_style.is_empty()
-        && element
-            .matches(":hover")
-            .unwrap_or_else(|_| {
-                element.get_attribute("data-tint-hover").as_deref() == Some("true")
-            });
-    if is_hovered {
-        if element.get_attribute("data-tint-hover").as_deref() != Some("true") {
-            let _ = element.set_attribute("data-tint-hover", "true");
+
+    let hoverable = !new.hover_style.is_empty() || !old.hover_style.is_empty();
+    let style_changed = old.style != new.style
+        || old.breakpoints != new.breakpoints
+        || old.hover_style != new.hover_style;
+    if style_changed || hoverable {
+        let mut props = Vec::new();
+        if dom_tag_name(new) == "button" {
+            props.extend(BUTTON_RESET.iter().map(|(k, v)| (k.to_string(), v.to_string())));
         }
-    } else if element.has_attribute("data-tint-hover") {
-        let _ = element.remove_attribute("data-tint-hover");
+        props.extend(new.style.iter().cloned());
+        if let Some((_, styles)) = new.breakpoints.iter().find(|(name, _)| name == breakpoint) {
+            props.extend(styles.iter().cloned());
+        }
+        if !hoverable {
+            el.set_attribute("style", &style_to_css_text(&props))?;
+        } else {
+            // Keep the hover closures bound in `build_node` current: they
+            // read these attributes at event time.
+            if !new.hover_style.is_empty() {
+                let base_css = style_to_css_text(&props);
+                let mut hover_props = props.clone();
+                hover_props.extend(new.hover_style.iter().cloned());
+                let hover_css = style_to_css_text(&hover_props);
+                if el.get_attribute("data-tint-base-css").as_deref() != Some(base_css.as_str()) {
+                    let _ = el.set_attribute("data-tint-base-css", &base_css);
+                }
+                if el.get_attribute("data-tint-hover-css").as_deref() != Some(hover_css.as_str()) {
+                    let _ = el.set_attribute("data-tint-hover-css", &hover_css);
+                }
+            }
+            // Reconcile hover from the browser's actual pointer state; the
+            // attribute is only a fast path between events.
+            let is_hovered = !new.hover_style.is_empty()
+                && el.matches(":hover").unwrap_or_else(|_| {
+                    el.get_attribute("data-tint-hover").as_deref() == Some("true")
+                });
+            if is_hovered {
+                if el.get_attribute("data-tint-hover").as_deref() != Some("true") {
+                    let _ = el.set_attribute("data-tint-hover", "true");
+                }
+            } else if el.has_attribute("data-tint-hover") {
+                let _ = el.remove_attribute("data-tint-hover");
+            }
+            if is_hovered {
+                props.extend(new.hover_style.iter().cloned());
+            }
+            apply_style_props(&el, &props)?;
+        }
     }
-    if is_hovered {
-        props.extend(node.hover_style.iter().cloned());
-    }
-    apply_style_props(element, &props)?;
-    Ok(element.clone())
+
+    m.has_hover = !new.hover_style.is_empty() || m.children.iter().any(|c| c.has_hover);
+    Ok(m)
 }
 
 fn apply_style_props(el: &Element, props: &[(String, String)]) -> Result<(), JsValue> {

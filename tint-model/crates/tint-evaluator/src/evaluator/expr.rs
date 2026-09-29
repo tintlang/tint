@@ -92,11 +92,12 @@ pub fn eval_expr<H: EvalHost>(host: &mut H, expr: &Expr) -> Value {
 
             if let (Some(x), Some(y)) = (a.as_number(), b.as_number()) {
                 match op.as_str() {
-                    "+" | "-" | "*" | "/" => {
+                    "+" | "-" | "*" | "/" | "%" => {
                         let result = match op.as_str() {
                             "+" => x + y,
                             "-" => x - y,
                             "*" => x * y,
+                            "%" => x % y,
                             _ => x / y,
                         };
                         return typed_numeric_result(&a, &b, result);
@@ -111,11 +112,18 @@ pub fn eval_expr<H: EvalHost>(host: &mut H, expr: &Expr) -> Value {
                 }
             }
 
+            // String concatenation: either side being a string is enough, the
+            // other side is appended by display text (same as the IR VM).
+            if op == "+" && (matches!(a, Value::String(_)) || matches!(b, Value::String(_))) {
+                return Value::String(format!("{a}{b}"));
+            }
+
             match (a, op.as_str(), b) {
                 (Value::Number(x), "+", Value::Number(y)) => Value::Number(x + y),
                 (Value::Number(x), "-", Value::Number(y)) => Value::Number(x - y),
                 (Value::Number(x), "*", Value::Number(y)) => Value::Number(x * y),
                 (Value::Number(x), "/", Value::Number(y)) => Value::Number(x / y),
+                (Value::Number(x), "%", Value::Number(y)) => Value::Number(x % y),
 
                 (left, "+", right) => match (vec2_components(&left), vec2_components(&right)) {
                     (Some((x1, y1)), Some((x2, y2))) => vec2_value(x1 + x2, y1 + y2),

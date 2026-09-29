@@ -48,6 +48,22 @@ impl RuntimeScopeStack {
         false
     }
 
+    /// Number of scope frames currently on the stack.
+    pub fn depth(&self) -> usize {
+        self.frames.len()
+    }
+
+    /// Like `lookup`, but also reports the index of the frame that holds
+    /// the binding and borrows the value instead of cloning it.
+    pub fn lookup_ref(&self, name: &str) -> Option<(usize, &RuntimeValue)> {
+        for (index, frame) in self.frames.iter().enumerate().rev() {
+            if let Some(v) = frame.get(name) {
+                return Some((index, v));
+            }
+        }
+        None
+    }
+
     pub fn lookup(&self, name: &str) -> Option<RuntimeValue> {
         for frame in self.frames.iter().rev() {
             if let Some(v) = frame.get(name) {

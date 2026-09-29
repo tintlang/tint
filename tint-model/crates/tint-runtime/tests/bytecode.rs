@@ -21,7 +21,7 @@ fn bytecode_round_trip_uses_the_same_ui_runtime() {
     let mut session =
         UiSession::from_bytecode(&bytes, "App").expect("bytecode session must use the existing VM");
     let tree = session.render().expect("bytecode UI must render");
-    fn contains_text(nodes: &[tint_runtime::ui::render::UiRenderNode]) -> bool {
+    fn contains_text(nodes: &[std::rc::Rc<tint_runtime::ui::render::UiRenderNode>]) -> bool {
         nodes.iter().any(|node| {
             (node.tag == "Text" && node.text.as_deref() == Some("Hello from bytecode"))
                 || contains_text(&node.children)

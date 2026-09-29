@@ -1,0 +1,11 @@
+// Known gaps. Each case documents intended behaviour and must currently
+// FAIL. When one starts passing the suite fails: turn it into a plain `expect`
+// and move it to the matching topic file. Keep parse-level gaps in their own
+// file each -- a parse error takes down every case in the same file.
+
+// expect: 3
+// xfail: `else if` chains are not parsed (parse_if_stmt/parse_if_expr accept only `else { }`)
+fn else_if_chain() {
+    let x = 5
+    if x < 0 { 1 } else if x < 3 { 2 } else { 3 }
+}

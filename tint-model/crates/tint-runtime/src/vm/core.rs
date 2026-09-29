@@ -15,8 +15,11 @@ impl TintVM {
 
             ui: UiRuntime::new(),
             treewalk_call_depth: 0,
+            read_logs: Vec::new(),
+            #[cfg(feature = "ir")]
             has_constants: false,
 
+            #[cfg(feature = "ir")]
             ir_program: ProgramIR::new(),
             last_result: EvalValue::Unit,
         };
@@ -76,9 +79,12 @@ impl TintVM {
 
     // PROGRAM ENTRY
     pub fn run_program(&mut self, program: &Program) {
-        let mut compiler = SsaCompiler::new();
-        self.ir_program = compiler.compile_program(program);
-        optimize(&mut self.ir_program);
+        #[cfg(feature = "ir")]
+        {
+            let mut compiler = SsaCompiler::new();
+            self.ir_program = compiler.compile_program(program);
+            optimize(&mut self.ir_program);
+        }
         self.register_functions(program);
         self.register_constants(program);
         self.mount_ui(program);
@@ -90,16 +96,20 @@ impl TintVM {
         for item in &program.items {
             match item {
                 Item::Fn(f) | Item::ExportFn(f, _) => {
-                    self.logic_functions.insert(f.name.clone(), f.clone());
+                    self.logic_functions
+                        .insert(f.name.clone(), Rc::new(f.clone()));
                 }
                 Item::UiFn(ui) => {
-                    self.ui_functions.insert(ui.name.clone(), ui.clone());
+                    self.ui_functions
+                        .insert(ui.name.clone(), Rc::new(ui.clone()));
                 }
                 Item::Impl(block) => {
                     if let tint_ast::Type::Simple(target) = &block.target {
                         for method in &block.methods {
-                            self.impl_methods
-                                .insert((target.clone(), method.name.clone()), method.clone());
+                            self.impl_methods.insert(
+                                (target.clone(), method.name.clone()),
+                                Rc::new(method.clone()),
+                            );
                         }
                     }
                 }
@@ -119,7 +129,10 @@ impl TintVM {
                     _ => value,
                 };
                 self.define_var(&constant.name, value);
-                self.has_constants = true;
+                #[cfg(feature = "ir")]
+                {
+                    self.has_constants = true;
+                }
             }
         }
     }

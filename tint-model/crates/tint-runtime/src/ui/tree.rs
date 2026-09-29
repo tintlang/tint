@@ -2,7 +2,10 @@
 
 use super::style::StyleList;
 use std::collections::HashMap;
+use std::rc::Rc;
 use tint_ast::UiModifierValue;
+
+use super::render::UiRenderNode;
 
 pub type UiNodeId = usize;
 
@@ -41,6 +44,10 @@ pub struct UiElement {
     pub on_key_down: Option<String>,
     pub on_key_up: Option<String>,
     pub on_frame: Option<String>,
+    /// Handler from `tick||handler`, run every `every_ms` milliseconds.
+    pub on_tick: Option<String>,
+    /// Interval from `every||ms` (used with `tick||`).
+    pub every_ms: Option<f64>,
     pub asset: Option<String>,
     pub key: Option<String>,
     pub sound: Option<String>,
@@ -63,6 +70,10 @@ pub struct UiElement {
     pub reference: Option<String>,
     /// Host callback name from js||callback.
     pub on_js: Option<String>,
+
+    /// Set when this node stands for a subtree reused from the previous
+    /// render (see builder/cache.rs): its finished, shared render form.
+    pub prebuilt: Option<Rc<UiRenderNode>>,
 }
 
 impl UiElement {
@@ -82,6 +93,8 @@ impl UiElement {
             on_key_down: None,
             on_key_up: None,
             on_frame: None,
+            on_tick: None,
+            every_ms: None,
             asset: None,
             key: None,
             sound: None,
@@ -90,6 +103,7 @@ impl UiElement {
             target: None,
             reference: None,
             on_js: None,
+            prebuilt: None,
         }
     }
 }
@@ -198,6 +212,13 @@ impl UiTree {
             node.on_key_down = on_key_down;
             node.on_key_up = on_key_up;
             node.on_frame = on_frame;
+        }
+    }
+
+    pub fn set_tick(&mut self, id: UiNodeId, handler: Option<String>, every_ms: Option<f64>) {
+        if let Some(node) = self.nodes.get_mut(id) {
+            node.on_tick = handler;
+            node.every_ms = every_ms;
         }
     }
 

@@ -67,6 +67,7 @@ impl<'a> IrVM<'a> {
                         (Value::Number(a), "-", Value::Number(b)) => Value::Number(a - b),
                         (Value::Number(a), "*", Value::Number(b)) => Value::Number(a * b),
                         (Value::Number(a), "/", Value::Number(b)) => Value::Number(a / b),
+                        (Value::Number(a), "%", Value::Number(b)) => Value::Number(a % b),
 
                         (Value::StructInstance { .. }, "+", Value::StructInstance { .. }) => {
                             Self::vec2_binary(&l, &r, "+")

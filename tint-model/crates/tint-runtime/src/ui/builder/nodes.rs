@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use super::helpers::*;
 use super::*;
 
@@ -78,7 +80,7 @@ impl UiBuilder {
             }
 
             _ => {
-                if let Some(id) = self.build(node, host) {
+                if let Some(id) = self.build_reusing(node, host) {
                     self.tree.add_child(parent, id);
                 }
             }
@@ -99,7 +101,13 @@ impl UiBuilder {
 
         if let Some(component) = self.components.get(name) {
             let component = component.clone();
-            return self.build_component(name, attributes, modifiers, children, &component, host);
+            // Nodes inside a component template are cloned per invocation, so
+            // their addresses mean nothing between renders: no reuse inside.
+            self.component_depth += 1;
+            let built =
+                self.build_component(name, attributes, modifiers, children, &component, host);
+            self.component_depth -= 1;
+            return built;
         }
 
         let expanded = self.expand_styles(modifiers);
@@ -112,6 +120,7 @@ impl UiBuilder {
         apply_events(&mut self.tree, id, attributes);
         apply_svg(&mut self.tree, id, attributes);
         apply_route(&mut self.tree, id, attributes);
+        apply_tick(&mut self.tree, id, attributes);
         apply_target(&mut self.tree, id, attributes);
         apply_reference(&mut self.tree, id, attributes);
         apply_js_handler(&mut self.tree, id, attributes);
@@ -206,6 +215,7 @@ impl UiBuilder {
                 }
             }
         }
+        self.tokens_hash = hash_tokens(&self.tokens);
     }
 
     pub(super) fn collect_styles(&mut self, nodes: &[UiNode]) {
@@ -325,6 +335,7 @@ impl UiBuilder {
         apply_events(&mut self.tree, id, attributes);
         apply_svg(&mut self.tree, id, attributes);
         apply_route(&mut self.tree, id, attributes);
+        apply_tick(&mut self.tree, id, attributes);
         apply_target(&mut self.tree, id, attributes);
         apply_reference(&mut self.tree, id, attributes);
         apply_js_handler(&mut self.tree, id, attributes);
@@ -423,7 +434,94 @@ impl UiBuilder {
         }
     }
 
+    /// `build`, but a pure subtree whose outer inputs are unchanged since the
+    /// previous render is reused instead of rebuilt (see cache.rs).
+    fn build_reusing<H: EvalHost>(&mut self, node: &UiNode, host: &mut H) -> Option<UiNodeId> {
+        if self.cache.is_none() || self.component_depth > 0 {
+            return self.build(node, host);
+        }
+        let key = node as *const UiNode as usize;
+        let tokens = self.tokens_hash;
+        let cache = self.cache.as_mut().expect("checked above");
+        if !cache.is_pure(key, node) {
+            return self.build(node, host);
+        }
+
+        let visit = {
+            let count = self.visits.entry(key).or_insert(0);
+            let visit = *count;
+            *count += 1;
+            visit
+        };
+
+        // Hit: same tokens and every outer variable it read still holds the
+        // value it had.
+        let hit = self
+            .cache
+            .as_ref()
+            .and_then(|cache| cache.entries.get(&key))
+            .and_then(|entries| entries.get(visit))
+            .filter(|entry| entry.tokens == tokens && host.reads_unchanged(&entry.reads))
+            .map(|entry| (entry.reads.clone(), entry.render.clone()));
+        if let Some((reads, render)) = hit {
+            host.track_merge(&reads);
+            return render.map(|render| {
+                let id = self.tree.create_node(render.tag.clone());
+                self.tree.nodes[id].prebuilt = Some(render);
+                id
+            });
+        }
+
+        // Miss: build while recording what it reads, then remember it.
+        host.track_begin();
+        let built = self.build(node, host);
+        let reads = host.track_end();
+        let render = built.map(|id| {
+            let render = super::super::render::to_render_rc(&self.tree, id);
+            self.tree.nodes[id].prebuilt = Some(Rc::clone(&render));
+            render
+        });
+        let entry = super::cache::CacheEntry {
+            reads,
+            tokens,
+            render,
+        };
+        let entries = self
+            .cache
+            .as_mut()
+            .expect("checked above")
+            .entries
+            .entry(key)
+            .or_default();
+        if visit < entries.len() {
+            entries[visit] = entry;
+        } else {
+            entries.push(entry);
+        }
+        built
+    }
+
+    /// Hands the cache back to the runtime after dropping entries this render
+    /// did not touch.
+    pub fn take_cache(&mut self) -> Option<UiBuildCache> {
+        let mut cache = self.cache.take()?;
+        cache.sweep(&self.visits);
+        Some(cache)
+    }
+
     pub fn finish(self) -> UiTree {
         self.tree
     }
+}
+
+fn hash_tokens(tokens: &HashMap<String, UiModifierValue>) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut keys: Vec<&String> = tokens.keys().collect();
+    keys.sort();
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    for key in keys {
+        key.hash(&mut hasher);
+        format!("{:?}", tokens[key]).hash(&mut hasher);
+    }
+    hasher.finish()
 }

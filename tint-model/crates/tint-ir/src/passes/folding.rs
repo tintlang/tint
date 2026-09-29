@@ -31,6 +31,7 @@ pub(super) fn constant_folding(func: &mut FunctionIR) -> bool {
                             "-" => Some(a - b),
                             "*" => Some(a * b),
                             "/" => Some(a / b),
+                            "%" => Some(a % b),
                             _ => None,
                         };
 

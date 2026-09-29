@@ -4,6 +4,7 @@
 
 use std::collections::HashMap;
 use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::rc::Rc;
 
 use tint_ast::{Item, Program, Span};
 use tint_evaluator::errors::EvalResult;
@@ -30,6 +31,9 @@ pub const VIEWPORT_WIDTH_VAR: &str = "viewport_width";
 pub struct UiSession {
     vm: TintVM,
     ui_fn_name: String,
+    /// Reuse unchanged subtrees between renders (default). Turning it off
+    /// rebuilds everything every time; results are identical either way.
+    reuse: bool,
 }
 
 impl UiSession {
@@ -105,6 +109,7 @@ impl UiSession {
             Ok(vm) => Ok(Self {
                 vm,
                 ui_fn_name: ui_fn_name.to_string(),
+                reuse: true,
             }),
             Err(panic) => Err(panic_message(panic)),
         }
@@ -121,11 +126,17 @@ impl UiSession {
             .define_var(VIEWPORT_WIDTH_VAR, EvalValue::Number(width));
     }
 
+    /// Enables or disables subtree reuse between renders.
+    pub fn set_reuse(&mut self, reuse: bool) {
+        self.reuse = reuse;
+    }
+
     /// Builds and returns the session's current tree.
-    pub fn render(&mut self) -> Result<Vec<UiRenderNode>, String> {
+    pub fn render(&mut self) -> Result<Vec<Rc<UiRenderNode>>, String> {
         let vm = &mut self.vm;
         let name = &self.ui_fn_name;
-        let outcome = catch_unwind(AssertUnwindSafe(|| vm.render_ui_fn(name, &[])));
+        let reuse = self.reuse;
+        let outcome = catch_unwind(AssertUnwindSafe(|| render(vm, name, reuse)));
         unwrap_outcome(outcome)
     }
 
@@ -133,7 +144,7 @@ impl UiSession {
     /// persistent state, then rebuilds and returns the tree -- see this
     /// module's doc comment for why that needs `call_user_fn` and a
     /// long-lived `TintVM`, not a fresh one per call.
-    pub fn dispatch(&mut self, handler: &str) -> Result<Vec<UiRenderNode>, String> {
+    pub fn dispatch(&mut self, handler: &str) -> Result<Vec<Rc<UiRenderNode>>, String> {
         self.dispatch_with_args(handler, &[])
     }
 
@@ -143,12 +154,13 @@ impl UiSession {
         &mut self,
         handler: &str,
         args: &[EvalValue],
-    ) -> Result<Vec<UiRenderNode>, String> {
+    ) -> Result<Vec<Rc<UiRenderNode>>, String> {
         let vm = &mut self.vm;
         let name = &self.ui_fn_name;
+        let reuse = self.reuse;
         let outcome = catch_unwind(AssertUnwindSafe(|| {
             vm.call_user_fn(handler, args, Span::dummy())?;
-            vm.render_ui_fn(name, &[])
+            render(vm, name, reuse)
         }));
         unwrap_outcome(outcome)
     }
@@ -172,9 +184,17 @@ impl UiSession {
     }
 }
 
+fn render(vm: &mut TintVM, name: &str, reuse: bool) -> EvalResult<Vec<Rc<UiRenderNode>>> {
+    if reuse {
+        vm.render_ui_fn_reusing(name, &[])
+    } else {
+        vm.render_ui_fn_shared_fresh(name, &[])
+    }
+}
+
 fn unwrap_outcome(
-    outcome: std::thread::Result<EvalResult<Vec<UiRenderNode>>>,
-) -> Result<Vec<UiRenderNode>, String> {
+    outcome: std::thread::Result<EvalResult<Vec<Rc<UiRenderNode>>>>,
+) -> Result<Vec<Rc<UiRenderNode>>, String> {
     match outcome {
         Ok(Ok(nodes)) => Ok(nodes),
         Ok(Err(e)) => Err(format!("{:?}", e)),

@@ -40,6 +40,38 @@ impl TintVM {
         name: &str,
         args: &[EvalValue],
     ) -> EvalResult<Vec<crate::ui::render::UiRenderNode>> {
+        self.ui.cache_enabled = false;
+        let nodes = self.render_ui_fn_shared(name, args)?;
+        Ok(nodes.iter().map(|node| (**node).clone()).collect())
+    }
+
+    /// Same as `render_ui_fn`, but keeps the render tree shared and reuses
+    /// every subtree whose inputs did not change since the previous call
+    /// (see ui/builder/cache.rs). Long-lived sessions render through this.
+    pub fn render_ui_fn_reusing(
+        &mut self,
+        name: &str,
+        args: &[EvalValue],
+    ) -> EvalResult<Vec<std::rc::Rc<crate::ui::render::UiRenderNode>>> {
+        self.ui.cache_enabled = true;
+        self.render_ui_fn_shared(name, args)
+    }
+
+    /// Shared-tree render that rebuilds everything (no reuse).
+    pub(crate) fn render_ui_fn_shared_fresh(
+        &mut self,
+        name: &str,
+        args: &[EvalValue],
+    ) -> EvalResult<Vec<std::rc::Rc<crate::ui::render::UiRenderNode>>> {
+        self.ui.cache_enabled = false;
+        self.render_ui_fn_shared(name, args)
+    }
+
+    fn render_ui_fn_shared(
+        &mut self,
+        name: &str,
+        args: &[EvalValue],
+    ) -> EvalResult<Vec<std::rc::Rc<crate::ui::render::UiRenderNode>>> {
         let ui = match self.ui_functions.get(name).cloned() {
             Some(ui) => ui,
             None => {

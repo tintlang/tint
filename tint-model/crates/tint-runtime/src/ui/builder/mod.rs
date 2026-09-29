@@ -15,6 +15,8 @@ pub struct UiComponent {
     pub variants: HashMap<String, (Vec<UiModifier>, Vec<UiNodeOrExpr>)>,
 }
 
+pub use cache::UiBuildCache;
+
 pub struct UiBuilder {
     pub tree: UiTree,
     /// Values collected from the active `theme::{ tokens { ... } }` block.
@@ -22,8 +24,14 @@ pub struct UiBuilder {
     pub tokens: HashMap<String, UiModifierValue>,
     pub styles: HashMap<String, Vec<UiModifier>>,
     pub components: HashMap<String, UiComponent>,
+    /// Subtree reuse across renders; `None` builds everything fresh.
+    pub cache: Option<UiBuildCache>,
+    visits: HashMap<usize, usize>,
+    component_depth: usize,
+    tokens_hash: u64,
 }
 
+mod cache;
 mod core;
 mod helpers;
 mod nodes;

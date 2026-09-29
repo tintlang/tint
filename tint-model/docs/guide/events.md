@@ -37,6 +37,33 @@ fn on_frame(dt: f32) { elapsed = elapsed + dt }
 receives elapsed seconds as `dt`. The host supplies the events and clock; the
 game state and simulation remain in Tint.
 
+### Interval timers
+
+`tick||handler` runs `handler` every `every||ms` milliseconds (1000 if `every`
+is left out); `frame||` above is the per-frame clock, this one is a fixed
+interval. The handler takes no arguments.
+
+```tn
+ui fn App() {
+    state n = 0
+    state running = true
+
+    Column {
+        Text { "count {n}" }
+        Ticker { tick||step every||100 if{running} }
+    }
+}
+
+fn step() {
+    n = n + 1
+    if n >= 5 { running = false }
+}
+```
+
+A timer lives as long as the node that declares it is rendered: put the node
+behind `if{}` to start and stop it from state. `every` needs a `tick` beside
+it and does nothing on its own. The interval is at least 10 ms.
+
 ```tn
 Icon {
     click||open_menu

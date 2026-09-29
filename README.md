@@ -48,7 +48,7 @@ slots, and variants without duplicating the UI tree for each theme.
 
 ## Features
 
-- **Compiler pipeline**: Lexer → Parser → AST → Semantic Checker → SSA IR → Optimizer → WASM
+- **Compiler pipeline**: Lexer → Parser → AST → Semantic Checker → tree-walking evaluator (the single execution engine; the SSA IR + optimizer is an optional `ir` cargo feature of `tint-runtime`, off by default)
 - **UI as a first-class value**: Tint owns the UI tree and rendering semantics, while CSS and JavaScript remain available for styling and host/browser integration
 - **Semantic modifier groups**: `layout::{...}`, `paint::{...}`, and `motion::{...}`; flat modifiers remain accepted for compatibility
 - **Control flow**: `if/else` statements and expressions, `for` loops, functions with persistence, full comparison operators (`< > <= >= == !=`) alongside `&& ||`
@@ -65,6 +65,9 @@ slots, and variants without duplicating the UI tree for each theme.
 - **CLI tools**: Check syntax, run, and generate a prototype HTML shell
 - **Terminal I/O**: `print`, `println`, `read_line`, `parse_number`, and
   `read_key` for native terminal programs
+- **Collections and strings**: methods on lists, strings, and maps (`len`, `push`,
+  `map`, `filter`, `join`, `split`, `trim`, `keys`, ...) -- see
+  [`tint-model/docs/guide/collections.md`](tint-model/docs/guide/collections.md)
 - **Result handling**: `Option<T>`, `Result<T, E>`, `Some`/`None`, `Ok`/`Err`,
   `expect`, `unwrap`, and postfix `?` error propagation
 - **Numeric types**: real `i32`, `i64`, `u8`, `u32`, `u64`, `f32`, and `f64`
@@ -185,7 +188,7 @@ covering the UI runtime, sessions, layout, and rendering.
 ✅ Automatic `.tn` reload and Rust/WASM rebuild with `npm run dev:all`
 ✅ A native fn called from *inside* a plain `fn`'s own body, invoked the normal top-level way through the IR VM -- `IrVM` now falls back to a native-lookup callback (`set_native_call`) when no IR-compiled function matches the callee name, backed by `TintVM::native_fns` (see `tint-runtime/tests/native_fn.rs`)
 ✅ Multi-file modules (`mod`/`use`/`export`) via a `tint-cli`-side loader -- absolute paths only (no `self::`/`super::`), but grouped (`use a::{b, c}`), `as`-aliased, and wildcard (`use a::*`) imports all work alongside the plain form; `fn`/`struct`/`enum` are exportable
-✅ An evolving semantic/type checker with inference over `fn`, `ui fn`, and `impl` method bodies -- `tint check` fails on errors, `tint run` warns and still executes. Built-in and user-defined generic structs/enums are checked strictly; some host-specific UI contracts remain unsupported.
+✅ An evolving semantic/type checker with inference over `fn`, `ui fn`, and `impl` method bodies (including inferred return types and call-site parameter types) -- `tint check` fails on errors, `tint run` warns and still executes. Built-in and user-defined generic structs/enums are checked strictly; some host-specific UI contracts remain unsupported.
 ✅ One UI syntax: the earlier XML dialect (`<Tag ...>...</Tag>`) has been removed -- `Tag { ... }` block syntax is now the only way to write UI, including `match{}`'s case arms (see below)
 ✅ `children { ... }` -- an optional grouping tag for a node's own children, so they don't blur together with several modifiers in the same block; splices straight into its parent, no wrapper node of its own (see `tint-runtime/tests/render_ui.rs`)
 
@@ -196,7 +199,7 @@ covering the UI runtime, sessions, layout, and rendering.
 ✅ Compile-time `.tn` imports in the Vite sandbox source pipeline
 ❌ Namespace access (`Ns::item`) and lambda expressions are unimplemented specifically in the IR VM path (both already work through the tree-walking path used for UI handlers)
 ❌ Tuple-style enum variants (`enum E { A(T) }`) -- rejected at the semantic-check stage; only named-field variants (`enum E { A { x } }`) are supported
-❌ Full type-system coverage (some host-specific UI contracts and generic functions are still incomplete)
+❌ Full type-system coverage (lambda parameters, `Option`/`Result` holes, generic functions, and some host-specific UI contracts are still incomplete)
 ❌ Generic functions and advanced generic constraints
 ❌ Async/await
 
@@ -285,8 +288,8 @@ Each compiler phase is independent:
 - **Lexer** → tokens (no state)
 - **Parser** → AST (recursive descent)
 - **Semantics** → validates scopes, types, call graph
-- **IR** → SSA form, optimization passes
-- **VM** → executes IR (native + WASM)
+- **Evaluator** → executes the AST (the only engine on the default runtime path)
+- **IR** → SSA form, optimization passes; experimental, behind the `ir` feature of `tint-runtime`
 
 No external DSL files—grammar is in code for easy modification.
 

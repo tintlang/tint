@@ -17,6 +17,9 @@ impl SemanticChecker {
             generic_params_by_type: HashMap::new(),
             generic_params: HashSet::new(),
             current_return: None,
+            observed_returns: None,
+            call_args: HashMap::new(),
+            record_calls: false,
             errors: vec![],
             inferred: HashMap::new(),
             references: vec![],
@@ -64,6 +67,8 @@ impl SemanticChecker {
         self.symbols.clear();
         self.known_fns.extend(self.external_context.known_fns.iter().cloned());
         self.collect_top_level_names(&program.items);
+        self.type_ui_state(&program.items);
+        self.infer_return_types(&program.items);
         for item in &program.items {
             self.visit_item(item);
         }
@@ -297,9 +302,7 @@ impl SemanticChecker {
                             self.validate_decl_type(ty);
                         }
                         let mut params = Vec::with_capacity(method.params.len());
-                        for p in method.params.iter().filter(
-                            |p| !matches!(&p.pattern, Pattern::Ident(name, _) if name == "self"),
-                        ) {
+                        for p in method.params.iter().filter(|p| !is_self_pattern(&p.pattern)) {
                             params.push(self.ast_type(p.ty.as_ref()));
                         }
                         let ret = method
@@ -523,9 +526,7 @@ impl SemanticChecker {
         let previous_return = self.current_return.clone();
         self.current_return = f.ret_ty.as_ref().map(|t| self.ast_type(Some(t)));
         self.scopes.push();
-        for param in &f.params {
-            self.bind_pattern_typed(&param.pattern, self.ast_type(param.ty.as_ref()));
-        }
+        self.bind_params(f, None);
         match &f.body {
             FnBody::Block(block) => {
                 let found = self.visit_block_in_current_scope(block);
@@ -543,13 +544,7 @@ impl SemanticChecker {
         let previous_return = self.current_return.clone();
         self.current_return = f.ret_ty.as_ref().map(|t| self.ast_type(Some(t)));
         self.scopes.push();
-        for param in &f.params {
-            if matches!(&param.pattern, Pattern::Ident(name, _) if name == "self") {
-                self.scopes.define("self", receiver.clone());
-            } else {
-                self.bind_pattern_typed(&param.pattern, self.ast_type(param.ty.as_ref()));
-            }
-        }
+        self.bind_params(f, Some(receiver));
         match &f.body {
             FnBody::Block(block) => {
                 let found = self.visit_block_in_current_scope(block);
@@ -566,4 +561,245 @@ impl SemanticChecker {
     // Binds every identifier a pattern introduces into the current scope
     // (reused for `let`, function params, and match-arm patterns).
     // Literal/wildcard sub-patterns bind nothing.
+}
+
+/// `self`, `mut self` or `&mut self` as a method parameter.
+fn is_self_pattern(pattern: &Pattern) -> bool {
+    match pattern {
+        Pattern::Ident(name, _) => name == "self",
+        Pattern::Mut { inner, .. } => is_self_pattern(inner),
+        _ => false,
+    }
+}
+
+impl SemanticChecker {
+    /// `state x = init` is visible, as a variable, to every plain `fn` used
+    /// as a handler. Give those variables their real types before any body
+    /// is checked, instead of after the owning `ui fn` happens to be visited.
+    /// Problems in the initializers are reported later, when the `ui fn` is
+    /// visited; this pass only learns the types.
+    fn type_ui_state(&mut self, items: &[Item]) {
+        let errors = self.errors.len();
+        let references = self.references.len();
+        for item in items {
+            if let Item::UiFn(f) = item {
+                for state in &f.state {
+                    let ty = self.infer_expr(&state.init);
+                    self.scopes.update_type(&state.name, ty);
+                }
+            }
+        }
+        self.errors.truncate(errors);
+        self.references.truncate(references);
+    }
+
+    /// Binds a fn/method's parameters; unannotated ones take the type
+    /// inferred from call sites (stored in `fn_types` / `methods`).
+    fn bind_params(&mut self, f: &tint_ast::FnDecl, receiver: Option<Type>) {
+        let inferred: Vec<Type> = match &receiver {
+            Some(Type::Struct(name)) => self
+                .methods
+                .get(&(name.clone(), f.name.clone()))
+                .map(|e| e.0.clone())
+                .unwrap_or_default(),
+            _ => self.fn_types.get(&f.name).map(|e| e.0.clone()).unwrap_or_default(),
+        };
+        let mut idx = 0;
+        for param in &f.params {
+            if is_self_pattern(&param.pattern) {
+                self.scopes.define("self", receiver.clone().unwrap_or(Type::Unknown));
+                continue;
+            }
+            let ty = match &param.ty {
+                Some(t) => self.ast_type(Some(t)),
+                None => inferred.get(idx).cloned().unwrap_or(Type::Unknown),
+            };
+            idx += 1;
+            self.bind_pattern_typed(&param.pattern, ty);
+        }
+    }
+
+    /// Return and unannotated-parameter types of functions/methods, found by
+    /// dry-running bodies a few times (diagnostics discarded): call sites
+    /// give parameter types, bodies give return types, and each round sees
+    /// the previous round's results. Only reliable results are kept: all
+    /// call sites must agree, and a body whose value comes from a trailing
+    /// `if` / `match` statement stays `Unknown`. If the rounds do not
+    /// converge, everything inferred is dropped.
+    fn infer_return_types(&mut self, items: &[Item]) {
+        let errors = self.errors.len();
+        let references = self.references.len();
+        let symbols = self.symbols.len();
+        let saved_fns = self.fn_types.clone();
+        let saved_methods = self.methods.clone();
+        let mut converged = false;
+        for _ in 0..5 {
+            self.call_args.clear();
+            self.record_calls = true;
+            let mut rets: Vec<(Option<(String, String)>, String, Type)> = Vec::new();
+            for item in items {
+                match item {
+                    Item::Fn(f) | Item::ExportFn(f, _) => {
+                        let ret = self.dry_run_return(f, None);
+                        if f.ret_ty.is_none() {
+                            if let Some(ret) = ret {
+                                rets.push((None, f.name.clone(), ret));
+                            }
+                        }
+                    }
+                    Item::UiFn(f) => self.visit_ui_fn(f),
+                    Item::Impl(block) => {
+                        let receiver = self.ast_type(Some(&block.target));
+                        let Type::Struct(name) = receiver.clone() else { continue };
+                        for m in &block.methods {
+                            let ret = self.dry_run_return(m, Some(receiver.clone()));
+                            if m.ret_ty.is_none() {
+                                if let Some(ret) = ret {
+                                    rets.push((Some((name.clone(), m.name.clone())), m.name.clone(), ret));
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            self.record_calls = false;
+            let mut changed = false;
+            for (owner, name, ret) in rets {
+                let entry = match owner {
+                    None => self.fn_types.get_mut(&name),
+                    Some(key) => self.methods.get_mut(&key),
+                };
+                if let Some(entry) = entry {
+                    if entry.1 != ret {
+                        entry.1 = ret;
+                        changed = true;
+                    }
+                }
+            }
+            for item in items {
+                match item {
+                    Item::Fn(f) | Item::ExportFn(f, _) => {
+                        let key = (String::new(), f.name.clone());
+                        changed |= self.apply_call_params(f, &key, None);
+                    }
+                    Item::Impl(block) => {
+                        let Type::Struct(name) = self.ast_type(Some(&block.target)) else { continue };
+                        for m in &block.methods {
+                            let key = (name.clone(), m.name.clone());
+                            changed |= self.apply_call_params(m, &key, Some(name.clone()));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            if !changed {
+                converged = true;
+                break;
+            }
+        }
+        self.record_calls = false;
+        self.call_args.clear();
+        if !converged {
+            self.fn_types = saved_fns;
+            self.methods = saved_methods;
+        }
+        self.errors.truncate(errors);
+        self.references.truncate(references);
+        self.symbols.truncate(symbols);
+        self.inferred.clear();
+    }
+
+    /// Sets unannotated parameter types from the recorded call sites.
+    fn apply_call_params(
+        &mut self,
+        f: &tint_ast::FnDecl,
+        key: &(String, String),
+        owner: Option<String>,
+    ) -> bool {
+        let Some(calls) = self.call_args.get(key).cloned() else { return false };
+        let untyped: Vec<Option<()>> = f
+            .params
+            .iter()
+            .filter(|p| !is_self_pattern(&p.pattern))
+            .map(|p| p.ty.is_none().then_some(()))
+            .collect();
+        let entry = match &owner {
+            None => self.fn_types.get_mut(&f.name),
+            Some(o) => self.methods.get_mut(&(o.clone(), f.name.clone())),
+        };
+        let Some(entry) = entry else { return false };
+        let mut changed = false;
+        for (i, u) in untyped.iter().enumerate() {
+            if u.is_none() || i >= entry.0.len() {
+                continue;
+            }
+            let mut seen: Option<Type> = None;
+            let mut ok = true;
+            for call in &calls {
+                match call.get(i) {
+                    Some(t) if *t == Type::Unknown || contains_unknown(t) => {}
+                    Some(t) => match &seen {
+                        None => seen = Some(t.clone()),
+                        Some(s) if s == t => {}
+                        Some(_) => ok = false,
+                    },
+                    None => {}
+                }
+            }
+            let ty = if ok { seen.unwrap_or(Type::Unknown) } else { Type::Unknown };
+            if entry.0[i] != ty {
+                entry.0[i] = ty;
+                changed = true;
+            }
+        }
+        changed
+    }
+
+    fn dry_run_return(&mut self, f: &tint_ast::FnDecl, receiver: Option<Type>) -> Option<Type> {
+        let previous_return = self.current_return.take();
+        let previous_observed = self.observed_returns.replace(Vec::new());
+        self.scopes.push();
+        self.bind_params(f, receiver.clone());
+        let tail = match &f.body {
+            FnBody::Block(block) => {
+                let found = self.visit_block_in_current_scope(block);
+                match block.stmts.last() {
+                    Some(Stmt::Expr(_)) => Some(found),
+                    Some(Stmt::Return(..)) => None,
+                    Some(Stmt::If { .. }) | Some(Stmt::Match { .. }) => None,
+                    _ => Some(Type::Unit),
+                }
+            }
+            FnBody::Expr(e) => Some(self.infer_expr(e)),
+        };
+        self.scopes.pop();
+        let returns = self.observed_returns.take().unwrap_or_default();
+        self.observed_returns = previous_observed;
+        self.current_return = previous_return;
+        let mut candidates: Vec<Type> = returns;
+        if let Some(t) = tail {
+            if t != Type::Unit || candidates.is_empty() {
+                candidates.push(t);
+            }
+        } else if candidates.is_empty() {
+            return None;
+        }
+        let first = candidates[0].clone();
+        if first == Type::Unknown || contains_unknown(&first) {
+            return None;
+        }
+        if candidates.iter().any(|c| *c != first) {
+            return None;
+        }
+        Some(first)
+    }
+}
+
+fn contains_unknown(ty: &Type) -> bool {
+    match ty {
+        Type::Unknown => true,
+        Type::Generic(_, args) => args.iter().any(contains_unknown),
+        _ => false,
+    }
 }

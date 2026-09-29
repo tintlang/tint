@@ -1,0 +1,38 @@
+// expect: 7
+fn add_mul_precedence() { 1 + 2 * 3 }
+
+// expect: 9
+fn parens() { (1 + 2) * 3 }
+
+// expect: 3
+fn modulo() { 7 % 4 }
+
+// expect: 2.5
+fn division() { 5 / 2 }
+
+// expect: -3
+fn unary_minus() { -(1 + 2) }
+
+// expect: true
+fn comparison_chain() { 1 < 2 && 2 <= 2 && 3 > 2 && 3 >= 3 && 1 != 2 && 2 == 2 }
+
+// expect: false
+fn logical_not() { !(1 < 2) }
+
+// expect: true
+fn or_short_circuit() { true || (1 / 0 > 0) }
+
+// expect: 14
+fn let_and_reassign() {
+    let mut x = 4
+    x = x + 3
+    x * 2
+}
+
+// expect: 6
+fn shadowing() {
+    let x = 1
+    let x = x + 2
+    let x = x * 2
+    x
+}

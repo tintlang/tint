@@ -1,0 +1,61 @@
+// expect: 42
+fn some_unwrap() {
+    let v: Option<f32> = Option::Some { value: 42.0 }
+    v.unwrap()
+}
+
+// expect: true
+fn none_is_none() {
+    let v: Option<f32> = Option::None {}
+    v.is_none()
+}
+
+// expect: 7
+fn ok_unwrap() {
+    let r: Result<f32, string> = Result::Ok { value: 7.0 }
+    r.unwrap()
+}
+
+// expect: "found 5"
+fn match_option() {
+    let v: Option<f32> = Option::Some { value: 5.0 }
+    match v {
+        Some { value } => "found {value}",
+        None {} => "empty",
+    }
+}
+
+// expect: "bad"
+fn match_result_err() {
+    let r: Result<f32, string> = Result::Err { error: "bad" }
+    match r {
+        Ok { value } => "ok {value}",
+        Err { error } => error,
+    }
+}
+
+// expect: 42
+fn question_mark_success() {
+    let v = unwrap_or_fail()
+    match v {
+        Ok { value } => value,
+        Err { error } => 0,
+    }
+}
+fn unwrap_or_fail() -> Result<f32, string> {
+    let a = Result::Ok { value: 41.0 }?
+    Result::Ok { value: a + 1.0 }
+}
+
+// expect: "stop"
+fn question_mark_propagates() {
+    let v = fails()
+    match v {
+        Ok { value } => "no",
+        Err { error } => error,
+    }
+}
+fn fails() -> Result<f32, string> {
+    let a = Result::Err { error: "stop" }?
+    Result::Ok { value: a }
+}

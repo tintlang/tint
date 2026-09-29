@@ -2,8 +2,8 @@ use super::super::*;
 
 impl TintVM {
     pub(super) fn host_load_var(&mut self, name: &str, _span: Span) -> EvalValue {
-        match self.scopes.lookup(name) {
-            Some(v) => Self::rt_to_eval(&v),
+        match self.tracked_lookup(name) {
+            Some(v) => v,
             None => EvalValue::Unit,
         }
     }

@@ -20,6 +20,10 @@ pub struct UiRuntime {
     pub tree: UiTree,
 
     pub dirty: bool,
+
+    /// Reuse unchanged subtrees between `mount` calls (see builder/cache.rs).
+    pub cache_enabled: bool,
+    cache: Option<builder::UiBuildCache>,
 }
 
 impl Default for UiRuntime {
@@ -34,6 +38,8 @@ impl UiRuntime {
             root: None,
             tree: UiTree::empty(),
             dirty: true,
+            cache_enabled: false,
+            cache: None,
         }
     }
 
@@ -51,11 +57,15 @@ impl UiRuntime {
         let ast_nodes: &Vec<UiNode> = &ui_fn.body;
 
         let mut builder = UiBuilder::new();
+        if self.cache_enabled && host.tracking_supported() {
+            builder.cache = Some(self.cache.take().unwrap_or_default());
+        }
 
         // Create synthetic root <Root>
         let synthetic_root = builder.build_root(ast_nodes, host);
 
         self.root = Some(synthetic_root);
+        self.cache = builder.take_cache();
         self.tree = builder.finish();
 
         self.dirty = true;

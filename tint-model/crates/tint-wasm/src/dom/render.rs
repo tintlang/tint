@@ -3,35 +3,12 @@ fn build_node(
     node: &UiRenderNode,
     shared: &Rc<Shared>,
     breakpoint: &str,
-) -> Result<Element, JsValue> {
+) -> Result<MNode, JsValue> {
     // Mirrors UiPreviewNode.svelte's own tag choice: a real <button> for
     // Button/MenuItem or anything with a click handler (so it gets free
     // keyboard/focus/AT behavior), a plain <div> otherwise.
-    let is_link = node.route.is_some();
-    let is_inline = node.tag == "Inline";
-    let is_text = node.tag == "Text";
-    let is_image = node.asset.is_some() && node.tag == "Image";
-    let is_audio = node.asset.is_some() && node.tag == "Audio";
-    let is_button = !is_link
-        && (node.tag == "Button"
-            || node.tag == "MenuItem"
-            || node.on_click.is_some()
-            || node.on_js.is_some());
-    let tag_name = if is_link {
-        "a"
-    } else if is_inline {
-        "span"
-    } else if is_text {
-        "span"
-    } else if is_image {
-        "img"
-    } else if is_audio {
-        "audio"
-    } else if is_button {
-        "button"
-    } else {
-        "div"
-    };
+    let tag_name = dom_tag_name(node);
+    let is_button = tag_name == "button";
     let el = document.create_element(tag_name)?;
     el.set_attribute("data-tag", &node.tag)?;
     el.set_attribute("data-tint-source", &node.tint_source)?;
@@ -152,14 +129,21 @@ fn build_node(
         bind_key_dispatch("keyup", handler, shared);
     }
 
+    let mut children = Vec::new();
     if node.text.is_none() && node.svg.is_none() {
         for child in &node.children {
-            let child_el = build_node(document, child, shared, breakpoint)?;
-            el.append_child(&child_el)?;
+            let child_mount = build_node(document, child, shared, breakpoint)?;
+            el.append_child(&child_mount.el)?;
+            children.push(child_mount);
         }
     }
 
-    Ok(el)
+    let has_hover = !node.hover_style.is_empty() || children.iter().any(|c| c.has_hover);
+    Ok(MNode {
+        el,
+        children,
+        has_hover,
+    })
 }
 
 /// Wires `event_name` on `el` to run `handler` against the session and
@@ -193,7 +177,7 @@ fn bind_dispatch(
             },
             Err(_) => return,
         };
-        if let Err(e) = mount_tree(&tree, &shared) {
+        if let Err(e) = mount_tree(tree, &shared) {
             web_sys::console::error_1(&e);
         }
     }) as Box<dyn FnMut(_)>);
@@ -266,7 +250,7 @@ fn bind_key_dispatch(event_name: &'static str, handler: String, shared: &Rc<Shar
             },
             Err(_) => return,
         };
-        if let Err(e) = mount_tree(&tree, &shared) {
+        if let Err(e) = mount_tree(tree, &shared) {
             web_sys::console::error_1(&e);
         }
     }) as Box<dyn FnMut(_)>);

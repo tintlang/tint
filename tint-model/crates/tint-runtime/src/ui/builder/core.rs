@@ -8,6 +8,10 @@ impl UiBuilder {
             tokens: std::collections::HashMap::new(),
             styles: std::collections::HashMap::new(),
             components: std::collections::HashMap::new(),
+            cache: None,
+            visits: std::collections::HashMap::new(),
+            component_depth: 0,
+            tokens_hash: 0,
         }
     }
 

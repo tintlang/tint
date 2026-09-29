@@ -1,0 +1,44 @@
+fn square(x) { x * x }
+
+fn factorial(n) {
+    match n {
+        0 => 1,
+        _ => n * factorial(n - 1),
+    }
+}
+
+fn fib(n) {
+    if n < 2 { n } else { fib(n - 1) + fib(n - 2) }
+}
+
+// expect: 25
+fn call() { square(5) }
+
+// expect: 120
+fn recursion() { factorial(5) }
+
+// expect: 55
+fn double_recursion() { fib(10) }
+
+// expect: 7
+fn lambda_call() {
+    let f = |a, b| a + b
+    f(3, 4)
+}
+
+// expect: 15
+fn lambda_captures_local() {
+    let base = 10
+    let add = |x| x + base
+    add(5)
+}
+
+// expect: 9
+fn function_as_argument() { apply(square, 3) }
+fn apply(f, x) { f(x) }
+
+// expect: 12
+fn lambda_as_argument() { apply(|x| x * 4, 3) }
+
+// expect: 6
+fn nested_calls() { square(1) + square(2) + 1 }

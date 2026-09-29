@@ -1,4 +1,4 @@
-// TintVM v3: Dual Runtime (IR VM + EvalHost)
+// TintVM: tree-walking evaluator (EvalHost); optional IR tier behind feature `ir`
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -7,6 +7,7 @@ use std::rc::Rc;
 use crate::{scope::RuntimeScopeStack, ui::UiRuntime, value::RuntimeValue};
 
 use tint_evaluator::eval_pattern::bind_pattern;
+#[cfg(feature = "ir")]
 use tint_ir::{ir::Value as IrValue, optimize, IrVM, ProgramIR, SsaCompiler};
 
 use tint_ast::{Block, Expr, FnBody, FnDecl, Item, Program, Span, UiFnDecl};
@@ -18,9 +19,9 @@ use tint_evaluator::{call::call_builtin, eval_stmt, EvalHost, Value as EvalValue
 pub struct TintVM {
     // Runtime
     pub scopes: RuntimeScopeStack,
-    pub logic_functions: HashMap<String, FnDecl>,
-    pub ui_functions: HashMap<String, UiFnDecl>,
-    pub impl_methods: HashMap<(String, String), FnDecl>,
+    pub logic_functions: HashMap<String, Rc<FnDecl>>,
+    pub ui_functions: HashMap<String, Rc<UiFnDecl>>,
+    pub impl_methods: HashMap<(String, String), Rc<FnDecl>>,
 
     // Real Rust functions registered from outside the language (see
     // `register_native`) -- direct Rust interop: no Rust parsing, no
@@ -51,9 +52,13 @@ pub struct TintVM {
     // and must share the persistent state scope.  Top-level logic calls can
     // still use the isolated IR VM.
     pub(crate) treewalk_call_depth: usize,
+    /// Active read recordings (see `tracking.rs`).
+    pub(crate) read_logs: Vec<tracking::ReadLog>,
+    #[cfg(feature = "ir")]
     pub(crate) has_constants: bool,
 
-    // IR
+    // IR (feature `ir`)
+    #[cfg(feature = "ir")]
     pub ir_program: ProgramIR,
     pub last_result: EvalValue,
 }
@@ -66,7 +71,11 @@ pub struct HttpRequest {
 }
 
 mod classification;
+#[cfg(feature = "ir")]
 mod conversion;
 mod core;
 mod host;
+#[cfg(feature = "ir")]
+mod ir_routing;
+mod tracking;
 mod ui;

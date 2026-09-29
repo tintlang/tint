@@ -6,15 +6,36 @@ mod compound;
 mod eval;
 mod match_values;
 mod patterns;
+mod stdlib;
 mod vars;
 
 impl EvalHost for TintVM {
     fn lookup_var(&mut self, name: &str) -> Option<EvalValue> {
-        self.scopes.lookup(name).map(|v| Self::rt_to_eval(&v))
+        self.tracked_lookup(name)
+    }
+
+    fn tracking_supported(&self) -> bool {
+        true
+    }
+
+    fn track_begin(&mut self) {
+        self.begin_tracking();
+    }
+
+    fn track_end(&mut self) -> Vec<(String, Option<EvalValue>)> {
+        self.end_tracking()
+    }
+
+    fn track_merge(&mut self, reads: &[(String, Option<EvalValue>)]) {
+        self.merge_tracking(reads);
+    }
+
+    fn reads_unchanged(&mut self, reads: &[(String, Option<EvalValue>)]) -> bool {
+        self.reads_still_hold(reads)
     }
 
     fn resolve_function(&mut self, name: &str) -> Option<EvalValue> {
-        let f = self.logic_functions.get(name)?.clone();
+        let f = (**self.logic_functions.get(name)?).clone();
         let params = f
             .params
             .iter()

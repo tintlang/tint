@@ -185,6 +185,24 @@ impl SemanticChecker {
                 // could meaningfully check.
                 UiAttrValue::Literal(_) => {}
                 UiAttrValue::Ident(name) => {
+                    if self.record_calls {
+                        // Host-invoked handlers: the argument types are fixed
+                        // by the runtime (`frame||` gets `dt`, key events
+                        // get the key name).
+                        let args = match attr.name.as_str() {
+                            "frame" => Some(vec![Type::Number]),
+                            "key_down" | "key_up" => Some(vec![Type::String]),
+                            "click" | "pointer_down" | "pointer_up" | "hover_in" | "hover_out"
+                            | "tick" => Some(Vec::new()),
+                            _ => None,
+                        };
+                        if let Some(args) = args {
+                            self.call_args
+                                .entry((String::new(), name.clone()))
+                                .or_default()
+                                .push(args);
+                        }
+                    }
                     if matches!(
                         attr.name.as_str(),
                         "click"

@@ -1,0 +1,80 @@
+// expect: [1, 2, 3]
+fn literal() { [1, 2, 3] }
+
+// expect: 3
+fn len() { [1, 2, 3].len() }
+
+// expect: 20
+fn index() { [10, 20, 30][1] }
+
+// expect: [1, 2, 3]
+fn push_writes_back() {
+    let mut xs = [1, 2]
+    xs.push(3)
+    xs
+}
+
+// expect: 3
+fn pop_returns_option() {
+    let mut xs = [1, 2, 3]
+    xs.pop().unwrap()
+}
+
+// expect: [2, 3]
+fn remove_writes_back() {
+    let mut xs = [1, 2, 3]
+    xs.remove(0)
+    xs
+}
+
+// expect: 1
+fn remove_returns_value() {
+    let mut xs = [1, 2, 3]
+    xs.remove(0)
+}
+
+// expect: [2, 4, 6]
+fn map_lambda() { [1, 2, 3].map(|x| x * 2) }
+
+// expect: [2, 4]
+fn filter() { [1, 2, 3, 4, 5].filter(|x| x % 2 == 0) }
+
+// expect: "1-2-3"
+fn join() { [1, 2, 3].join("-") }
+
+// expect: true
+fn contains() { [1, 2, 3].contains(2) && ![1, 2, 3].contains(9) }
+
+// expect: [1, 2, 3]
+fn sort_numbers() { [3, 1, 2].sort() }
+
+// expect: ["apple", "fig", "pear"]
+fn sort_strings() { ["pear", "apple", "fig"].sort() }
+
+// expect: [3, 2, 1]
+fn reverse() { [1, 2, 3].reverse() }
+
+// expect: [2, 3]
+fn slice_from() { [1, 2, 3].slice(1) }
+
+// expect: [1, 2]
+fn slice_range() { [1, 2, 3].slice(0, 2) }
+
+// expect: 0
+fn slice_out_of_range_is_empty() { [1, 2, 3].slice(5).len() }
+
+// expect: 2
+fn find_hit() { [1, 2, 3].find(|x| x > 1).unwrap() }
+
+// expect: true
+fn find_miss() { [1, 2, 3].find(|x| x > 9).is_none() }
+
+// expect: [1, 2, 3]
+fn sort_does_not_mutate_receiver() {
+    let xs = [1, 2, 3]
+    let ys = xs.reverse()
+    xs
+}
+
+// expect-error: sort
+fn sort_mixed_is_an_error() { [1, "a"].sort() }

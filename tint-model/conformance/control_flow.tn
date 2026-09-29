@@ -1,0 +1,80 @@
+// expect: 1
+fn if_true() { if 2 > 1 { 1 } else { 0 } }
+
+// expect: 10
+fn while_loop() {
+    let mut i = 0
+    let mut sum = 0
+    while i < 5 {
+        sum = sum + i
+        i = i + 1
+    }
+    sum
+}
+
+// expect: 10
+fn for_range() {
+    let mut sum = 0
+    for i in 0..5 {
+        sum = sum + i
+    }
+    sum
+}
+
+// expect: 6
+fn for_range_break() {
+    let mut sum = 0
+    for i in 0..10 {
+        if i == 4 { break }
+        sum = sum + i
+    }
+    sum
+}
+
+// expect: 25
+fn for_range_continue() {
+    let mut sum = 0
+    for i in 0..10 {
+        if i % 2 == 0 { continue }
+        sum = sum + i
+    }
+    sum
+}
+
+// expect: 5
+fn loop_break() {
+    let mut i = 0
+    loop {
+        i = i + 1
+        if i == 5 { break }
+    }
+    i
+}
+
+// expect: 3
+fn early_return() {
+    let mut i = 0
+    while true {
+        if i == 3 { return i }
+        i = i + 1
+    }
+    99
+}
+
+// expect: "negative"
+fn match_guard() { classify(-4) }
+
+// expect: "zero"
+fn match_literal() { classify(0) }
+
+// expect: "big"
+fn match_wildcard() { classify(100) }
+
+fn classify(n) {
+    match n {
+        n if n < 0 => "negative",
+        0 => "zero",
+        n if n < 10 => "small",
+        _ => "big",
+    }
+}

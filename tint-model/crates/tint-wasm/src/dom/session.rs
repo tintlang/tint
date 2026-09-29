@@ -15,6 +15,8 @@ impl DomSession {
                     key_down_bound: Cell::new(false),
                     key_up_bound: Cell::new(false),
                     last_frame_time: Cell::new(None),
+                    timers: RefCell::new(Vec::new()),
+                    retained: RefCell::new(None),
                 });
                 bind_resize_listener(&shared);
                 DomSession {
@@ -46,6 +48,8 @@ impl DomSession {
                     key_down_bound: Cell::new(false),
                     key_up_bound: Cell::new(false),
                     last_frame_time: Cell::new(None),
+                    timers: RefCell::new(Vec::new()),
+                    retained: RefCell::new(None),
                 });
                 bind_resize_listener(&shared);
                 DomSession {
@@ -73,7 +77,7 @@ impl DomSession {
             Ok(tree) => tree,
             Err(e) => return Some(e),
         };
-        mount_tree(&tree, &shared)
+        mount_tree(tree, &shared)
             .err()
             .map(|e| js_error_to_string(&e))
     }
@@ -91,7 +95,7 @@ impl DomSession {
             Ok(tree) => tree,
             Err(e) => return Some(e),
         };
-        mount_tree(&tree, &shared)
+        mount_tree(tree, &shared)
             .err()
             .map(|e| js_error_to_string(&e))
     }
@@ -110,7 +114,7 @@ impl DomSession {
             Ok(tree) => tree,
             Err(e) => return Some(e),
         };
-        mount_tree(&tree, &shared)
+        mount_tree(tree, &shared)
             .err()
             .map(|e| js_error_to_string(&e))
     }
@@ -159,7 +163,7 @@ impl DomSession {
             Ok(tree) => tree,
             Err(e) => return Some(e),
         };
-        mount_tree(&tree, &shared)
+        mount_tree(tree, &shared)
             .err()
             .map(|e| js_error_to_string(&e))
     }
@@ -218,7 +222,7 @@ impl DomSession {
             Ok(tree) => tree,
             Err(e) => return Some(e),
         };
-        mount_tree(&tree, &shared)
+        mount_tree(tree, &shared)
             .err()
             .map(|e| js_error_to_string(&e))
     }
@@ -238,7 +242,7 @@ impl DomSession {
             Ok(tree) => tree,
             Err(e) => return Some(e),
         };
-        mount_tree(&tree, &shared)
+        mount_tree(tree, &shared)
             .err()
             .map(|e| js_error_to_string(&e))
     }

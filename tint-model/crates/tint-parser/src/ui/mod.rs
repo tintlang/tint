@@ -128,6 +128,12 @@ impl Parser {
                 Ok(UiAttrValue::Literal(tok.lexeme.clone()))
             }
 
+            // `every||180`: a bare number is kept as its text, like a string.
+            TokenKind::Number => {
+                let tok = self.stream.next();
+                Ok(UiAttrValue::Literal(tok.lexeme.clone()))
+            }
+
             TokenKind::LBrace => {
                 self.stream.next();
                 let expr = self.parse_expr()?;

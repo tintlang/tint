@@ -6,14 +6,47 @@ impl Lexer<'_> {
     pub(super) fn lex_string(&mut self, start: Position) -> Token {
         self.bump();
         let mut value = String::new();
+        // Open `{` interpolations. Inside one, a `"` starts a nested string
+        // literal (`"{xs.join(" ")}"`) instead of ending this one; the
+        // nested literal is kept verbatim for the expression parser.
+        let mut depth = 0usize;
 
         while let Some(c) = self.bump() {
             match c {
+                '"' if depth > 0 => {
+                    value.push('"');
+                    while let Some(inner) = self.bump() {
+                        value.push(inner);
+                        match inner {
+                            '\\' => {
+                                if let Some(escaped) = self.bump() {
+                                    value.push(escaped);
+                                }
+                            }
+                            '"' => break,
+                            _ => {}
+                        }
+                    }
+                }
                 '"' => break,
                 '\\' => {
                     if let Some(escaped) = self.bump() {
-                        value.push(escaped);
+                        value.push(match escaped {
+                            'n' => '\n',
+                            't' => '\t',
+                            'r' => '\r',
+                            '0' => '\0',
+                            other => other,
+                        });
                     }
+                }
+                '{' => {
+                    depth += 1;
+                    value.push(c);
+                }
+                '}' => {
+                    depth = depth.saturating_sub(1);
+                    value.push(c);
                 }
                 _ => value.push(c),
             }

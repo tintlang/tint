@@ -26,97 +26,12 @@ impl TintVM {
             return self.call_ui_fn(&ui, args, span);
         }
 
-        // A helper called from a UI event/frame handler must stay on the
-        // tree-walking VM: that is the VM which owns the persistent `state`
-        // scope.  The IR VM is intentionally isolated and is still used for
-        // ordinary top-level logic calls.
-        if self.treewalk_call_depth > 0 && self.is_ir_function(name) {
-            return self.host_call_user_fn(name, args, span);
-        }
-
-        // The IR backend currently has no closure value or indirect call.
-        // Route functions that actually contain a lambda through the
-        // evaluator, which already supports lexical capture and lambda calls.
-        if self.is_ir_function(name)
-            && (self.uses_lambda(name)
-                || self.uses_function_value(name)
-                || self.uses_interpreter_control_flow(name)
-                || self.uses_try(name)
-                || self.uses_fallible_method(name)
-                || self.uses_cast(name)
-                || self.uses_exact_numeric(name)
-                || self.has_constants
-                || self.has_function_values())
-        {
-            return self.host_call_user_fn(name, args, span);
-        }
-
-        // 3) Logic functions -> IR VM
-        if self.is_ir_function(name) {
-            let params: Vec<tint_ast::Pattern> = self
-                .logic_functions
-                .get(name)
-                .map(|f| f.params.iter().map(|p| p.pattern.clone()).collect())
-                .unwrap_or_default();
-            let ir_args: Vec<IrValue> = args
-                .iter()
-                .map(|a| Self::eval_value_to_ir_value(a.clone()))
-                .collect();
-
-            let mut irvm = IrVM::new(self.ir_program.clone());
-
-            // Give the IR VM a way to reach a registered native fn from
-            // INSIDE a plain `fn`'s own body (`fn go() { shout("hi") }`,
-            // called the normal top-level way, so `Instr::Call` runs
-            // inside this very `IrVM`) -- previously unreachable, since
-            // `tint-ir` has no dependency on this crate's `native_fns`
-            // table at all (see `tint-runtime/tests/native_fn.rs` and
-            // `IrVM::set_native_call`'s doc comment). `Rc::clone` here is
-            // what lets this closure outlive `self`'s borrow: it owns its
-            // own handle to the SAME table, rather than borrowing `self`.
-            let native_fns = Rc::clone(&self.native_fns);
-            irvm.set_native_call(Box::new(move |name, ir_args| {
-                let eval_args: Vec<EvalValue> = ir_args
-                    .iter()
-                    .cloned()
-                    .map(Self::ir_value_to_eval_value)
-                    .collect();
-
-                let f = native_fns.borrow();
-                let f = f.get(name)?;
-                match f(&eval_args) {
-                    Ok(v) => Some(Self::eval_value_to_ir_value(v)),
-                    // A native fn CAN fail (e.g. bad args) -- that's a
-                    // real error, not "no such function", so this
-                    // doesn't silently fall back to Unit the way an
-                    // unresolved name does; it panics with the native's
-                    // own error message, same as any other unrecoverable
-                    // runtime error in this VM (`Instr::Index` out of
-                    // bounds, `Instr::LoadLocal` on an undefined name, …).
-                    Err(e) => panic!("native fn `{}` failed: {}", name, e),
-                }
-            }));
-
-            let mut method_call = |receiver: IrValue, method: &str, method_args: &[IrValue]| {
-                let receiver = Self::ir_value_to_eval_value(receiver);
-                let args: Vec<EvalValue> = method_args
-                    .iter()
-                    .cloned()
-                    .map(Self::ir_value_to_eval_value)
-                    .collect();
-                let updated = match self.host_call_method(receiver, method, &args, span) {
-                    Ok(updated) => updated,
-                    Err(error) => panic!("IR method call `{}` failed: {:?}", method, error),
-                };
-                Some((
-                    Self::eval_value_to_ir_value(updated.0),
-                    Self::eval_value_to_ir_value(updated.1),
-                ))
-            };
-            irvm.set_method_call(&mut method_call);
-
-            let out = irvm.run_with_args(name, &params, &ir_args);
-            return Ok(Self::ir_value_to_eval_value(out));
+        // Optional second tier (cargo feature `ir`): plain logic functions may
+        // run on the SSA/IR VM. Off by default -- the tree-walker is the
+        // single execution engine.
+        #[cfg(feature = "ir")]
+        if let Some(result) = self.try_call_via_ir(name, args, span) {
+            return result;
         }
 
         // 4) fallback
@@ -183,7 +98,7 @@ impl TintVM {
         Ok(result)
     }
 
-    pub(super) fn host_call_method(
+    pub(crate) fn host_call_method(
         &mut self,
         receiver: EvalValue,
         method: &str,
@@ -292,6 +207,10 @@ impl TintVM {
                     _ => unreachable!(),
                 }
             }
+        }
+
+        if let Some(result) = self.collection_method(&receiver, method, args, span) {
+            return result;
         }
 
         let type_name = match &receiver {
