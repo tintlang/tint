@@ -90,6 +90,7 @@ fn apply_property(path: &[String], value: &UiModifierValue, out: &mut StyleList)
         "border.l" | "border.left" => apply_border_edges(value, out, &["left"]),
         "border.r" | "border.right" => apply_border_edges(value, out, &["right"]),
         "text" => apply_text(value, out),
+        "white-space" => push_raw_string(out, "white-space", value),
         "scale" => push_transform_fn(out, "scale", value),
         "transform" => push_raw_string(out, "transform", value),
         "blur" => push_blur(out, "filter", value),

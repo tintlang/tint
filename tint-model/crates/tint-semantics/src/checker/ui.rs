@@ -10,9 +10,9 @@
 impl SemanticChecker {
     fn visit_ui_fn(&mut self, f: &UiFnDecl) {
         self.ctx.mode = Mode::UI;
-        self.ui_tokens.clear();
-        self.ui_styles.clear();
-        self.ui_variants.clear();
+        self.ui_tokens = self.external_context.ui_tokens.clone();
+        self.ui_styles = self.external_context.ui_styles.clone();
+        self.ui_variants = self.external_context.ui_variants.clone();
         for node in &f.body {
             self.collect_ui_tokens(node);
             self.collect_ui_styles(node);

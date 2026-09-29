@@ -1,0 +1,5 @@
+fn main() {
+    print("Press a key: ")
+    let key = read_key()
+    println("You pressed: {key}")
+}

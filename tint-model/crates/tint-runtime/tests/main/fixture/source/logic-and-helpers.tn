@@ -1,0 +1,71 @@
+fn TestImplCall(tex: Texture) {
+    tex.downscale();
+}
+struct Sprite {
+    @kit.position2d
+    @kit.size
+    @kit.uv
+    @kit.color
+}
+struct Sprite{
+    @kit.transform2d {
+        @kit.position {
+            x: f32,
+            y: f32,
+        }
+        @kit.rotation {
+            angle: f32,
+        }
+    }
+}
+fn [@(strict)] gpu() {
+    let r = borrow(frame)
+}
+fn gpu() {
+    let r = borrow @strict (frame)
+}
+fn [@(strict)] f() {
+    borrow(x)
+    borrow@group(x)
+    borrow@strict(x)
+}
+fn [@(strict)] gpu() {
+    borrow(frame) {
+        convolve(frame, invert)
+        normalize(frame)
+    }
+    borrow@group(samples) {
+        samples.push(42)
+    }
+}
+fn TestUnionParsing(x: Number) {
+    1
+}
+fn TestTupleDefault1((a, b, c) {10}) {
+    a + b + c
+}
+fn TestTupleDefault2((x, (y, z)) {5}) {
+    x * y + z
+}
+struct User {
+    id: i32,
+    name: string,
+}
+struct Pair {
+    a: i32,
+    b: i32,
+}
+fn TestDefaultParams(a, b = 10, c: i32 = 5) {
+    a + b + c
+}
+fn TestDefaultParams2(x = 1) { x * 2 }
+fn __global_tests__() {
+    let (x, y) = p;
+    let (a, (b, c)) = nested;
+    let (_, y2) = pair;
+}
+struct User {
+    id: i32,
+    name: string,
+    age: i32,
+}

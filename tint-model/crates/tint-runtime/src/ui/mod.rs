@@ -72,8 +72,6 @@ impl UiRuntime {
         // painting each node at that rect -- see ui/layout.rs. The DOM
         // backend (sandbox/) doesn't need this: the browser already does
         // its own layout from the CSS strings ui/style.rs resolves.
-        println!("UI RENDER FRAME");
-
         self.dirty = false;
     }
 }

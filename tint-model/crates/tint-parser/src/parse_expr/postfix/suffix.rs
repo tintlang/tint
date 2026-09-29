@@ -43,8 +43,12 @@ impl Parser {
                 })
             }
 
-            TokenKind::Ident => {
-                let field = self.parse_ident()?;
+            TokenKind::Ident | TokenKind::MapLit => {
+                let field = if self.stream.peek_kind() == TokenKind::MapLit {
+                    self.stream.next().lexeme
+                } else {
+                    self.parse_ident()?
+                };
                 let span = Span::merge(base.span(), dot.span);
                 Ok(Expr::Field {
                     target: Box::new(base),

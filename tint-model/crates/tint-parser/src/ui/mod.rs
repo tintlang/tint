@@ -37,6 +37,41 @@ impl Parser {
         Ok(nodes)
     }
 
+    /// Parses a `.tn` source file that is intended to be expanded inside a
+    /// `ui fn` body by the source-import loader.  These files deliberately do
+    /// not have a `ui fn` wrapper of their own (`Nav { ... }`, `Hero { ... }`,
+    /// etc.), so treating them as a normal program produces the misleading
+    /// top-level "expected fn/ui/struct/enum" diagnostic.
+    pub fn parse_ui_fragment(&mut self) -> PResult<Vec<UiNode>> {
+        self.recover_ui_indentation = true;
+        let mut nodes = Vec::new();
+        self.check_ui_root_start()?;
+
+        while !self.stream.check(TokenKind::Eof) {
+            if self.stream.peek().lexeme == "theme"
+                && self.stream.peek2_kind() == TokenKind::PathSep
+                && self.stream.peek_n_kind(2) == TokenKind::Ident
+                && self.stream.peek_n_kind(3) == TokenKind::LBrace
+            {
+                nodes.push(self.parse_theme_node()?);
+            } else if self.stream.peek().lexeme == "style"
+                && self.stream.peek2_kind() == TokenKind::Ident
+                && self.stream.peek_n_kind(2) == TokenKind::LBrace
+            {
+                nodes.push(self.parse_style_node()?);
+            } else if self.stream.peek().lexeme == "component"
+                && self.stream.peek2_kind() == TokenKind::Ident
+                && self.stream.peek_n_kind(2) == TokenKind::LBrace
+            {
+                nodes.push(self.parse_component_node()?);
+            } else {
+                nodes.push(self.parse_block_node()?);
+            }
+        }
+
+        Ok(nodes)
+    }
+
     /// UI syntax is block-mode only (`Tag { ... }`) -- the earlier XML
     /// dialect (`<Tag ...>...</Tag>`) was removed (see `tint-parser/src/ui/block.rs`'s
     /// `parse_block_case_node` for where its one syntax-unique feature,

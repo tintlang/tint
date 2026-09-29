@@ -88,6 +88,10 @@ impl SsaCompiler {
 
             Expr::Paren(expr, _) => self.lower_expr(expr, block, locals),
 
+            // `?` is lowered by the tree-walking evaluator, never by SSA.
+            Expr::Try { expr, .. } => self.lower_expr(expr, block, locals),
+            Expr::Cast { expr, .. } => self.lower_expr(expr, block, locals),
+
             // CALL: foo(a,b)
             Expr::Call { target, args, .. } => {
                 if let Expr::Field {
@@ -314,10 +318,7 @@ impl SsaCompiler {
             Expr::NamedArg { value, .. } => self.lower_expr(value, block, locals),
 
             // TODO λ
-            Expr::Lambda { .. } => {
-                println!("TODO: lambda lowering");
-                self.builder.emit_const(block, Value::Unit)
-            }
+            Expr::Lambda { .. } => self.builder.emit_const(block, Value::Unit),
 
             // Conditional expressions currently execute through the
             // tree-walking evaluator; keep IR compilation total for tools

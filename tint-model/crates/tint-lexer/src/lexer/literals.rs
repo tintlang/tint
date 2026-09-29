@@ -81,6 +81,7 @@ impl Lexer<'_> {
 fn keyword_kind(value: &str) -> Option<TokenKind> {
     Some(match value {
         "fn" => TokenKind::Fn,
+        "const" => TokenKind::Const,
         "return" => TokenKind::Return,
         "let" => TokenKind::Let,
         "if" => TokenKind::If,

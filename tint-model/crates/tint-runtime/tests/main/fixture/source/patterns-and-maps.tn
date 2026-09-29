@@ -1,0 +1,226 @@
+fn AdvancedMonster(x, y {10}) {
+    let a = (1, (2, (3, (4, [x, y, x+y]))));
+    let b = match a {
+        (x, (y, (z, (k, arr)))) => {
+            let f = |u| u * 2;
+            f(x + y + z + k + arr[2])
+        }
+    };
+    let c = borrow(x) {
+        borrow@group(y) {
+            x + y + b
+        }
+    };
+    let d = Logic::deep_mix(x, y);
+    (b + c + d) * 2
+}
+fn MegaNested() {
+    let a = (
+        1,
+        (2, (3, (4, 5))),
+        User {
+            id: 10,
+            name: "Tint",
+            age:
+                (1 + 2) * 3
+            }
+    );
+    let b = map {
+        x{ map {
+            y{ map {
+                z{ 99 }
+            }}
+        }},
+        list{ [ (1,2) (3,4) (5, [6,7,8]) ] },
+        user{
+            User {
+                id: a.2.id,
+                name: "Deep",
+                age: a.2.age + 1
+            }
+        }
+    };
+    let c = match a.1 {
+        (x, (y, (z, k))) => x + y + z + k,
+        _ => 0,
+    };
+    let d = match b {
+        map {
+            x{ map {
+                y{ map { z } }
+            }},
+            user{ User { id, name } },
+            list
+        } => z + id + name.len(),
+        _ => 0
+    };
+    let op = Option::Some { value: map {
+        inner{ [1,2,3] },
+        deep{ User { id: 5, name: "X", age: 7 } }
+    }};
+    let r = match op {
+        Some { value{ inner, deep } } => {
+            let mul = |a, b| a * b;
+            mul(inner[1], deep.age)
+        },
+        None {} => 0
+    };
+    borrow(frame) {
+        borrow@group(invert) {
+            convolve(frame, invert)
+        }
+    }
+    c + d + r
+}
+enum Option<T> {
+    Some { value },
+    None {}
+}
+fn TestOptionGeneric() {
+    let a = Option::Some { value: 10 }
+    let b = Option::None {}
+    match a {
+        Some { value } => value + 1,
+        None {} => 0
+    }
+}
+fn TestGenericResult() {
+    let r = Result::Ok { value: 50 }
+    match r {
+        Ok { value } => value * 2,
+        Err { error } => 0
+    }
+}
+fn TestTupleDefaultMatch2() {
+    let tmp = (x, y);
+    match tmp {
+        (3, 3) => 1
+        _ => 0
+    }
+}
+fn TestMapAssign() {
+    let mut m = map { a{1}, b{2} };
+    m.b = 5;
+    m.b * 2
+}
+fn foo1((x, y)) {
+    x + y
+}
+fn foo2((a, (b, c))) {
+    a + b + c
+}
+fn foo3(User { id, name }) {
+    id * 100
+}
+fn typed1(x: i32) {
+    x + 1
+}
+fn typed2((a: i32, b)) {
+    a * 10 + b
+}
+enum Shape {
+    Circle { r: f32 },
+}
+fn TestMatchNumbers(x) {
+    match x {
+        0 => "zero",
+        1 => "one",
+        _ => "other",
+    }
+}
+fn TestMatchTuple(point) {
+    match point {
+        (0,0) => 0,
+        (x,y) => x*x + y*y,
+    }
+}
+fn TestMatchStruct(user) {
+    match user {
+        User { id, name } => "{id}:{name}",
+        _ => "unknown"
+    }
+}
+fn TestGuard(value) {
+    match value {
+        x if x > 10 => "big",
+        _ => "small",
+    }
+}
+fn TestMatchShapes(shape) {
+    match shape {
+        Circle { r } => r * 2,
+        _ => 0,
+    }
+}
+fn TestMapBasic() {
+    let m = map {
+        a{1},
+        b{2},
+        c{3},
+    };
+    return m.a + m.b + m.c;
+}
+fn TestMapNested() {
+    let m = map {
+        user{ map {
+            id{10},
+            name{"Tint"}
+        }},
+        nums{ [1,2,3] }
+    };
+    return m.user.id + m.nums[2];
+}
+fn TestMapPattern() {
+    let m = map { x{5}, y{9} };
+    match m {
+        map { x, y } => x * y,
+        _ => 0
+    }
+}
+enum Option<T> {
+    Some { value },
+    None {}
+}
+enum Result<T, E> {
+    Ok { value },
+    Err { error },
+}
+fn TestTintOption() {
+    let a = Option::Some { value: 10 };
+    let b = Option::None {};
+    match a {
+        Some { value } => value + 1,
+        None {} => 0
+    }
+}
+fn TestTintResult() {
+    let r1 = Result::Ok { value: "OK" };
+    let r2 = Result::Err { error: "E" };
+    match r1 {
+        Ok { value } => value.len(),
+        Err { error } => -1
+    }
+}
+enum Option2<T> {
+    Some { value: T },
+    None {}
+}
+enum Result2<T, E> {
+    Ok { value: T },
+    Err { error: E },
+}
+fn TestRustOption() {
+    let a = Option2::Some { value: 20 };
+    let b = Option2::None {};
+    match a {
+        Some { value: v } => v * 3,
+        None {} => 0
+    }
+}
+fn TestRustResult() {
+    let r = Result2::Ok { value: 5 };
+    match r {
+        Ok { value: x } => x * 2,
+        Err { error: _ } => 0
+    }
+}

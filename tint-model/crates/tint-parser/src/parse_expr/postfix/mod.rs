@@ -54,6 +54,27 @@ impl Parser {
                     continue;
                 }
 
+                TokenKind::Question => {
+                    let question = self.stream.next();
+                    expr = Expr::Try {
+                        span: Span::merge(expr.span(), question.span),
+                        expr: Box::new(expr),
+                    };
+                    continue;
+                }
+
+                TokenKind::As => {
+                    self.stream.next();
+                    let ty = self.parse_type()?;
+                    let span = Span::merge(expr.span(), ty.span());
+                    expr = Expr::Cast {
+                        expr: Box::new(expr),
+                        ty,
+                        span,
+                    };
+                    continue;
+                }
+
                 TokenKind::LBrace => {
                     // A brace is a named call only for known function identifiers.
                     if let Expr::Ident(ref fname, _) = expr {

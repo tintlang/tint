@@ -29,6 +29,7 @@ pub fn eval_user_fn<H: EvalHost>(host: &mut H, f: &FnDecl, args: &[Value], _span
                     // break/continue inside fn behave like early return Unit
                     Value::Unit
                 }
+                Flow::Propagate(v) => v,
             }
         }
     };

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Type {
     Simple(String),
     Unit,
@@ -22,6 +22,7 @@ pub enum Type {
     // User defined
     Struct(String),
     Enum(String),
+    Generic(String, Vec<Type>),
     Fn(Box<Type>, Vec<Type>),
 
     Array(Box<Type>),

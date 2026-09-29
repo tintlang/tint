@@ -1,7 +1,7 @@
 use super::super::*;
 
 impl TintVM {
-    pub(super) fn host_call_fn(
+    pub(crate) fn host_call_fn(
         &mut self,
         name: &str,
         args: &[EvalValue],
@@ -40,6 +40,12 @@ impl TintVM {
         if self.is_ir_function(name)
             && (self.uses_lambda(name)
                 || self.uses_function_value(name)
+                || self.uses_interpreter_control_flow(name)
+                || self.uses_try(name)
+                || self.uses_fallible_method(name)
+                || self.uses_cast(name)
+                || self.uses_exact_numeric(name)
+                || self.has_constants
                 || self.has_function_values())
         {
             return self.host_call_user_fn(name, args, span);
@@ -145,17 +151,31 @@ impl TintVM {
 
         // bind params
         for (param, arg) in func.params.iter().zip(args.iter()) {
-            bind_pattern(self, &param.pattern, arg);
+            let value = match param.ty.as_ref() {
+                Some(ty) if matches!(ty, tint_ast::Type::Simple(name) if matches!(name.as_str(), "i32" | "i64" | "u8" | "u32" | "u64" | "f32" | "f64")) => {
+                    arg.cast_numeric(ty)
+                        .unwrap_or_else(|message| panic!("numeric parameter type error: {message}"))
+                }
+                _ => arg.clone(),
+            };
+            bind_pattern(self, &param.pattern, &value);
         }
 
         // execute
         let result = match &func.body {
             FnBody::Block(block) => match self.eval_block(block) {
-                Flow::Value(v) => v,
-                Flow::Return(v) => v,
+                Flow::Value(v) | Flow::Return(v) | Flow::Propagate(v) => v,
                 _ => EvalValue::Unit,
             },
             FnBody::Expr(expr) => self.eval_expr(expr),
+        };
+        let result = match func.ret_ty.as_ref() {
+            Some(ty) if matches!(ty, tint_ast::Type::Simple(name) if matches!(name.as_str(), "i32" | "i64" | "u8" | "u32" | "u64" | "f32" | "f64")) => {
+                result
+                    .cast_numeric(ty)
+                    .unwrap_or_else(|message| panic!("numeric return type error: {message}"))
+            }
+            _ => result,
         };
 
         self.treewalk_call_depth -= 1;
@@ -170,6 +190,110 @@ impl TintVM {
         args: &[EvalValue],
         span: Span,
     ) -> EvalResult<(EvalValue, EvalValue)> {
+        if let EvalValue::EnumInstance {
+            enum_name,
+            variant,
+            args: values,
+        } = &receiver
+        {
+            if (enum_name == "Option" || enum_name == "Result")
+                && (method == "expect" || method == "unwrap")
+            {
+                if method == "expect" && args.len() != 1 {
+                    return Err(tint_evaluator::errors::EvalError::InvalidOp {
+                        msg: "expect expects one message argument".into(),
+                        span,
+                    });
+                }
+                if method == "unwrap" && !args.is_empty() {
+                    return Err(tint_evaluator::errors::EvalError::InvalidOp {
+                        msg: "unwrap expects no arguments".into(),
+                        span,
+                    });
+                }
+
+                let success = (enum_name == "Option" && variant == "Some")
+                    || (enum_name == "Result" && variant == "Ok");
+                if let (true, Some(value)) = (success, values.first()) {
+                    return Ok((receiver.clone(), value.clone()));
+                }
+
+                return Err(tint_evaluator::errors::EvalError::InvalidOp {
+                    msg: if method == "expect" {
+                        "expect called on an empty or failed value".into()
+                    } else {
+                        "unwrap called on an empty or failed value".into()
+                    },
+                    span,
+                });
+            }
+        }
+
+        if let EvalValue::EnumInstance {
+            enum_name,
+            variant,
+            args: values,
+        } = receiver.clone()
+        {
+            let is_option = enum_name == "Option";
+            let is_result = enum_name == "Result";
+            if (is_option || is_result)
+                && matches!(
+                    method,
+                    "is_some" | "is_none" | "is_ok" | "is_err" | "unwrap_or" | "map" | "and_then"
+                )
+            {
+                let success = (is_option && variant == "Some") || (is_result && variant == "Ok");
+                match method {
+                    "is_some" => return Ok((receiver, EvalValue::Bool(is_option && success))),
+                    "is_none" => return Ok((receiver, EvalValue::Bool(is_option && !success))),
+                    "is_ok" => return Ok((receiver, EvalValue::Bool(is_result && success))),
+                    "is_err" => return Ok((receiver, EvalValue::Bool(is_result && !success))),
+                    "unwrap_or" => {
+                        if args.len() != 1 {
+                            return Err(tint_evaluator::errors::EvalError::InvalidOp {
+                                msg: "unwrap_or expects one argument".into(),
+                                span,
+                            });
+                        }
+                        return Ok((
+                            receiver.clone(),
+                            values
+                                .first()
+                                .cloned()
+                                .filter(|_| success)
+                                .unwrap_or_else(|| args[0].clone()),
+                        ));
+                    }
+                    "map" | "and_then" => {
+                        if args.len() != 1 {
+                            return Err(tint_evaluator::errors::EvalError::InvalidOp {
+                                msg: format!("{method} expects one callable argument"),
+                                span,
+                            });
+                        }
+                        if !success {
+                            return Ok((receiver.clone(), receiver));
+                        }
+                        let value = values.first().cloned().unwrap_or(EvalValue::Unit);
+                        let mapped = self.host_call_value(args[0].clone(), &[value], span);
+                        if method == "and_then" {
+                            return Ok((receiver.clone(), mapped));
+                        }
+                        return Ok((
+                            receiver.clone(),
+                            EvalValue::EnumInstance {
+                                enum_name,
+                                variant,
+                                args: vec![mapped],
+                            },
+                        ));
+                    }
+                    _ => unreachable!(),
+                }
+            }
+        }
+
         let type_name = match &receiver {
             EvalValue::StructInstance { name, .. } => name.clone(),
             _ => {
@@ -213,7 +337,7 @@ impl TintVM {
 
         let result = match &func.body {
             FnBody::Block(block) => match self.eval_block(block) {
-                Flow::Value(v) | Flow::Return(v) => v,
+                Flow::Value(v) | Flow::Return(v) | Flow::Propagate(v) => v,
                 _ => EvalValue::Unit,
             },
             FnBody::Expr(expr) => self.eval_expr(expr),
@@ -278,7 +402,7 @@ impl TintVM {
                 let result = match body {
                     tint_evaluator::eval_fn::FnBodyKind::Block(block) => {
                         match self.eval_block(&block) {
-                            Flow::Value(v) | Flow::Return(v) => v,
+                            Flow::Value(v) | Flow::Return(v) | Flow::Propagate(v) => v,
                             Flow::Break | Flow::Continue => EvalValue::Unit,
                         }
                     }

@@ -73,6 +73,7 @@ impl EvalHost for HostVM {
                 Flow::Return(value) => return Flow::Return(value),
                 Flow::Break => return Flow::Break,
                 Flow::Continue => return Flow::Continue,
+                Flow::Propagate(value) => return Flow::Propagate(value),
                 Flow::Value(value) => last = value,
             }
         }

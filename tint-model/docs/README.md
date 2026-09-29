@@ -25,6 +25,8 @@ subject.
 **Guide** (`guide/`) — narrative, one topic per file, with rationale and examples
 - `basics.md`, `control-flow.md`, `functions.md`, `types.md` — core TintLogic,
   including `if` expressions and first-class function types
+- [`guide/terminal.md`](guide/terminal.md) — CLI development workflow, terminal I/O,
+  `read_key`, and `while`/`loop`
 - `events.md` — current UI events and handlers
 
 **UI** (`ui/`) — the declarative UI layer

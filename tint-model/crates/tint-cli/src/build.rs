@@ -37,7 +37,7 @@ fn build_file(path: &str, entry: &str, output: Option<&str>) {
     // -- see `standalone_html`'s doc comment on why plain concatenation of
     // those texts is enough, with no unparser needed.
     let loaded = module_loader::load(path);
-    for error in &semantic_check(&loaded.program) {
+    for error in &semantic_check(&loaded) {
         eprintln!("warning: semantic:");
         crate::support::report_semantic_error(&loaded.entry_source, error);
     }

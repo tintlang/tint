@@ -1,7 +1,6 @@
 use std::io::{self, Write};
 
 use tint_ast::Span;
-use tint_evaluator::EvalHost;
 use tint_runtime::vm::TintVM;
 
 use crate::support::{has_fn, parse_source, report_parse_error};

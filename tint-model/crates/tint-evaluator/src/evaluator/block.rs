@@ -12,7 +12,7 @@ pub fn eval_block_flow<H: EvalHost>(host: &mut H, block: &Block) -> Flow {
             Flow::Value(_) => {
                 last = flow;
             }
-            Flow::Break | Flow::Continue | Flow::Return(_) => {
+            Flow::Break | Flow::Continue | Flow::Return(_) | Flow::Propagate(_) => {
                 return flow;
             }
         }

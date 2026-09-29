@@ -1,0 +1,37 @@
+const C: f32 = 32.0
+
+fn c_to_f(celsius: f32) -> f32 {
+    celsius * 9 / 5 + C
+}
+
+fn f_to_c(fahrenheit: f32) -> f32 {
+    (fahrenheit - C) * 5 / 9
+}
+
+fn convert(temperature: f32, choice: u8) -> Option<f32> {
+    if choice == 1 {
+        Option::Some { value: c_to_f(temperature) }
+    } else {
+        if choice == 2 {
+            Option::Some { value: f_to_c(temperature) }
+        } else {
+            Option::None {}
+        }
+    }
+}
+
+fn main() {
+    println("Temperature converter")
+    println("1. Celsius -> Fahrenheit")
+    println("2. Fahrenheit -> Celsius")
+    print("Choose a conversion: ")
+    let choice = parse_number(read_line()).expect("Please type a number!") as u8
+    print("Enter temperature: ")
+    let temperature = parse_number(read_line()).expect("Please type a number!") as f32
+
+    let converted = convert(temperature, choice)
+    match converted {
+        Some { value } => println("Result: {value}"),
+        None {} => println("Unknown conversion")
+    }
+}

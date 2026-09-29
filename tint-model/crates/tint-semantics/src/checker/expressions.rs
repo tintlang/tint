@@ -4,23 +4,40 @@ impl SemanticChecker {
     }
 
     fn infer_expr(&mut self, expr: &Expr) -> Type {
+        let ty = self.infer_expr_inner(expr);
+        self.inferred.insert(
+            (expr.span().start.offset, expr.span().end.offset),
+            TypedExpr {
+                span: expr.span(),
+                ty: ty.clone(),
+            },
+        );
+        ty
+    }
+
+    fn infer_expr_inner(&mut self, expr: &Expr) -> Type {
         match expr {
             Expr::Number(_, _) => Type::Number,
             Expr::String(_, _) => Type::String,
             Expr::Bool(_, _) => Type::Bool,
             Expr::Unit(_) => Type::Unit,
-            Expr::Ident(id, span) => self
-                .scopes
-                .lookup(id)
-                .or_else(|| {
-                    self.fn_types
-                        .get(id)
-                        .map(|(params, ret)| Type::Fn(Box::new(ret.clone()), params.clone()))
-                })
-                .unwrap_or_else(|| {
-                    self.error(*span, SemanticErrorKind::UnknownIdent(id.clone()));
-                    Type::Unknown
-                }),
+            Expr::Ident(id, span) => {
+                self.references.push(Reference {
+                    name: id.clone(),
+                    span: *span,
+                });
+                self.scopes
+                    .lookup(id)
+                    .or_else(|| {
+                        self.fn_types
+                            .get(id)
+                            .map(|(params, ret)| Type::Fn(Box::new(ret.clone()), params.clone()))
+                    })
+                    .unwrap_or_else(|| {
+                        self.error(*span, SemanticErrorKind::UnknownIdent(id.clone()));
+                        Type::Unknown
+                    })
+            }
             Expr::SelfKw(span) => self.scopes.lookup("self").unwrap_or_else(|| {
                 self.error(*span, SemanticErrorKind::UnknownIdent("self".into()));
                 Type::Unknown
@@ -139,6 +156,37 @@ impl SemanticChecker {
                 }
             }
             Expr::Paren(inner, _) => self.infer_expr(inner),
+            Expr::Try { expr, span } => {
+                match self.infer_expr(expr) {
+                    Type::Generic(name, args) if name == "Option" || name == "Result" =>
+                        args.into_iter().next().unwrap_or(Type::Unknown),
+                    found => {
+                        self.error(
+                            *span,
+                            SemanticErrorKind::TypeMismatch {
+                                expected: "Option or Result".into(),
+                                found: type_name(&found),
+                            },
+                        );
+                        Type::Unknown
+                    }
+                }
+            }
+            Expr::Cast { expr, ty, span } => {
+                let source = self.infer_expr(expr);
+                let target = self.ast_type(Some(ty));
+                let numeric = |value: &Type| match value {
+                    Type::Number => true,
+                    Type::Simple(name) => matches!(name.as_str(), "i32" | "i64" | "u8" | "u32" | "u64" | "f32" | "f64" | "number"),
+                    _ => false,
+                };
+                if !numeric(&source) || !numeric(&target) {
+                    self.error(*span, SemanticErrorKind::TypeMismatch { expected: "numeric type".into(), found: type_name(&source) });
+                    Type::Unknown
+                } else {
+                    target
+                }
+            }
             Expr::Match {
                 scrutinee, arms, ..
             } => {
@@ -183,13 +231,25 @@ impl SemanticChecker {
                 Type::Fn(Box::new(ret), vec![Type::Unknown; params.len()])
             }
             Expr::StructInit { name, fields, span } => {
+                let generic_params = self
+                    .generic_params_by_type
+                    .get(name)
+                    .cloned()
+                    .unwrap_or_default();
+                let mut substitutions = HashMap::new();
                 if let Some(expected) = self.struct_fields.get(name).cloned() {
                     let mut seen = HashSet::new();
                     for field in fields {
                         let (field_name, value, field_span) = init_field_parts(field);
                         let found = self.infer_expr(value);
                         if let Some(field_ty) = expected.get(field_name) {
-                            self.require_compatible(field_ty, &found, *field_span);
+                            if let Type::Simple(parameter) = field_ty {
+                                if generic_params.iter().any(|name| name == parameter) {
+                                    substitutions.insert(parameter.clone(), found.clone());
+                                }
+                            }
+                            let expected_ty = substitute_type(field_ty, &substitutions);
+                            self.require_compatible(&expected_ty, &found, *field_span);
                             seen.insert(field_name.to_string());
                         } else {
                             self.error(
@@ -208,7 +268,17 @@ impl SemanticChecker {
                 } else if !self.type_names.contains(name) && name != "Vec2" {
                     self.error(*span, SemanticErrorKind::UnknownIdent(name.clone()));
                 }
-                Type::Struct(name.clone())
+                if generic_params.is_empty() {
+                    Type::Struct(name.clone())
+                } else {
+                    Type::Generic(
+                        name.clone(),
+                        generic_params
+                            .iter()
+                            .map(|parameter| substitutions.get(parameter).cloned().unwrap_or(Type::Unknown))
+                            .collect(),
+                    )
+                }
             }
             Expr::StructUpdate { base, updates, .. } => {
                 let ty = self.infer_expr(base);
@@ -249,6 +319,12 @@ impl SemanticChecker {
                 fields,
                 span,
             } => {
+                let generic_params = self
+                    .generic_params_by_type
+                    .get(enum_name)
+                    .cloned()
+                    .unwrap_or_default();
+                let mut substitutions = HashMap::new();
                 if let Some(expected) = self
                     .enum_variants
                     .get(&(enum_name.clone(), variant.clone()))
@@ -261,7 +337,13 @@ impl SemanticChecker {
                         let (_, value, field_span) = init_field_parts(field);
                         let found = self.infer_expr(value);
                         if let Some(expected_ty) = expected.get(index) {
-                            self.require_compatible(expected_ty, &found, *field_span);
+                            if let Type::Simple(parameter) = expected_ty {
+                                if generic_params.iter().any(|name| name == parameter) {
+                                    substitutions.insert(parameter.clone(), found.clone());
+                                }
+                            }
+                            let expected_ty = substitute_type(expected_ty, &substitutions);
+                            self.require_compatible(&expected_ty, &found, *field_span);
                         }
                     }
                 } else {
@@ -273,7 +355,40 @@ impl SemanticChecker {
                         self.visit_struct_init_field(field);
                     }
                 }
-                Type::Enum(enum_name.clone())
+                if enum_name == "Option" || enum_name == "Result" {
+                    let payloads = fields
+                        .iter()
+                        .map(|field| self.infer_expr(init_field_parts(field).1))
+                        .collect::<Vec<_>>();
+                    match (enum_name.as_str(), variant.as_str()) {
+                        ("Option", "Some") => Type::Generic(
+                            "Option".into(),
+                            vec![payloads.first().cloned().unwrap_or(Type::Unknown)],
+                        ),
+                        ("Option", "None") => {
+                            Type::Generic("Option".into(), vec![Type::Unknown])
+                        }
+                        ("Result", "Ok") => Type::Generic(
+                            "Result".into(),
+                            vec![payloads.first().cloned().unwrap_or(Type::Unknown), Type::Unknown],
+                        ),
+                        ("Result", "Err") => Type::Generic(
+                            "Result".into(),
+                            vec![Type::Unknown, payloads.first().cloned().unwrap_or(Type::Unknown)],
+                        ),
+                        _ => Type::Enum(enum_name.clone()),
+                    }
+                } else if generic_params.is_empty() {
+                    Type::Enum(enum_name.clone())
+                } else {
+                    Type::Generic(
+                        enum_name.clone(),
+                        generic_params
+                            .iter()
+                            .map(|parameter| substitutions.get(parameter).cloned().unwrap_or(Type::Unknown))
+                            .collect(),
+                    )
+                }
             }
             Expr::MapInit { entries, .. } => {
                 let mut item = Type::Unknown;
@@ -311,7 +426,7 @@ impl SemanticChecker {
                     .cloned()
                 {
                     self.check_args(&params, &arg_types, span);
-                    return Type::Enum(enum_name.clone());
+                    return builtin_variant_type(enum_name, item, &arg_types);
                 }
             }
         }
@@ -326,6 +441,49 @@ impl SemanticChecker {
                 if let Some((params, ret)) = self.methods.get(&(name, method.clone())).cloned() {
                     self.check_args(&params, &arg_types, span);
                     return ret;
+                }
+            } else {
+                let (name, args) = match receiver_ty {
+                    Type::Generic(name, args) => (name, args),
+                    Type::Enum(name) => (name, Vec::new()),
+                    _ => (String::new(), Vec::new()),
+                };
+                if name == "Option" || name == "Result" {
+                    match method.as_str() {
+                        "unwrap" => {
+                            if !arg_types.is_empty() {
+                                self.error(span, SemanticErrorKind::Unsupported);
+                            }
+                            return args.first().cloned().unwrap_or(Type::Unknown);
+                        }
+                        "expect" => {
+                            self.check_args(&[Type::String], &arg_types, span);
+                            return args.first().cloned().unwrap_or(Type::Unknown);
+                        }
+                        "is_some" | "is_none" | "is_ok" | "is_err" => {
+                            if !arg_types.is_empty() {
+                                self.error(span, SemanticErrorKind::Unsupported);
+                            }
+                            return Type::Bool;
+                        }
+                        "unwrap_or" => {
+                            self.check_args(&[args.first().cloned().unwrap_or(Type::Unknown)], &arg_types, span);
+                            return args.first().cloned().unwrap_or(Type::Unknown);
+                        }
+                        "map" => {
+                            if let Some(Type::Fn(ret, _)) = arg_types.first() {
+                                return Type::Generic(name, vec![(**ret).clone()]);
+                            }
+                            return Type::Generic(name, vec![Type::Unknown]);
+                        }
+                        "and_then" => {
+                            if let Some(Type::Fn(ret, _)) = arg_types.first() {
+                                return *ret.clone();
+                            }
+                            return Type::Unknown;
+                        }
+                        _ => {}
+                    }
                 }
             }
         }
@@ -343,7 +501,16 @@ impl SemanticChecker {
                     self.check_args(&[Type::Number, Type::Number], &arg_types, span);
                     return Type::Struct("Vec2".into());
                 }
-                "clamp" | "min" | "max" | "abs" | "sign" | "sqrt" => return Type::Number,
+                "clamp" | "min" | "max" | "abs" | "sign" | "sqrt" => {
+                    return Type::Number;
+                }
+                "parse_number" => {
+                    return Type::Generic(
+                        "Result".into(),
+                        vec![Type::Number, Type::String],
+                    );
+                }
+                "read_line" | "read_key" => return Type::String,
                 _ => {
                     if !self.known_fns.contains(name) {
                         self.error(span, SemanticErrorKind::UnknownIdent(name.clone()));
@@ -412,13 +579,13 @@ fn compatible(expected: &Type, found: &Type) -> bool {
     if let Type::Simple(name) = expected {
         return matches!(
             (name.as_str(), found),
-            ("f32" | "f64" | "i32" | "i64" | "u32" | "u64", Type::Number)
+            ("f32" | "f64" | "i32" | "i64" | "u8" | "u32" | "u64", Type::Number)
         );
     }
     if let Type::Simple(name) = found {
         return matches!(
             (name.as_str(), expected),
-            ("f32" | "f64" | "i32" | "i64" | "u32" | "u64", Type::Number)
+            ("f32" | "f64" | "i32" | "i64" | "u8" | "u32" | "u64", Type::Number)
         );
     }
     if let (Type::Fn(expected_ret, expected_params), Type::Fn(found_ret, found_params)) =
@@ -430,12 +597,22 @@ fn compatible(expected: &Type, found: &Type) -> bool {
                 .zip(found_params)
                 .all(|(e, f)| compatible(e, f))
             && compatible(expected_ret, found_ret)
+    } else if let (Type::Generic(expected_name, expected_args), Type::Generic(found_name, found_args)) =
+        (expected, found)
+    {
+        expected_name == found_name
+            && expected_args.len() == found_args.len()
+            && expected_args
+                .iter()
+                .zip(found_args)
+                .all(|(expected, found)| compatible(expected, found))
     } else {
         expected == found
     }
 }
 fn type_name(ty: &Type) -> String {
     match ty {
+        Type::Simple(name) => name.clone(),
         Type::Unit => "unit".into(),
         Type::Number => "number".into(),
         Type::String => "string".into(),
@@ -445,12 +622,53 @@ fn type_name(ty: &Type) -> String {
         Type::UIChildren => "ui-children".into(),
         Type::Slot => "slot".into(),
         Type::Struct(n) | Type::Enum(n) => n.clone(),
+        Type::Generic(name, args) => format!(
+            "{}<{}>",
+            name,
+            args.iter().map(type_name).collect::<Vec<_>>().join(", ")
+        ),
         Type::Fn(_, _) => "function".into(),
         Type::Array(_) => "array".into(),
         Type::Tuple(_) => "tuple".into(),
         Type::Map(_) => "map".into(),
         Type::Unknown => "unknown".into(),
         other => format!("{:?}", other),
+    }
+}
+
+fn substitute_type(ty: &Type, substitutions: &HashMap<String, Type>) -> Type {
+    match ty {
+        Type::Simple(name) => substitutions.get(name).cloned().unwrap_or_else(|| ty.clone()),
+        Type::Generic(name, args) => Type::Generic(
+            name.clone(),
+            args.iter().map(|arg| substitute_type(arg, substitutions)).collect(),
+        ),
+        Type::Array(item) => Type::Array(Box::new(substitute_type(item, substitutions))),
+        Type::Tuple(items) => Type::Tuple(items.iter().map(|item| substitute_type(item, substitutions)).collect()),
+        Type::Fn(ret, params) => Type::Fn(
+            Box::new(substitute_type(ret, substitutions)),
+            params.iter().map(|param| substitute_type(param, substitutions)).collect(),
+        ),
+        _ => ty.clone(),
+    }
+}
+
+fn builtin_variant_type(enum_name: &str, variant: &str, args: &[Type]) -> Type {
+    match (enum_name, variant) {
+        ("Option", "Some") => Type::Generic(
+            "Option".into(),
+            vec![args.first().cloned().unwrap_or(Type::Unknown)],
+        ),
+        ("Option", "None") => Type::Generic("Option".into(), vec![Type::Unknown]),
+        ("Result", "Ok") => Type::Generic(
+            "Result".into(),
+            vec![args.first().cloned().unwrap_or(Type::Unknown), Type::Unknown],
+        ),
+        ("Result", "Err") => Type::Generic(
+            "Result".into(),
+            vec![Type::Unknown, args.first().cloned().unwrap_or(Type::Unknown)],
+        ),
+        _ => Type::Enum(enum_name.into()),
     }
 }
 fn init_field_parts(field: &StructInitField) -> (&str, &Expr, &Span) {

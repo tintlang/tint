@@ -93,14 +93,21 @@ returns, function arguments, struct fields, method arguments and UI
 state/interpolation expressions; and reports `TypeMismatch` alongside the
 existing undefined-variable, duplicate-binding and immutability errors.
 Unknown types remain permissive where declarations are intentionally untyped;
-generic typing and every UI attribute's host-specific value contract remain
+generic functions and every UI attribute's host-specific value contract remain
 future work. `tint check` reports errors as fatal;
 `tint run` reports them as non-fatal warnings and still executes.
 
 **Map literals:** `map { a{1}, b{2} }`.
 
-**Generics:** generic syntax parses in several positions, but generic runtime
-semantics are not a supported end-to-end feature.
+**Generics:** `Option<T>` and `Result<T, E>` are supported by the checker and
+runtime. User-defined generic `struct` and `enum` declarations now preserve
+their parameters in the AST; the checker validates arity and substitutes
+generic parameters while checking fields and variant payloads.
+
+**Numeric types:** `i32`, `i64`, `u8`, `u32`, `u64`, `f32`, and `f64` have
+distinct runtime values. Explicit `as` casts, range checks, typed arithmetic,
+and typed numeric return values are supported. `number` is the compatibility
+alias for `f64`.
 
 **Union type sugar:** `type Number = union(i32 | f32 | f64)`.
 
@@ -116,8 +123,10 @@ modules and preserves the same source/entry contract for development and HMR.
 
 ## Not yet implemented or not supported end to end
 
-- A settled `Option`/`Result` DSL (`throw`, `try`, `catch`) — several shapes have
-  been prototyped but none is final.
+- Error handling is implemented through `Option<T>`, `Result<T, E>`, their
+  standard methods (`is_some`, `is_none`, `is_ok`, `is_err`, `unwrap_or`,
+  `map`, `and_then`), `expect`, `unwrap`, and postfix `?` propagation. A
+  larger `throw`/`try`/`catch` error DSL remains future work.
 - Move-checking beyond the basic runtime model, including ordinary-value moves.
 - Broader component semantics and additional runtime behavior remain future work.
 - GPU/WebGPU, Tint2D, tensors, async execution, resource borrowing, and kits

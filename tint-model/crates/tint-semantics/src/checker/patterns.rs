@@ -27,6 +27,22 @@ impl SemanticChecker {
             Pattern::Struct { name, fields, span } => {
                 let actual = match expected {
                     Type::Struct(actual) => actual,
+                    Type::Enum(enum_name) | Type::Generic(enum_name, _) => {
+                        let known = self
+                            .enum_variants
+                            .keys()
+                            .any(|(decl, variant)| decl == enum_name && variant == name);
+                        if !known {
+                            self.error(
+                                *span,
+                                SemanticErrorKind::UnknownIdent(name.clone()),
+                            );
+                        }
+                        for field in fields {
+                            self.check_pattern_field_type(field, &Type::Unknown);
+                        }
+                        return;
+                    }
                     Type::Unknown => return,
                     _ => {
                         self.error(
@@ -67,7 +83,7 @@ impl SemanticChecker {
                 }
             }
             Pattern::Variant { name, args, span } => {
-                if let Type::Enum(enum_name) = expected {
+                if let Type::Enum(enum_name) | Type::Generic(enum_name, _) = expected {
                     if let Some(types) =
                         self.enum_variants
                             .iter()
@@ -109,6 +125,12 @@ impl SemanticChecker {
         }
     }
 
+    fn check_pattern_field_type(&mut self, field: &PatternField, expected: &Type) {
+        if let PatternField::Assign { pat, .. } = field {
+            self.check_pattern_type(pat, expected);
+        }
+    }
+
     fn check_match_exhaustiveness(&mut self, scrutinee: &Type, arms: &[MatchArm]) {
         if arms
             .iter()
@@ -118,7 +140,7 @@ impl SemanticChecker {
         }
         match scrutinee {
             Type::Bool => {}
-            Type::Enum(name) => {
+            Type::Enum(name) | Type::Generic(name, _) => {
                 let variants: HashSet<String> = self
                     .enum_variants
                     .keys()
@@ -129,6 +151,7 @@ impl SemanticChecker {
                     .filter(|arm| arm.guard.is_none())
                     .filter_map(|arm| match &arm.pattern {
                         Pattern::Variant { name, .. } => Some(name.clone()),
+                        Pattern::Struct { name, .. } => Some(name.clone()),
                         _ => None,
                     })
                     .collect();

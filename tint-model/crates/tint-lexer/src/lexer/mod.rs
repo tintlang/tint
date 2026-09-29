@@ -54,6 +54,7 @@ impl<'a> Lexer<'a> {
             '/' => self.single(TokenKind::Slash),
             '%' => self.single(TokenKind::Percent),
             '!' => self.single(TokenKind::Bang),
+            '?' => self.single(TokenKind::Question),
             '|' => self.single(TokenKind::Pipe),
             '=' => self.single(TokenKind::Eq),
             '@' => self.single(TokenKind::At),

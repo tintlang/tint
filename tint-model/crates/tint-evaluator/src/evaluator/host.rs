@@ -9,6 +9,7 @@ use crate::{env::Env, errors::EvalResult, value::Value};
 pub enum Flow {
     Value(Value),
     Return(Value),
+    Propagate(Value),
     Break,
     Continue,
 }

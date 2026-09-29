@@ -1,0 +1,11 @@
+[package]
+name = "tint-compiler"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+tint-ast = { path = "../tint-ast" }
+tint-lexer = { path = "../tint-lexer" }
+tint-parser = { path = "../tint-parser" }
+tint-semantics = { path = "../tint-semantics" }

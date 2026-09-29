@@ -8,6 +8,8 @@ fn build_node(
     // Button/MenuItem or anything with a click handler (so it gets free
     // keyboard/focus/AT behavior), a plain <div> otherwise.
     let is_link = node.route.is_some();
+    let is_inline = node.tag == "Inline";
+    let is_text = node.tag == "Text";
     let is_image = node.asset.is_some() && node.tag == "Image";
     let is_audio = node.asset.is_some() && node.tag == "Audio";
     let is_button = !is_link
@@ -17,6 +19,10 @@ fn build_node(
             || node.on_js.is_some());
     let tag_name = if is_link {
         "a"
+    } else if is_inline {
+        "span"
+    } else if is_text {
+        "span"
     } else if is_image {
         "img"
     } else if is_audio {

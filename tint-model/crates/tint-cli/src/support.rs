@@ -1,12 +1,7 @@
-use std::fs;
-
+use crate::module_loader::Loaded;
 use tint_ast::{Item, Program};
-use tint_lexer::{collect_tokens, Lexer};
 use tint_parser::error::ParserError;
-use tint_parser::Parser;
 use tint_semantics::errors::SemanticError;
-use tint_semantics::prelude::CheckerContext;
-use tint_semantics::SemanticChecker;
 
 pub(crate) fn require_arg<'a>(arg: Option<&'a String>, usage: &str) -> &'a str {
     arg.map(String::as_str).unwrap_or_else(|| {
@@ -15,19 +10,8 @@ pub(crate) fn require_arg<'a>(arg: Option<&'a String>, usage: &str) -> &'a str {
     })
 }
 
-pub(crate) fn read_file(path: &str) -> String {
-    match fs::read_to_string(path) {
-        Ok(source) => source,
-        Err(error) => {
-            eprintln!("error reading '{}': {}", path, error);
-            std::process::exit(1);
-        }
-    }
-}
-
 pub(crate) fn parse_source(source: &str) -> Result<Program, ParserError> {
-    let tokens = collect_tokens(&mut Lexer::new(source));
-    Parser::new(tokens).parse_program()
+    tint_compiler::parse_source(source)
 }
 
 pub(crate) fn report_parse_error(source: &str, error: &ParserError) {
@@ -46,8 +30,8 @@ pub(crate) fn report_parse_error(source: &str, error: &ParserError) {
     );
 }
 
-pub(crate) fn semantic_check(program: &Program) -> Vec<SemanticError> {
-    SemanticChecker::new(CheckerContext::default()).check(program)
+pub(crate) fn semantic_check(loaded: &Loaded) -> Vec<SemanticError> {
+    loaded.resolved.check().0
 }
 
 pub(crate) fn report_semantic_error(source: &str, error: &SemanticError) {
@@ -72,9 +56,9 @@ pub(crate) fn has_fn(program: &Program, name: &str) -> bool {
 pub(crate) fn check_command(path: Option<&String>) {
     let path = require_arg(path, "tint check <file.tn>");
     let loaded = crate::module_loader::load(path);
-    let program = loaded.program;
+    let program = &loaded.program;
 
-    let errors = semantic_check(&program);
+    let errors = semantic_check(&loaded);
     if !errors.is_empty() {
         for error in &errors {
             report_semantic_error(&loaded.entry_source, error);

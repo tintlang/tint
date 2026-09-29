@@ -12,7 +12,6 @@
 
 use super::fixture;
 use tint_evaluator::value::Value;
-use tint_evaluator::EvalHost;
 
 fn expect_number(v: Value) -> f64 {
     match v {

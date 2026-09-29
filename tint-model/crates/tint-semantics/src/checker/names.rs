@@ -13,17 +13,75 @@ impl SemanticChecker {
             enum_variants: HashMap::new(),
             enum_names: HashSet::new(),
             type_names: HashSet::new(),
+            generic_arity: HashMap::new(),
+            generic_params_by_type: HashMap::new(),
+            generic_params: HashSet::new(),
             current_return: None,
             errors: vec![],
+            inferred: HashMap::new(),
+            references: vec![],
+            symbols: vec![],
+            external_context: SemanticContext::default(),
         }
     }
 
+    /// Builds the UI/name environment exported by a fully resolved program.
+    /// This is intentionally separate from `check`: an editor may check an
+    /// imported fragment against the context of its entry file.
+    pub fn context_for_program(program: &Program) -> SemanticContext {
+        let mut checker = Self::new(Default::default());
+        checker.collect_top_level_names(&program.items);
+        for item in &program.items {
+            if let Item::UiFn(function) = item {
+                for node in &function.body {
+                    checker.collect_ui_tokens(node);
+                    checker.collect_ui_styles(node);
+                    checker.collect_ui_variants(node);
+                }
+            }
+        }
+        SemanticContext {
+            known_fns: checker.known_fns,
+            ui_tokens: checker.ui_tokens,
+            ui_styles: checker.ui_styles,
+            ui_variants: checker.ui_variants,
+        }
+    }
+
+    pub fn check_with_context(
+        &mut self,
+        program: &Program,
+        context: &SemanticContext,
+    ) -> (Vec<SemanticError>, SemanticModel) {
+        self.external_context = context.clone();
+        self.check_with_model(program)
+    }
+
     pub fn check(&mut self, program: &Program) -> Vec<SemanticError> {
+        self.errors.clear();
+        self.inferred.clear();
+        self.references.clear();
+        self.symbols.clear();
+        self.known_fns.extend(self.external_context.known_fns.iter().cloned());
         self.collect_top_level_names(&program.items);
         for item in &program.items {
             self.visit_item(item);
         }
         self.errors.clone()
+    }
+
+    pub fn check_with_model(&mut self, program: &Program) -> (Vec<SemanticError>, SemanticModel) {
+        let errors = self.check(program);
+        let mut expressions: Vec<_> = self.inferred.values().cloned().collect();
+        expressions.sort_by_key(|typed| (typed.span.start.offset, typed.span.end.offset));
+        (
+            errors,
+            SemanticModel {
+                expressions,
+                symbols: self.symbols.clone(),
+                references: self.references.clone(),
+            },
+        )
     }
 
     fn collect_top_level_names(&mut self, items: &[Item]) {
@@ -40,7 +98,21 @@ impl SemanticChecker {
             .define_with_mutability("theme", Type::String, true);
 
         for builtin in [
-            "print", "log", "dbg", "debug", "error", "sqrt", "vec2", "clamp", "min", "max", "abs",
+            "print",
+            "println",
+            "read_line",
+            "read_key",
+            "parse_number",
+            "log",
+            "dbg",
+            "debug",
+            "error",
+            "sqrt",
+            "vec2",
+            "clamp",
+            "min",
+            "max",
+            "abs",
             "sign",
         ] {
             self.known_fns.insert(builtin.to_string());
@@ -64,14 +136,34 @@ impl SemanticChecker {
             ("Vec2".into(), "normalized".into()),
             (vec![], Type::Struct("Vec2".into())),
         );
+
+        // Built-in algebraic data types. Their payload types become strict
+        // once generic type arguments are carried through the type table;
+        // for now the checker still validates their shape and variants.
+        self.type_names.insert("Option".into());
+        self.type_names.insert("Result".into());
+        self.enum_names.insert("Option".into());
+        self.enum_names.insert("Result".into());
+        self.enum_variants
+            .insert(("Option".into(), "Some".into()), vec![Type::Unknown]);
+        self.enum_variants
+            .insert(("Option".into(), "None".into()), vec![]);
+        self.enum_variants
+            .insert(("Result".into(), "Ok".into()), vec![Type::Unknown]);
+        self.enum_variants
+            .insert(("Result".into(), "Err".into()), vec![Type::Unknown]);
         for item in items {
             match item {
                 Item::Struct(s) | Item::ExportStruct(s) => {
                     self.type_names.insert(s.name.clone());
+                    self.generic_arity.insert(s.name.clone(), s.generics.len());
+                    self.generic_params_by_type.insert(s.name.clone(), s.generics.clone());
                 }
                 Item::Enum(e) | Item::ExportEnum(e) => {
                     self.type_names.insert(e.name.clone());
                     self.enum_names.insert(e.name.clone());
+                    self.generic_arity.insert(e.name.clone(), e.generics.len());
+                    self.generic_params_by_type.insert(e.name.clone(), e.generics.clone());
                 }
                 Item::TypeAlias(alias) => {
                     self.type_names.insert(alias.name.clone());
@@ -82,6 +174,22 @@ impl SemanticChecker {
         for item in items {
             match item {
                 Item::Fn(f) | Item::ExportFn(f, _) => {
+                    let params = f
+                        .params
+                        .iter()
+                        .map(|p| self.ast_type(p.ty.as_ref()))
+                        .collect::<Vec<_>>();
+                    let ret = f
+                        .ret_ty
+                        .as_ref()
+                        .map(|t| self.ast_type(Some(t)))
+                        .unwrap_or(Type::Unknown);
+                    self.symbols.push(Symbol {
+                        name: f.name.clone(),
+                        span: f.span,
+                        ty: Type::Fn(Box::new(ret.clone()), params.clone()),
+                        kind: SymbolKind::Function,
+                    });
                     self.known_fns.insert(f.name.clone());
                     for param in &f.params {
                         if let Some(ty) = &param.ty {
@@ -92,17 +200,20 @@ impl SemanticChecker {
                         self.validate_decl_type(ty);
                     }
                     self.type_names.extend(f.generics.iter().cloned());
-                    let params = f
-                        .params
-                        .iter()
-                        .map(|p| self.ast_type(p.ty.as_ref()))
-                        .collect();
-                    let ret = f
-                        .ret_ty
-                        .as_ref()
-                        .map(|t| self.ast_type(Some(t)))
-                        .unwrap_or(Type::Unknown);
                     self.fn_types.insert(f.name.clone(), (params, ret));
+                }
+                Item::Const(c) => {
+                    let ty = self.ast_type(c.ty.as_ref());
+                    self.scopes.define_with_mutability(&c.name, ty.clone(), false);
+                    self.symbols.push(Symbol {
+                        name: c.name.clone(),
+                        span: c.span,
+                        ty,
+                        kind: SymbolKind::Variable,
+                    });
+                    if let Some(declared) = &c.ty {
+                        self.validate_decl_type(declared);
+                    }
                 }
                 Item::UiFn(f) => {
                     self.known_fns.insert(f.name.clone());
@@ -122,21 +233,45 @@ impl SemanticChecker {
                     }
                 }
                 Item::Struct(s) => {
+                    self.symbols.push(Symbol {
+                        name: s.name.clone(),
+                        span: s.span,
+                        ty: Type::Struct(s.name.clone()),
+                        kind: SymbolKind::Struct,
+                    });
                     self.known_fns.insert(s.name.clone());
                     self.type_names.insert(s.name.clone());
                     self.collect_struct(s);
                 }
                 Item::ExportStruct(s) => {
+                    self.symbols.push(Symbol {
+                        name: s.name.clone(),
+                        span: s.span,
+                        ty: Type::Struct(s.name.clone()),
+                        kind: SymbolKind::Struct,
+                    });
                     self.known_fns.insert(s.name.clone());
                     self.type_names.insert(s.name.clone());
                     self.collect_struct(s);
                 }
                 Item::TypeAlias(alias) => self.validate_decl_type(&alias.ty),
                 Item::Enum(e) => {
+                    self.symbols.push(Symbol {
+                        name: e.name.clone(),
+                        span: e.span,
+                        ty: Type::Enum(e.name.clone()),
+                        kind: SymbolKind::Enum,
+                    });
                     self.type_names.insert(e.name.clone());
                     self.collect_enum_names(e);
                 }
                 Item::ExportEnum(e) => {
+                    self.symbols.push(Symbol {
+                        name: e.name.clone(),
+                        span: e.span,
+                        ty: Type::Enum(e.name.clone()),
+                        kind: SymbolKind::Enum,
+                    });
                     self.type_names.insert(e.name.clone());
                     self.collect_enum_names(e);
                 }
@@ -183,16 +318,30 @@ impl SemanticChecker {
     fn ast_type(&self, ty: Option<&tint_ast::Type>) -> Type {
         let Some(ty) = ty else { return Type::Unknown };
         match ty {
-            tint_ast::Type::Simple(name) => match name.as_str() {
+            tint_ast::Type::Simple(name) => {
+                if self.generic_params.contains(name) {
+                    return Type::Simple(name.clone());
+                }
+                match name.as_str() {
                 "()" | "unit" => Type::Unit,
                 "string" | "str" => Type::String,
                 "bool" => Type::Bool,
-                "i32" | "i64" | "u32" | "u64" | "f32" | "f64" | "number" => Type::Number,
+                "i32" | "i64" | "u8" | "u32" | "u64" | "f32" | "f64" => {
+                    Type::Simple(name.clone())
+                }
+                "number" => Type::Number,
                 _ if self.enum_names.contains(name) => Type::Enum(name.clone()),
-                _ => Type::Struct(name.clone()),
-            },
+                    _ => Type::Struct(name.clone()),
+                }
+            }
             tint_ast::Type::Generic(name, args) if name == "Vec" || name == "Array" => {
                 Type::Array(Box::new(self.ast_type(args.first())))
+            }
+            tint_ast::Type::Generic(name, args) if name == "Option" || name == "Result" => {
+                Type::Generic(
+                    name.clone(),
+                    args.iter().map(|arg| self.ast_type(Some(arg))).collect(),
+                )
             }
             tint_ast::Type::Union(types) => {
                 Type::Tuple(types.iter().map(|t| self.ast_type(Some(t))).collect())
@@ -202,11 +351,15 @@ impl SemanticChecker {
                 params.iter().map(|p| self.ast_type(Some(p))).collect(),
             ),
             tint_ast::Type::Unit => Type::Unit,
-            tint_ast::Type::Generic(name, _) => Type::Struct(name.clone()),
+            tint_ast::Type::Generic(name, args) => Type::Generic(
+                name.clone(),
+                args.iter().map(|arg| self.ast_type(Some(arg))).collect(),
+            ),
         }
     }
 
     fn collect_struct(&mut self, s: &tint_ast::StructDecl) {
+        self.generic_params.extend(s.generics.iter().cloned());
         let mut fields = HashMap::new();
         for member in &s.members {
             if let tint_ast::StructMember::Field(field) = member {
@@ -223,11 +376,17 @@ impl SemanticChecker {
             }
         }
         self.struct_fields.insert(s.name.clone(), fields);
+        for generic in &s.generics {
+            self.generic_params.remove(generic);
+        }
     }
 
     fn validate_decl_type(&mut self, ty: &tint_ast::Type) {
         match ty {
             tint_ast::Type::Simple(name) => {
+                if self.generic_params.contains(name) {
+                    return;
+                }
                 let builtin = matches!(
                     name.as_str(),
                     "unit"
@@ -237,6 +396,7 @@ impl SemanticChecker {
                         | "bool"
                         | "i32"
                         | "i64"
+                        | "u8"
                         | "u32"
                         | "u64"
                         | "f32"
@@ -249,10 +409,21 @@ impl SemanticChecker {
                 }
             }
             tint_ast::Type::Generic(name, args) => {
-                if !matches!(name.as_str(), "Vec" | "Array" | "Map")
+                if !matches!(name.as_str(), "Vec" | "Array" | "Map" | "Option" | "Result")
                     && !self.type_names.contains(name)
                 {
                     self.error(ty.span(), SemanticErrorKind::UnknownIdent(name.clone()));
+                }
+                if let Some(expected) = self.generic_arity.get(name) {
+                    if *expected != args.len() {
+                        self.error(
+                            ty.span(),
+                            SemanticErrorKind::TypeMismatch {
+                                expected: format!("{name} with {expected} type argument(s)"),
+                                found: format!("{name} with {} type argument(s)", args.len()),
+                            },
+                        );
+                    }
                 }
                 for arg in args {
                     self.validate_decl_type(arg);
@@ -274,6 +445,7 @@ impl SemanticChecker {
     }
 
     fn collect_enum_names(&mut self, e: &tint_ast::EnumDecl) {
+        self.generic_params.extend(e.generics.iter().cloned());
         self.known_fns.insert(e.name.clone());
         for v in &e.variants {
             let (name, fields) = match v {
@@ -307,6 +479,9 @@ impl SemanticChecker {
             self.enum_variants
                 .insert((e.name.clone(), name.clone()), fields);
         }
+        for generic in &e.generics {
+            self.generic_params.remove(generic);
+        }
     }
 
     fn visit_item(&mut self, item: &Item) {
@@ -328,6 +503,11 @@ impl SemanticChecker {
             // init can reference an earlier one.
             Item::GlobalLet(Stmt::Let { init, .. }) => {
                 self.visit_expr(init.expr());
+            }
+            Item::Const(c) => {
+                let expected = self.ast_type(c.ty.as_ref());
+                let found = self.infer_expr(&c.init);
+                self.require_compatible(&expected, &found, c.init.span());
             }
             // Not yet covered by this pass, and not oversights: struct/enum
             // declarations themselves (nothing to check about a

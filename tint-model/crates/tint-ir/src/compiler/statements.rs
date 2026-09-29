@@ -71,9 +71,7 @@ impl SsaCompiler {
                 self.lower_expr(expr, block, locals);
             }
 
-            other => {
-                println!("WARNING: stmt not lowered in SSA: {:?}", other);
-            }
+            _ => {}
         }
     }
 
@@ -173,9 +171,7 @@ impl SsaCompiler {
             }
 
             // Some(x), Ok(v) -- still a stub
-            Pattern::Variant { .. } => {
-                println!("TODO: variant pattern in SSA");
-            }
+            Pattern::Variant { .. } => {}
 
             // typed pattern:  pat: Type
             Pattern::Typed { pat, .. } => {

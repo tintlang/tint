@@ -1,5 +1,4 @@
 use tint_evaluator::value::Value;
-use tint_evaluator::EvalHost;
 use tint_lexer::{collect_tokens, Lexer};
 use tint_parser::Parser;
 use tint_runtime::vm::TintVM;

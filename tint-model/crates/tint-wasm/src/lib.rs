@@ -26,7 +26,6 @@ mod dom;
 pub use dom::DomSession;
 
 use tint_ast::{Item, Program, Span};
-use tint_evaluator::EvalHost;
 use tint_lexer::{collect_tokens, Lexer};
 use tint_parser::error::ParserError;
 use tint_parser::Parser;

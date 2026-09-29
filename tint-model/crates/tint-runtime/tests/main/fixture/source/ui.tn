@@ -1,41 +1,27 @@
-[@(main.att)]
-
-// XML-style `<Tag ...>...</Tag>` syntax was removed -- block mode (see
-// TestBlock just below) is the only UI syntax now. `TestChildrenGroup`
-// exercises the `children { ... }` grouping tag instead: a plain tag
-// named "children" that the builder splices straight into its parent
-// rather than wrapping (tint-runtime/src/ui/builder/nodes.rs), used to
-// visually separate a node's own modifiers from several structural
-// children.
 ui fn TestChildrenGroup() {
     Button {
         click||restart
         padding::{left::20, right::20}
-
         children {
             Icon { "refresh" }
             Text { "Restart" }
         }
     }
 }
-
 ui fn TestBlock() {
     Column {
         padding::20
         radius::8
-
         Text {
             text::{20, medium}
             "Hello BLOCK"
         }
-
         Button {
             click||do_action
             padding::{left::12, right::12}
             radius.top::10
             "Open"
         }
-
         Row {
             gap::10
             Text { "A" }
@@ -43,65 +29,53 @@ ui fn TestBlock() {
         }
     }
 }
-
 ui fn TestInterpolation(name) {
     Column {
         padding::20
-
         Text {
             text::20
             "Hello {name}"
         }
-
         Text {
             text::14
             "User len = {name.len()}"
         }
     }
 }
-
 ui fn TestModifiers() {
     Column {
         padding::{left::20, top::10}
         opacity::0.8
         radius::12
         background::black
-
         Card {
             padding::12
             radius.top::20
-
-
             Text { text::{18, bold, red}  "Animated" }
         }
     }
 }
-
 ui fn TestMultiRoot() {
     Text { text::20 "First" }
     Text { text::20 "Second" }
     Text { text::20 "Third" }
 }
-
 ui fn TestIf(visible) {
     Block {
         if{visible}
         Text { text::20 "Visible!" }
     }
-
     Block {
         if{!visible}
         Text { text::20 "Hidden" }
     }
 }
-
 ui fn TestFor(list) {
     Block {
         for{item in list}
         Text { text::16 "{item}" }
     }
 }
-
 ui fn TestMatch(status) {
     Block {
         match{status}
@@ -113,9 +87,7 @@ ui fn TestMatch(status) {
 ui fn TestClick() {
     Column {
         padding::20
-
         Text { text::20 "Count: {count}" }
-
         Button {
             click||inc
             padding::12
@@ -123,19 +95,14 @@ ui fn TestClick() {
         }
     }
 }
-
-
 ui fn TestNested() {
     Column {
         padding::20
-
         Card {
             padding::16
             radius::12
-
             Column {
                 gap::8
-
                 Text { "Inner Text" }
                 Row {
                     gap::6
@@ -146,30 +113,3 @@ ui fn TestNested() {
         }
     }
 }
-
-space Logic {
-    struct Node<T> {
-        id: i32,
-        value: T,
-        next: Option<Node<T>>,
-    }
-
-    impl Node<T> {
-        fn sum(self) {
-            match self.next {
-                Some { value, next } => self.value + value + match next {
-                    Some { value, .. } => value,
-                    None {} => 0
-                },
-                None {} => self.value
-            }
-        }
-    }
-
-    struct Vec2 {
-        x: f32,
-        y: f32,
-    }
-
-    impl Vec2 {
-        fn len(self) {

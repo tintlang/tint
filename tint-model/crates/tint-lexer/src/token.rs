@@ -47,6 +47,7 @@ pub enum TokenKind {
     OrOr,
     Pipe,
     Bang,
+    Question,
 
     // Paths and DSL syntax.
     PathSep,
@@ -57,6 +58,7 @@ pub enum TokenKind {
 
     // Control flow and declarations.
     Fn,
+    Const,
     Return,
     Let,
     If,

@@ -8,7 +8,10 @@ impl Parser {
         self.stream.expect(TokenKind::LBrace)?;
 
         let (attributes, modifiers) = self.parse_modifier_list_block()?;
-        let children = self.parse_block_children()?;
+        self.ui_block_columns.push(start.start.column);
+        let children = self.parse_block_children();
+        self.ui_block_columns.pop();
+        let children = children?;
 
         let end = self.stream.expect(TokenKind::RBrace)?.span;
 
@@ -25,6 +28,22 @@ impl Parser {
         let mut out = Vec::new();
 
         loop {
+            if self.recover_ui_indentation
+                && self.stream.peek().kind == TokenKind::Ident
+                && self.stream.peek2_kind() == TokenKind::LBrace
+                && self
+                    .ui_block_columns
+                    .last()
+                    .is_some_and(|column| self.stream.peek().span.start.column <= *column)
+            {
+                return Err(ParserError::Message {
+                    msg: format!(
+                        "Expected `}}` before UI node `{}`. This node starts at the same level as the current block.",
+                        self.stream.peek().lexeme
+                    ),
+                    span: self.stream.peek().span,
+                });
+            }
             match self.stream.peek().kind {
                 TokenKind::RBrace => break,
                 TokenKind::Ident

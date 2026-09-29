@@ -76,7 +76,9 @@ impl Parser {
             },
 
             Logic => match item {
-                Item::Fn(_) | Item::Struct(_) | Item::Enum(_) | Item::Impl(_) => Ok(()),
+                Item::Fn(_) | Item::Const(_) | Item::Struct(_) | Item::Enum(_) | Item::Impl(_) => {
+                    Ok(())
+                }
 
                 _ => self.error("Only fn, struct, enum, impl allowed in logic space"),
             },
@@ -91,6 +93,7 @@ impl Parser {
             Item::UiFn(_) => SpaceKind::UI,
 
             Item::Fn(_)
+            | Item::Const(_)
             | Item::Struct(_)
             | Item::Enum(_)
             | Item::Impl(_)

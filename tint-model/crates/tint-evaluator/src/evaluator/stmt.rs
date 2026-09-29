@@ -12,6 +12,20 @@ pub fn eval_stmt<H: EvalHost>(host: &mut H, stmt: &Stmt) -> Flow {
                 LetInit::Assign(expr) => host.eval_expr(expr),
                 LetInit::Tint(expr) => host.eval_expr(expr),
             };
+            let value = if let Some(tint_ast::Type::Simple(name)) = ty.as_ref() {
+                if matches!(name.as_str(), "u8" | "f32" | "f64") {
+                    value
+                        .cast_numeric(ty.as_ref().expect("typed binding has a type"))
+                        .unwrap_or_else(|message| panic!("numeric type error: {message}"))
+                } else {
+                    value
+                }
+            } else {
+                value
+            };
+            if let Value::Propagate(value) = value {
+                return Flow::Propagate(*value);
+            }
             // Type validation is reserved for the typed evaluator pass.
             if let Some(_expected_ty) = ty {
                 // TODO
@@ -26,6 +40,9 @@ pub fn eval_stmt<H: EvalHost>(host: &mut H, stmt: &Stmt) -> Flow {
         // Assignment supports any target accepted by EvalHost::assign_to.
         Stmt::Assign { lhs, rhs, .. } => {
             let r = host.eval_expr(rhs);
+            if let Value::Propagate(value) = r {
+                return Flow::Propagate(*value);
+            }
             if !host.assign_to(lhs, r.clone()) {
                 panic!("Invalid assignment target");
             }
@@ -35,6 +52,9 @@ pub fn eval_stmt<H: EvalHost>(host: &mut H, stmt: &Stmt) -> Flow {
         Stmt::CompoundAssign { name, op, expr, .. } => {
             let left = host.load_var(name, expr.span());
             let right = host.eval_expr(expr);
+            if let Value::Propagate(value) = right {
+                return Flow::Propagate(*value);
+            }
 
             let new = host.apply_compound(&left, op.as_str(), &right);
             host.set_var(name, new.clone());
@@ -44,6 +64,9 @@ pub fn eval_stmt<H: EvalHost>(host: &mut H, stmt: &Stmt) -> Flow {
 
         Stmt::Return(expr, _) => {
             let v = host.eval_expr(expr);
+            if let Value::Propagate(value) = v {
+                return Flow::Propagate(*value);
+            }
             Flow::Return(v)
         }
 
@@ -78,6 +101,7 @@ pub fn eval_stmt<H: EvalHost>(host: &mut H, stmt: &Stmt) -> Flow {
                     Flow::Continue => continue,
                     Flow::Break => break,
                     Flow::Return(v) => return Flow::Return(v),
+                    Flow::Propagate(v) => return Flow::Propagate(v),
                     Flow::Value(_) => {}
                 }
             }
@@ -95,6 +119,7 @@ pub fn eval_stmt<H: EvalHost>(host: &mut H, stmt: &Stmt) -> Flow {
                     Flow::Continue => continue,
                     Flow::Break => break,
                     Flow::Return(v) => return Flow::Return(v),
+                    Flow::Propagate(v) => return Flow::Propagate(v),
                     Flow::Value(_) => {}
                 }
             }
@@ -123,6 +148,7 @@ pub fn eval_stmt<H: EvalHost>(host: &mut H, stmt: &Stmt) -> Flow {
                     Flow::Continue => continue,
                     Flow::Break => break,
                     Flow::Return(v) => return Flow::Return(v),
+                    Flow::Propagate(v) => return Flow::Propagate(v),
                     Flow::Value(_) => {}
                 }
             }
@@ -135,13 +161,32 @@ pub fn eval_stmt<H: EvalHost>(host: &mut H, stmt: &Stmt) -> Flow {
 
             for arm in arms {
                 if host.match_pattern(&v, &arm.pattern) {
-                    return Flow::Value(host.eval_expr(&arm.expr));
+                    host.push_scope();
+                    if !host.bind_pattern(&arm.pattern, &v) {
+                        host.pop_scope();
+                        continue;
+                    }
+                    if let Some(guard) = &arm.guard {
+                        if !host.eval_expr(guard).force_bool() {
+                            host.pop_scope();
+                            continue;
+                        }
+                    }
+                    let result = host.eval_expr(&arm.expr);
+                    host.pop_scope();
+                    if let Value::Propagate(value) = result {
+                        return Flow::Propagate(*value);
+                    }
+                    return Flow::Value(result);
                 }
             }
 
             Flow::Value(Value::Unit)
         }
 
-        Stmt::Expr(expr) => Flow::Value(host.eval_expr(expr)),
+        Stmt::Expr(expr) => match host.eval_expr(expr) {
+            Value::Propagate(value) => Flow::Propagate(*value),
+            value => Flow::Value(value),
+        },
     }
 }

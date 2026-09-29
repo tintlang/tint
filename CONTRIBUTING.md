@@ -16,6 +16,18 @@ cargo check --manifest-path tint-model/Cargo.toml --workspace --locked
 
 ## Tint model development
 
+To run the current CLI without accidentally using an older globally installed
+binary, add the repository wrapper to `PATH`:
+
+```bash
+export PATH="$PWD/scripts:$PATH"
+tint run main.tn
+```
+
+The wrapper delegates to `cargo run -p tint-cli`, so Cargo rebuilds the CLI
+when its source or runtime dependencies change. Release users receive a
+prebuilt binary and never run this wrapper.
+
 The compiler, browser runtime, Vite plugin, and sandbox live under
 `tint-model/`. After changing the parser or runtime, run the focused checks:
 

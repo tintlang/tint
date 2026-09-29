@@ -9,6 +9,7 @@ name = "tint"
 path = "src/main.rs"
 
 [dependencies]
+tint-compiler = { path = "../tint-compiler" }
 tint-lexer = { path = "../tint-lexer" }
 tint-ast = { path = "../tint-ast" }
 tint-parser = { path = "../tint-parser" }
@@ -16,3 +17,4 @@ tint-runtime = { path = "../tint-runtime" }
 tint-evaluator = { path = "../tint-evaluator" }
 tint-semantics = { path = "../tint-semantics" }
 base64 = "0.22"
+crossterm = "0.28"

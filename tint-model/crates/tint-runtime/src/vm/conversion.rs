@@ -4,9 +4,17 @@ impl TintVM {
     pub(super) fn eval_value_to_ir_value(v: EvalValue) -> IrValue {
         match v {
             EvalValue::Number(n) => IrValue::Number(n),
+            EvalValue::I32(n) => IrValue::Number(f64::from(n)),
+            EvalValue::I64(n) => IrValue::Number(n as f64),
+            EvalValue::U32(n) => IrValue::Number(f64::from(n)),
+            EvalValue::U64(n) => IrValue::Number(n as f64),
+            EvalValue::U8(n) => IrValue::Number(f64::from(n)),
+            EvalValue::F32(n) => IrValue::Number(f64::from(n)),
+            EvalValue::F64(n) => IrValue::Number(n),
             EvalValue::String(s) => IrValue::String(s),
             EvalValue::Bool(b) => IrValue::Bool(b),
             EvalValue::Unit => IrValue::Unit,
+            EvalValue::Propagate(value) => Self::eval_value_to_ir_value(*value),
             EvalValue::Tuple(items) => IrValue::Tuple(
                 items
                     .into_iter()

@@ -8,6 +8,50 @@ pub fn eval_expr<H: EvalHost>(host: &mut H, expr: &Expr) -> Value {
         Expr::String(s, _) => Value::String(s.clone()),
         Expr::Bool(v, _) => Value::Bool(*v),
         Expr::Unit(_) => Value::Unit,
+        Expr::Try { expr, .. } => {
+            let value = eval_expr(host, expr);
+            if let Value::Propagate(value) = value {
+                return Value::Propagate(value);
+            }
+            let original = value.clone();
+            match value {
+                Value::EnumInstance {
+                    enum_name,
+                    variant,
+                    args,
+                } if enum_name == "Option" && variant == "Some" => {
+                    args.into_iter().next().unwrap_or(Value::Unit)
+                }
+                Value::EnumInstance {
+                    ref enum_name,
+                    ref variant,
+                    ..
+                } if enum_name == "Option" && variant == "None" => {
+                    Value::Propagate(Box::new(original))
+                }
+                Value::EnumInstance {
+                    enum_name,
+                    variant,
+                    args,
+                } if enum_name == "Result" && variant == "Ok" => {
+                    args.into_iter().next().unwrap_or(Value::Unit)
+                }
+                Value::EnumInstance {
+                    ref enum_name,
+                    ref variant,
+                    ..
+                } if enum_name == "Result" && variant == "Err" => {
+                    Value::Propagate(Box::new(original))
+                }
+                other => panic!("`?` expects Option or Result, got {}", other),
+            }
+        }
+        Expr::Cast { expr, ty, .. } => {
+            let value = eval_expr(host, expr);
+            value
+                .cast_numeric(ty)
+                .unwrap_or_else(|message| panic!("numeric cast failed: {message}"))
+        }
 
         Expr::Borrow { target, .. } => {
             // Borrowing is not modeled yet; evaluate the target directly.
@@ -45,6 +89,27 @@ pub fn eval_expr<H: EvalHost>(host: &mut H, expr: &Expr) -> Value {
         } => {
             let a = eval_expr(host, left);
             let b = eval_expr(host, right);
+
+            if let (Some(x), Some(y)) = (a.as_number(), b.as_number()) {
+                match op.as_str() {
+                    "+" | "-" | "*" | "/" => {
+                        let result = match op.as_str() {
+                            "+" => x + y,
+                            "-" => x - y,
+                            "*" => x * y,
+                            _ => x / y,
+                        };
+                        return typed_numeric_result(&a, &b, result);
+                    }
+                    "<" => return Value::Bool(x < y),
+                    ">" => return Value::Bool(x > y),
+                    "<=" => return Value::Bool(x <= y),
+                    ">=" => return Value::Bool(x >= y),
+                    "==" => return Value::Bool(x == y),
+                    "!=" => return Value::Bool(x != y),
+                    _ => {}
+                }
+            }
 
             match (a, op.as_str(), b) {
                 (Value::Number(x), "+", Value::Number(y)) => Value::Number(x + y),
@@ -160,6 +225,7 @@ pub fn eval_expr<H: EvalHost>(host: &mut H, expr: &Expr) -> Value {
             match host.eval_block_flow(block) {
                 Flow::Value(v) | Flow::Return(v) => v,
                 Flow::Break | Flow::Continue => Value::Unit,
+                Flow::Propagate(value) => Value::Propagate(Box::new(value)),
             }
         }
         Expr::Field { target, field, .. } => {
@@ -177,6 +243,11 @@ pub fn eval_expr<H: EvalHost>(host: &mut H, expr: &Expr) -> Value {
         }
         Expr::Call { target, args, span } => {
             let arg_vals = args.iter().map(|a| eval_expr(host, a)).collect::<Vec<_>>();
+            if let Some(Value::Propagate(value)) =
+                arg_vals.iter().find(|v| matches!(v, Value::Propagate(_)))
+            {
+                return Value::Propagate(value.clone());
+            }
 
             // A field-shaped call (`point.move_by(...)`) is a method call
             // candidate. The host returns the updated receiver so a mutable
@@ -188,11 +259,12 @@ pub fn eval_expr<H: EvalHost>(host: &mut H, expr: &Expr) -> Value {
             } = target.as_ref()
             {
                 let receiver = eval_expr(host, receiver_expr);
-                if let Ok((updated_receiver, result)) =
-                    host.call_method(receiver, method, &arg_vals, *span)
-                {
-                    let _ = host.assign_to(receiver_expr, updated_receiver);
-                    return result;
+                match host.call_method(receiver, method, &arg_vals, *span) {
+                    Ok((updated_receiver, result)) => {
+                        let _ = host.assign_to(receiver_expr, updated_receiver);
+                        return result;
+                    }
+                    Err(error) => panic!("method `{}` failed: {}", method, error),
                 }
             }
 
@@ -339,6 +411,41 @@ pub fn eval_expr<H: EvalHost>(host: &mut H, expr: &Expr) -> Value {
             Value::Map(m)
         }
         Expr::Paren(inner, ..) => eval_expr(host, inner),
+    }
+}
+
+fn typed_numeric_result(left: &Value, right: &Value, value: f64) -> Value {
+    if matches!(left, Value::F64(_)) || matches!(right, Value::F64(_)) {
+        Value::F64(value)
+    } else if matches!(left, Value::F32(_)) || matches!(right, Value::F32(_)) {
+        Value::F32(value as f32)
+    } else if matches!(left, Value::U8(_)) && matches!(right, Value::U8(_)) {
+        if !value.is_finite() || value.fract() != 0.0 || !(0.0..=255.0).contains(&value) {
+            panic!("u8 arithmetic overflow: {value}")
+        }
+        Value::U8(value as u8)
+    } else if matches!(left, Value::I32(_)) && matches!(right, Value::I32(_)) {
+        if value < i32::MIN as f64 || value > i32::MAX as f64 || value.fract() != 0.0 {
+            panic!("i32 arithmetic overflow: {value}")
+        }
+        Value::I32(value as i32)
+    } else if matches!(left, Value::I64(_)) && matches!(right, Value::I64(_)) {
+        if value < i64::MIN as f64 || value > i64::MAX as f64 || value.fract() != 0.0 {
+            panic!("i64 arithmetic overflow: {value}")
+        }
+        Value::I64(value as i64)
+    } else if matches!(left, Value::U32(_)) && matches!(right, Value::U32(_)) {
+        if value < 0.0 || value > u32::MAX as f64 || value.fract() != 0.0 {
+            panic!("u32 arithmetic overflow: {value}")
+        }
+        Value::U32(value as u32)
+    } else if matches!(left, Value::U64(_)) && matches!(right, Value::U64(_)) {
+        if value < 0.0 || value > u64::MAX as f64 || value.fract() != 0.0 {
+            panic!("u64 arithmetic overflow: {value}")
+        }
+        Value::U64(value as u64)
+    } else {
+        Value::Number(value)
     }
 }
 

@@ -115,6 +115,29 @@ impl TintVM {
 
                     true
                 }
+                EvalValue::EnumInstance { variant, args, .. } if variant == name => {
+                    let mut index = 0;
+                    for field in fields {
+                        let Some(value) = args.get(index) else {
+                            return false;
+                        };
+                        let ok = match field {
+                            PatternField::Shorthand { field, .. } => {
+                                self.define_var(field, value.clone());
+                                true
+                            }
+                            PatternField::Assign { pat, .. } => self.host_bind_pattern(pat, value),
+                            PatternField::Rest(_) => true,
+                        };
+                        if !ok {
+                            return false;
+                        }
+                        if !matches!(field, PatternField::Rest(_)) {
+                            index += 1;
+                        }
+                    }
+                    index == args.len() || fields.iter().any(|f| matches!(f, PatternField::Rest(_)))
+                }
                 _ => false,
             },
 

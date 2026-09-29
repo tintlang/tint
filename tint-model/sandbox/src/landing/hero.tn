@@ -1,7 +1,18 @@
 Hero {
     use::HeroLayout
 
-    Headline { use::CenteredOnSmall text::{54, bold, @text-main} "This page is written in Tint.tn" }
+    Headline {
+        use::CenteredOnSmall
+        Text {
+            text::{54, bold, @text-main}
+            "This page is written in "
+            Inline {
+                white-space::"nowrap"
+                "Tint"
+                Inline { layout::{ margin.l::1 } text::{18, bold, @text-main} ".tn" }
+            }
+        }
+    }
     Sub { use::CenteredOnSmall text::{18, @text-muted} "A small declarative UI DSL for Rust/WASM. No React or Svelte. Compiled to WebAssembly and rendered directly to the DOM." }
 
     CtaRow {

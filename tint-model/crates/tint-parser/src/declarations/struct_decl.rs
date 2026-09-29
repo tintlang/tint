@@ -52,7 +52,7 @@ impl Parser {
 
         let name = self.parse_ident()?;
 
-        let _generics = self.parse_optional_generics()?;
+        let generics = self.parse_optional_generics()?;
 
         self.stream.expect(TokenKind::LBrace)?;
 
@@ -102,6 +102,7 @@ impl Parser {
 
         Ok(StructDecl {
             name,
+            generics,
             members: fields, // NOTE: YOU MUST UPDATE StructDecl
             exported: false,
             span: Span::merge(start, end),

@@ -79,6 +79,33 @@ pub fn match_pattern(pat: &Pattern, val: &Value) -> bool {
                 }
                 true
             }
+            Value::EnumInstance {
+                variant,
+                args: inst_args,
+                ..
+            } if name == variant => {
+                let mut index = 0;
+                for field in fields {
+                    let Some(value) = inst_args.get(index) else {
+                        return false;
+                    };
+                    let matches = match field {
+                        PatternField::Shorthand { .. } => true,
+                        PatternField::Assign { pat, .. } => match_pattern(pat, value),
+                        PatternField::Rest(_) => true,
+                    };
+                    if !matches {
+                        return false;
+                    }
+                    if !matches!(field, PatternField::Rest(_)) {
+                        index += 1;
+                    }
+                }
+                index == inst_args.len()
+                    || fields
+                        .iter()
+                        .any(|field| matches!(field, PatternField::Rest(_)))
+            }
             _ => false,
         },
 

@@ -2,6 +2,7 @@ use super::stmt::Block;
 use crate::BorrowKind;
 use crate::MatchArm;
 use crate::Span;
+use crate::Type;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum StructInitField {
@@ -168,6 +169,17 @@ pub enum Expr {
         block: Option<Block>,
         span: Span,
     },
+
+    Try {
+        expr: Box<Expr>,
+        span: Span,
+    },
+
+    Cast {
+        expr: Box<Expr>,
+        ty: Type,
+        span: Span,
+    },
 }
 
 impl Expr {
@@ -201,6 +213,8 @@ impl Expr {
             Expr::VariantInit { span, .. } => *span,
             Expr::MapInit { span, .. } => *span,
             Expr::Borrow { span, .. } => *span,
+            Expr::Try { span, .. } => *span,
+            Expr::Cast { span, .. } => *span,
         }
     }
 }

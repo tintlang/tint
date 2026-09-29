@@ -61,7 +61,7 @@ and `frame` events on a `GameRoot` node. A UI node only references a
 handler by name. See `guide/events.md` for the full list and the
 `GameRoot` example.
 
-## Methods and draft generics
+## Methods and generic types
 
 ```tn
 struct User { id: i32, name: string }
@@ -69,8 +69,9 @@ struct User { id: i32, name: string }
 impl User {
     fn label(self) -> string { self.name }
 }
-
-fn identity<T>(value: T) -> T { value }
 ```
 
-Resource borrowing is not part of the current supported runtime.
+User-defined generic structs and enums are checked strictly, including generic
+arity and field/variant payload types. Generic functions such as
+`identity<T>(value: T) -> T` are still future work. Resource borrowing is not
+part of the current supported runtime.

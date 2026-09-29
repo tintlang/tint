@@ -25,7 +25,6 @@ use tint_lexer::{collect_tokens, Lexer};
 use tint_parser::Parser;
 
 use crate::vm::TintVM;
-use tint_evaluator::EvalHost;
 
 /// The result of evaluating one REPL entry.
 pub struct ReplOutcome {

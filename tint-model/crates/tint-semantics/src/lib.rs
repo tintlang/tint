@@ -6,5 +6,7 @@ pub mod scope;
 pub mod type_table;
 
 // convenient export
-pub use checker::SemanticChecker;
+pub use checker::{Reference, SemanticModel, Symbol, SymbolKind, TypedExpr};
+pub use checker::{SemanticChecker, SemanticContext};
 pub use errors::SemanticError;
+pub use type_table::Type;

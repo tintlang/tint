@@ -6,7 +6,11 @@ advanced resource and GPU types below are draft syntax only.
 
 ## Primitives
 
-`i32` (32-bit signed int), `f32` (32-bit float), `bool`, `string` (immutable UTF-8).
+`()`/`unit`, `bool`, `string`/`str`, `number`, `i32`, `i64`, `u8`, `u32`,
+`u64`, `f32`, and `f64`.
+
+`i32`, `i64`, `u8`, `u32`, `u64`, `f32`, and `f64` are distinct runtime
+values. `number` is the compatibility alias for `f64`.
 
 ## Math types
 
@@ -43,11 +47,52 @@ enum Result<T, E> { Ok(T), Err(E) }
 enum State { Ready, Loading, Error(string) }
 ```
 
-## Option\<T>
+## Option\<T> and Result\<T, E>
 
 ```
-let name: Option<string>;   // Some(value) | None
+let name: Option<string> = Option::Some { value: "Tint" }
+let missing: Option<string> = Option::None {}
+let parsed: Result<number, string> = parse_number("42")
+
+match parsed {
+    Ok { value } => value,
+    Err { error } => 0
+}
 ```
+
+`Option<T>` uses `Some { value }` and `None {}`. `Result<T, E>` uses
+`Ok { value }` and `Err { error }`. `expect(message)` and `unwrap()` return
+the successful payload and fail at runtime for `None`/`Err`. The postfix `?`
+operator extracts `Some`/`Ok` and returns `None`/`Err` from the current
+function:
+
+```tn
+fn read_value() -> Result<f32, string> {
+    let value = parse_number(read_line())?
+    Result::Ok { value: value }
+}
+```
+
+Entry-point calls convert failed `expect`/`unwrap` operations into runtime
+errors instead of exposing an uncaught evaluator panic.
+
+Standard methods are available for branching and callback-style composition:
+
+```tn
+let fallback = missing.unwrap_or("guest")
+let upper = name.map(|value| value)
+let next = parsed.and_then(|value| Result::Ok { value: value })
+let present = name.is_some()
+let absent = missing.is_none()
+let successful = parsed.is_ok()
+let failed = parsed.is_err()
+```
+
+`is_some`/`is_none` apply to `Option<T>`; `is_ok`/`is_err` apply to
+`Result<T, E>`. `unwrap_or` returns the payload or its fallback value. `map`
+transforms a successful payload and preserves failure, while `and_then`
+returns the callback's `Option`/`Result` and preserves failure. Callback
+signatures and payload types are checked statically.
 
 ## Type aliases
 
@@ -77,6 +122,15 @@ conversions.
 
 No implicit conversions, no dynamic typing, no nullable values (`Option<T>`
 instead), everything resolved at compile time, WASM/TintVM-compatible.
+
+## Numeric conversions
+
+Explicit numeric conversions use Rust-like `as` syntax, for example
+`let count: u8 = value as u8` and `let ratio: f32 = count as f32`.
+Implicit conversion between numeric types is intentionally not part of the
+language. Converting to an integer rejects fractional, non-finite, and
+out-of-range values; unsigned types also reject negative values. Converting to
+`f32` rejects values outside the representable finite range.
 
 ## Resources cannot live inside your types
 
@@ -109,15 +163,31 @@ let t: (i32, string) = (10, "ok")
 May contain primitives, structs, enums, `vec2`/`3`/`4`, or other tuples. Immutable,
 not usable in UI Mode, cannot contain resources.
 
-## Draft generic structs
+## Generic types
 
 ```
 struct Box<T> { value: T }
 let i: Box<i32> = Box { value: 10 }
 ```
 
-Generic syntax parses in some positions, but generic runtime semantics are not
-supported end to end.
+`Option<T>` and `Result<T, E>` are supported by the semantic checker and
+runtime. User-defined generic structs and enums are now checked strictly:
+type arguments must match their declared arity and field/variant payloads are
+validated after substituting `T`, `E`, and other parameters.
+
+```tn
+struct Box<T> { value: T }
+enum Response<T, E> {
+    Ok { value: T },
+    Err { error: E }
+}
+
+let boxed: Box<i32> = Box { value: 42 }
+let response: Response<i32, string> = Response::Ok { value: 42 }
+```
+
+The runtime executes these values with their concrete payloads; generic
+argument checking is a compile-time responsibility.
 
 ## Unit type
 

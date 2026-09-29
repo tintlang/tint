@@ -47,6 +47,14 @@ pub struct TypeAliasDecl {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ConstDecl {
+    pub name: String,
+    pub ty: Option<Type>,
+    pub init: Expr,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct KernelDecl {
     pub name: String,
     pub params: Vec<Param>,
@@ -83,6 +91,7 @@ pub struct SpaceDecl {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum Item {
     Fn(FnDecl),
+    Const(ConstDecl),
     UiFn(UiFnDecl),
     Struct(StructDecl),
     Enum(EnumDecl),
@@ -182,6 +191,7 @@ pub enum StructMember {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct StructDecl {
     pub name: String,
+    pub generics: Vec<String>,
     pub members: Vec<StructMember>,
     pub exported: bool,
     pub span: Span,

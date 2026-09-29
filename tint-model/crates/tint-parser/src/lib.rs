@@ -1,5 +1,6 @@
 pub mod error;
 pub mod parse_block;
+pub mod parse_const;
 pub mod parse_export;
 pub mod parse_expr;
 pub mod parse_file;

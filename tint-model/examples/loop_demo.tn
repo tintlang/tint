@@ -1,0 +1,17 @@
+fn main() {
+    let mut tick = 0
+    while tick < 3 {
+        println("tick {tick}")
+        tick = tick + 1
+    }
+
+    loop {
+        println("loop {tick}")
+        tick = tick + 1
+        if tick == 5 {
+            break
+        }
+    }
+
+    println("loops finished")
+}

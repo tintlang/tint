@@ -1,0 +1,14 @@
+fn main() {
+    let value: Option<f32> = Option::Some { value: 42.0 }
+    let result: Result<f32, string> = Result::Ok { value: 7.0 }
+
+    match value {
+        Some { value } => println("Option: {value}"),
+        None {} => println("Option: empty")
+    }
+
+    match result {
+        Ok { value } => println("Result: {value}"),
+        Err { error } => println("Error: {error}")
+    }
+}

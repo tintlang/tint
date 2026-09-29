@@ -6,6 +6,8 @@ pub struct Parser {
     pub(crate) stream: TokenStream,
     pub symbols: Symbols,
     pub(crate) in_pattern: bool,
+    pub(crate) recover_ui_indentation: bool,
+    pub(crate) ui_block_columns: Vec<usize>,
 }
 
 impl Parser {
@@ -14,6 +16,8 @@ impl Parser {
             stream: TokenStream::new(tokens),
             symbols: Symbols::default(),
             in_pattern: false,
+            recover_ui_indentation: false,
+            ui_block_columns: Vec::new(),
         }
     }
 
@@ -22,6 +26,8 @@ impl Parser {
             stream: self.stream.clone_with_reset(),
             symbols: Symbols::default(),
             in_pattern: false,
+            recover_ui_indentation: false,
+            ui_block_columns: Vec::new(),
         }
     }
 
@@ -113,6 +119,8 @@ impl Parser {
                 let decl = self.parse_fn_decl()?;
                 Ok(Item::Fn(decl))
             }
+
+            TokenKind::Const => self.parse_const_decl(),
 
             TokenKind::Ui => {
                 let u = self.parse_ui_fn()?;

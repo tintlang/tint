@@ -1,0 +1,38 @@
+impl Box<T> {
+    fn unwrap(self) { self.value }
+}
+struct Box<T> {
+    value: T
+}
+struct Vec3<T> {
+    x: T, y: T, z: T
+}
+fn length<T>(v: Vec3<T>) { 0 }
+fn id<T>(x: T) -> T { x }
+fn TestReturnGeneric() {
+    let a = id(99)
+    let b = id("Tint")
+    (a + 1) == 100 && b.len() == 4
+}
+    enum Result<T, E> {
+    Ok { value },
+    Err { error },
+}
+fn Pair<K, V>(a: K, b: V) {
+    (a, b)
+}
+fn TestPair() {
+    let p = Pair(1, "A")
+    p.0 + p.1.len()
+}
+fn pick<T>(x: T, y: T {x}) { y }
+fn TestGenericDefault() {
+    pick(5, 10) + pick(5)
+}
+fn wrap<T>(x: T) { x }
+fn TestWrap() {
+    let a = wrap(10)
+    let b = wrap("Tint")
+    let c = wrap(true)
+    (a == 10) && (b == "Tint") && c
+}

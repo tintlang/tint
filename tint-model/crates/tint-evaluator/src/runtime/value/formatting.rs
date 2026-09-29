@@ -6,9 +6,17 @@ impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Value::Number(n) => write!(f, "{}", n),
+            Value::I32(n) => write!(f, "{}", n),
+            Value::I64(n) => write!(f, "{}", n),
+            Value::U32(n) => write!(f, "{}", n),
+            Value::U64(n) => write!(f, "{}", n),
+            Value::U8(n) => write!(f, "{}", n),
+            Value::F32(n) => write!(f, "{}", n),
+            Value::F64(n) => write!(f, "{}", n),
             Value::Bool(b) => write!(f, "{}", b),
             Value::String(s) => write!(f, "{}", s),
             Value::Unit => write!(f, "()"),
+            Value::Propagate(value) => write!(f, "propagate({value})"),
 
             Value::Tuple(items) => {
                 write!(f, "(")?;
@@ -85,9 +93,17 @@ impl fmt::Debug for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Value::Number(n) => write!(f, "{}", n),
+            Value::I32(n) => write!(f, "{}i32", n),
+            Value::I64(n) => write!(f, "{}i64", n),
+            Value::U32(n) => write!(f, "{}u32", n),
+            Value::U64(n) => write!(f, "{}u64", n),
+            Value::U8(n) => write!(f, "{}u8", n),
+            Value::F32(n) => write!(f, "{}f32", n),
+            Value::F64(n) => write!(f, "{}f64", n),
             Value::String(s) => write!(f, "{:?}", s),
             Value::Bool(b) => write!(f, "{}", b),
             Value::Unit => write!(f, "unit"),
+            Value::Propagate(value) => write!(f, "propagate({value:?})"),
 
             Value::Tuple(items) => {
                 write!(f, "(")?;

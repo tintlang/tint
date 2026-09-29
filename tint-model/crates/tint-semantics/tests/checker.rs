@@ -22,6 +22,56 @@ fn errors_for(source: &str) -> Vec<SemanticErrorKind> {
         .collect()
 }
 
+#[test]
+fn checker_exposes_inferred_expression_types_for_analyzer_clients() {
+    let source = "fn test(value: i32) -> i32 { value + 1 }";
+    let tokens = collect_tokens(&mut Lexer::new(source));
+    let program = Parser::new(tokens).parse_program().unwrap();
+    let (errors, model) =
+        tint_semantics::SemanticChecker::new(CheckerContext::default()).check_with_model(&program);
+
+    assert!(errors.is_empty(), "unexpected errors: {:?}", errors);
+    assert!(model
+        .expressions
+        .iter()
+        .any(|typed| matches!(typed.ty, tint_semantics::Type::Number)));
+}
+
+#[test]
+fn user_generic_structs_and_enums_are_checked_strictly() {
+    assert_clean(
+        r#"
+struct Box<T> { value: T }
+enum Response<T, E> { Ok { value: T }, Err { error: E } }
+
+fn test() {
+    let boxed: Box<i32> = Box { value: 42 }
+    let response: Response<i32, string> = Response::Ok { value: 42 }
+}
+"#,
+    );
+}
+
+#[test]
+fn user_generic_types_reject_wrong_arguments_and_arity() {
+    let errors = errors_for(
+        r#"
+struct Box<T> { value: T }
+enum Response<T, E> { Ok { value: T }, Err { error: E } }
+
+fn test() {
+    let wrong: Box<i32> = Box { value: "not an integer" }
+    let bad_arity: Box<i32, string> = Box { value: 1 }
+    let bad_enum: Response<i32, string> = Response::Ok { value: "wrong" }
+}
+"#,
+    );
+
+    assert!(errors
+        .iter()
+        .any(|error| matches!(error, SemanticErrorKind::TypeMismatch { .. })));
+}
+
 fn assert_clean(source: &str) {
     let errors = errors_for(source);
     assert!(
@@ -159,6 +209,60 @@ fn type_checker_rejects_incompatible_assignment() {
         fn update() {
             let mut value: i32 = 1
             value = "wrong"
+        }
+        "#,
+    );
+}
+
+#[test]
+fn consts_and_distinct_numeric_annotations_are_checked() {
+    assert_clean(
+        r#"
+        const OFFSET: f32 = 32.0
+        fn convert(value: f32) -> f32 { value + OFFSET }
+        fn test() {
+            let choice: u8 = 1
+            convert(1)
+        }
+        "#,
+    );
+    assert_type_mismatch(
+        r#"
+        const OFFSET: f32 = 32.0
+        fn test(value: u8) { let other: f32 = value }
+        "#,
+    );
+}
+
+#[test]
+fn builtin_option_and_result_variants_are_typed() {
+    assert_clean(
+        r#"
+        fn some(value: f32) -> Option<f32> {
+            Option::Some { value: value }
+        }
+        fn none() -> Option<f32> {
+            Option::None {}
+        }
+        fn ok(value: f32) -> Result<f32, string> {
+            Result::Ok { value: value }
+        }
+        fn err(message: string) -> Result<f32, string> {
+            Result::Err { error: message }
+        }
+        "#,
+    );
+    assert_type_mismatch(
+        r#"
+        fn wrong() -> Option<f32> {
+            Option::Some { value: "not a number" }
+        }
+        "#,
+    );
+    assert_clean(
+        r#"
+        fn parsed() -> f32 {
+            parse_number("42").expect("invalid number")
         }
         "#,
     );

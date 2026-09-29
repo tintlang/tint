@@ -1,0 +1,66 @@
+fn normal() {
+    borrow(x)
+    borrow@strict(x)
+    borrow@group(x)
+}
+fn [@(strict)] gpu_process() {
+    borrow(frame) {
+        sobel(frame)
+    }
+    borrow@group(invert) {
+        sort(invert)
+    }
+}
+fn [@(speed, speed)] TestFor1(n) {
+    let mut sum = 0;
+    for i in 0..n {
+        sum = sum + i;
+    }
+    sum
+}
+fn TestIf1(x) {
+    if (x > 10) {
+        1
+    } else {
+        0
+    }
+}
+fn TestIf2(x) {
+    let mut a = 0;
+    if (x == 5) {
+        a = 10;
+    }
+    a
+}
+fn TestIfNested(x, y) {
+    if (x > y) {
+        if (x > 100) { 1 } else { 2 }
+    } else {
+        3
+    }
+}
+fn TestWhile1(n) {
+    let mut sum = 0;
+    let mut i = 0;
+    while (i < n) {
+        sum = sum + i;
+        i = i + 1;
+    }
+    sum
+}
+fn TestWhileBreak() {
+    let mut i = 0;
+    while (true) {
+        if (i == 3) { break; }
+        i = i + 1;
+    }
+    i
+}
+fn TestForBreak() {
+    let mut res = 0;
+    for i in 0..10 {
+        if (i == 4) { break; }
+        res = res + i;
+    }
+    res
+}

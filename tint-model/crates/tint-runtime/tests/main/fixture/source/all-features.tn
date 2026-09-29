@@ -1,0 +1,49 @@
+struct User {
+    id: i32,
+    name: string,
+    age: i32,
+}
+enum E2 {
+    A { x },
+    B { y, z },
+}
+fn test_updates() {
+    User { ..old }
+    User { ..old, age: 30 }
+    User { id: 1, ..other }
+}
+fn AllFeatures() {
+    let p = (10, 20, 30);
+    let (x, y, z) = p;
+    let s1 = x + y + z;
+    let arr = [x, y, z, s1];
+    let a0 = arr[0];
+    let a3 = arr[3];
+    let u = User { id: x, name: "Tint", age: 99 };
+    let user2 = User {
+        age: u.age + 1,
+        name: "Nornse",
+        id: u.id,
+    };
+    let en = E2::A { x: 50 };
+    let r1 = match en {
+        A { x } => x * 2,
+        B { y, z } => y + z,
+        _ => 0
+    };
+    let tval = 42;
+    let r2 = match tval {
+        x: i32 => x * 2,
+        _ => 0,
+    };
+    let t = (1, 2, 3);
+    let r3 = match t {
+        (1, b, 3) => b * 10,
+        _ => 0
+    };
+    let who = match user2 {
+        User { id, name } => id * 100,
+        _ => 0
+    };
+    return s1 + a0 + a3 + r1 + r2 + r3 + who;
+}

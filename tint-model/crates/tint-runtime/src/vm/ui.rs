@@ -7,14 +7,6 @@ impl TintVM {
         args: &[EvalValue],
         _span: Span,
     ) -> EvalResult<EvalValue> {
-        println!("⛰ UI CALL → {}(", ui.name);
-        for (i, a) in args.iter().enumerate() {
-            println!("    arg[{i}] = {:?}", a);
-        }
-        println!(")");
-
-        println!("UI FN CALL: {}", ui.name);
-
         // 1) Parameters
         for (param, arg) in ui.params.iter().zip(args.iter()) {
             bind_pattern(self, &param.pattern, arg);
@@ -28,8 +20,6 @@ impl TintVM {
         // - reconciliation
         // - layout
         // - WebGPU render
-        println!("UI tree building not implemented yet.");
-
         self.pop_scope();
 
         Ok(EvalValue::Unit)

@@ -15,6 +15,7 @@ impl TintVM {
 
             ui: UiRuntime::new(),
             treewalk_call_depth: 0,
+            has_constants: false,
 
             ir_program: ProgramIR::new(),
             last_result: EvalValue::Unit,
@@ -50,44 +51,45 @@ impl TintVM {
             .insert(name.into(), Box::new(f));
     }
 
-    // PROGRAM ENTRY
-    pub fn run_program(&mut self, program: &Program) {
-        println!("Compiling to SSA IR…");
-
-        let mut compiler = SsaCompiler::new();
-        self.ir_program = compiler.compile_program(program);
-
-        println!("=== SSA IR DUMP ===");
-        for f in &self.ir_program.functions {
-            println!("fn {}:", f.name);
-            for block in &f.blocks {
-                println!("  block {}:", block.id);
-                for instr in &block.instrs {
-                    println!("    {:?}", instr);
-                }
+    /// Run an entry point and turn evaluator panics into a regular runtime
+    /// error. The evaluator still has a few legacy infallible interfaces;
+    /// this boundary keeps those failures from escaping into the host.
+    pub fn call_fn(&mut self, name: &str, args: &[EvalValue], span: Span) -> EvalResult<EvalValue> {
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            self.host_call_fn(name, args, span)
+        })) {
+            Ok(result) => result,
+            Err(payload) => {
+                let message = payload
+                    .downcast_ref::<String>()
+                    .cloned()
+                    .or_else(|| {
+                        payload
+                            .downcast_ref::<&str>()
+                            .map(|value| (*value).to_owned())
+                    })
+                    .unwrap_or_else(|| "evaluation failed".into());
+                Err(tint_evaluator::errors::EvalError::InvalidOp { msg: message, span })
             }
         }
+    }
 
-        println!("====================\n");
+    // PROGRAM ENTRY
+    pub fn run_program(&mut self, program: &Program) {
+        let mut compiler = SsaCompiler::new();
+        self.ir_program = compiler.compile_program(program);
         optimize(&mut self.ir_program);
         self.register_functions(program);
+        self.register_constants(program);
         self.mount_ui(program);
         self.last_result = EvalValue::Unit;
     }
 
     // FUNCTION REGISTRATION
     pub(super) fn register_functions(&mut self, program: &Program) {
-        eprintln!(
-            "DEBUG register_functions: registering {} items",
-            program.items.len()
-        );
         for item in &program.items {
             match item {
                 Item::Fn(f) | Item::ExportFn(f, _) => {
-                    eprintln!(
-                        "DEBUG register_functions: registering logic function: {}",
-                        f.name
-                    );
                     self.logic_functions.insert(f.name.clone(), f.clone());
                 }
                 Item::UiFn(ui) => {
@@ -102,6 +104,22 @@ impl TintVM {
                     }
                 }
                 _ => {}
+            }
+        }
+    }
+
+    fn register_constants(&mut self, program: &Program) {
+        for item in &program.items {
+            if let Item::Const(constant) = item {
+                let value = self.eval_expr(&constant.init);
+                let value = match constant.ty.as_ref() {
+                    Some(ty) if is_exact_numeric_type(ty) => value
+                        .cast_numeric(ty)
+                        .unwrap_or_else(|message| panic!("numeric constant type error: {message}")),
+                    _ => value,
+                };
+                self.define_var(&constant.name, value);
+                self.has_constants = true;
             }
         }
     }
@@ -209,6 +227,10 @@ impl TintVM {
     pub fn take_http_requests(&mut self) -> Vec<HttpRequest> {
         std::mem::take(&mut *self.http_requests.borrow_mut())
     }
+}
+
+fn is_exact_numeric_type(ty: &tint_ast::Type) -> bool {
+    matches!(ty, tint_ast::Type::Simple(name) if matches!(name.as_str(), "i32" | "i64" | "u8" | "u32" | "u64" | "f32" | "f64"))
 }
 
 fn string_arg(args: &[EvalValue], index: usize, function: &str) -> EvalResult<String> {

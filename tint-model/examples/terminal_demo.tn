@@ -1,0 +1,34 @@
+fn intro() {
+    let mut count = 0
+    while count < 3 {
+        println("Preparing terminal demo: {count}")
+        count = count + 1
+    }
+}
+
+fn is_exit_key(key) {
+    if key == "q" {
+        true
+    } else {
+        if key == "Escape" {
+            true
+        } else {
+            key == "Ctrl+c"
+        }
+    }
+}
+
+fn main() {
+    intro()
+    println("Press any key to count. Press q, Escape, or Ctrl+c to quit.")
+    let mut score = 0
+    loop {
+        let key = read_key()
+        if is_exit_key(key) {
+            println("Final score: {score}")
+            return 0
+        }
+        score = score + 1
+        println("key: {key}; score: {score}")
+    }
+}

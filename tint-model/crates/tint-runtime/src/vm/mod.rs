@@ -51,6 +51,7 @@ pub struct TintVM {
     // and must share the persistent state scope.  Top-level logic calls can
     // still use the isolated IR VM.
     pub(crate) treewalk_call_depth: usize,
+    pub(crate) has_constants: bool,
 
     // IR
     pub ir_program: ProgramIR,

@@ -45,7 +45,6 @@
 // its real source is reused here rather than inventing a new snippet.
 
 use tint_evaluator::value::Value;
-use tint_evaluator::EvalHost;
 use tint_lexer::{collect_tokens, Lexer};
 use tint_parser::Parser;
 use tint_runtime::vm::TintVM;

@@ -62,6 +62,7 @@ pub(super) fn call_value(host: &mut HostVM, value: Value, args: &[Value], span: 
                 eval_fn::FnBodyKind::Block(block) => match host.eval_block(&block) {
                     Flow::Value(value) | Flow::Return(value) => value,
                     Flow::Break | Flow::Continue => Value::Unit,
+                    Flow::Propagate(value) => value,
                 },
                 eval_fn::FnBodyKind::Expr(expr) => host.eval_expr(&expr),
             };

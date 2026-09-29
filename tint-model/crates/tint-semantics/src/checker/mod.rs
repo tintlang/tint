@@ -8,6 +8,67 @@ use tint_ast::{
     UiModifierItem, UiModifierValue, UiNode, UiNodeOrExpr, UiText, UiTextPart,
 };
 
+#[derive(Debug, Clone)]
+pub struct TypedExpr {
+    pub span: Span,
+    pub ty: Type,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SymbolKind {
+    Function,
+    Struct,
+    Enum,
+    Type,
+    Variable,
+}
+
+#[derive(Debug, Clone)]
+pub struct Symbol {
+    pub name: String,
+    pub span: Span,
+    pub ty: Type,
+    pub kind: SymbolKind,
+}
+
+#[derive(Debug, Clone)]
+pub struct Reference {
+    pub name: String,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct SemanticModel {
+    pub expressions: Vec<TypedExpr>,
+    pub symbols: Vec<Symbol>,
+    pub references: Vec<Reference>,
+}
+
+/// Names exported by the project-wide UI environment.  A `.tn` file can be
+/// checked on its own in the editor even though its styles, theme tokens and
+/// event handlers are declared in sibling files imported by the entry UI.
+#[derive(Debug, Clone, Default)]
+pub struct SemanticContext {
+    pub(crate) known_fns: HashSet<String>,
+    pub(crate) ui_tokens: HashSet<String>,
+    pub(crate) ui_styles: HashSet<String>,
+    pub(crate) ui_variants: HashSet<String>,
+}
+
+impl SemanticModel {
+    pub fn type_at(&self, offset: usize) -> Option<&Type> {
+        self.expressions
+            .iter()
+            .filter(|typed| typed.span.start.offset <= offset && offset <= typed.span.end.offset)
+            .min_by_key(|typed| typed.span.len())
+            .map(|typed| &typed.ty)
+    }
+
+    pub fn symbol_named(&self, name: &str) -> Option<&Symbol> {
+        self.symbols.iter().find(|symbol| symbol.name == name)
+    }
+}
+
 // Scope management for variable tracking. Frame 0 is never popped -- it
 // holds top-level globals (`let` items) for the lifetime of a `check()`
 // call, so every function body can see them regardless of declaration
@@ -125,8 +186,15 @@ pub struct SemanticChecker {
     enum_variants: HashMap<(String, String), Vec<Type>>,
     enum_names: HashSet<String>,
     type_names: HashSet<String>,
+    generic_arity: HashMap<String, usize>,
+    generic_params_by_type: HashMap<String, Vec<String>>,
+    generic_params: HashSet<String>,
     current_return: Option<Type>,
     errors: Vec<SemanticError>,
+    inferred: HashMap<(usize, usize), TypedExpr>,
+    references: Vec<Reference>,
+    symbols: Vec<Symbol>,
+    external_context: SemanticContext,
 }
 
 include!("names.rs");
