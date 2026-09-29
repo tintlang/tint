@@ -1,6 +1,7 @@
 //! Text dump of a module, for tests and debugging.
 
 use super::ir::*;
+use super::ui::*;
 use std::fmt::Write;
 
 fn cmp_name(op: CmpOp) -> &'static str {
@@ -106,6 +107,16 @@ pub fn show_instr(module: &Module, func: &Func, instr: &Instr) -> String {
         Instr::GlobalSet { global, src } => {
             format!("global {} = r{}", module.globals[global.0 as usize].name, src.0)
         }
+        Instr::UiOpen { template, values } => {
+            let tag = match &module.ui_templates[*template as usize] {
+                UiTemplate::Element(e) => e.tag.as_str(),
+                UiTemplate::Tokens { .. } => "<tokens>",
+            };
+            format!("ui.open {tag} #{template}({})", regs(values))
+        }
+        Instr::UiClose => "ui.close".to_string(),
+        Instr::UiText { src } => format!("ui.text r{}", src.0),
+        Instr::UiTokens { template } => format!("ui.tokens #{template}"),
     }
 }
 

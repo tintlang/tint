@@ -250,7 +250,10 @@ pub fn eval_expr<H: EvalHost>(host: &mut H, expr: &Expr) -> Value {
             host.index_lookup(arr, idx)
         }
         Expr::Call { target, args, span } => {
-            let arg_vals = args.iter().map(|a| eval_expr(host, a)).collect::<Vec<_>>();
+            let arg_vals = args
+                .iter()
+                .map(|a| eval_expr(host, tint_ast::arg_value(a)))
+                .collect::<Vec<_>>();
             if let Some(Value::Propagate(value)) =
                 arg_vals.iter().find(|v| matches!(v, Value::Propagate(_)))
             {
@@ -273,6 +276,15 @@ pub fn eval_expr<H: EvalHost>(host: &mut H, expr: &Expr) -> Value {
                         return result;
                     }
                     Err(error) => panic!("method `{}` failed: {}", method, error),
+                }
+            }
+
+            if let Expr::Ident(name, _) = target.as_ref() {
+                if args.iter().any(|a| matches!(a, Expr::NamedArg { .. })) {
+                    return match host.call_fn_named(name, args, &arg_vals, *span) {
+                        Ok(v) => v,
+                        Err(error) => panic!("call of `{name}` failed: {error}"),
+                    };
                 }
             }
 

@@ -57,6 +57,22 @@ pub trait EvalHost {
     /// Resolve and invoke a named function.
     fn call_fn(&mut self, name: &str, args: &[Value], span: Span) -> EvalResult<Value>;
 
+    /// Call a user function whose arguments include `name: value` ones.
+    /// `arg_exprs` and `arg_vals` are parallel.
+    fn call_fn_named(
+        &mut self,
+        name: &str,
+        arg_exprs: &[tint_ast::Expr],
+        arg_vals: &[Value],
+        span: Span,
+    ) -> EvalResult<Value> {
+        let _ = (name, arg_exprs, arg_vals);
+        Err(crate::errors::EvalError::InvalidOp {
+            msg: "named arguments are not supported by this host".into(),
+            span,
+        })
+    }
+
     /// Invoke a user-defined function by name.
     fn call_user_fn(&mut self, name: &str, args: &[Value], span: Span) -> EvalResult<Value>;
 

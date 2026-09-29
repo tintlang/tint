@@ -33,5 +33,5 @@ pub struct UiBuilder {
 
 mod cache;
 mod core;
-mod helpers;
+pub(crate) mod helpers;
 mod nodes;

@@ -73,14 +73,42 @@ impl<'a> Lowerer<'a> {
                 self.emit(Instr::GlobalGet { dst: callee, global });
                 return self.call_closure_exprs(callee, args, span);
             }
-            if let Some(info) = self.fns.get(name).cloned() {
-                if info.params.len() != args.len() {
-                    return self.err(Some(span), format!("`{name}` takes {} arguments, got {}", info.params.len(), args.len()));
+            let info = match self.fns.get(name).cloned() {
+                Some(info) => Some(info),
+                None if self.generic_fns.contains_key(name) => {
+                    let key = target as *const Expr as usize;
+                    let Some(types) = self.model.instances.get(&key).cloned() else {
+                        return self.err(Some(span), format!("no type arguments were inferred for this call of `{name}`"));
+                    };
+                    let targs = types.iter().map(|t| self.conv(t)).collect::<LResult<Vec<_>>>()?;
+                    Some(self.fn_instance(name, targs, span)?)
                 }
-                let mut regs = Vec::new();
-                for (arg, ty) in args.iter().zip(&info.params) {
-                    regs.push(self.expr_as(arg, *ty)?);
+                None => None,
+            };
+            if let Some(info) = info {
+                let slots = match tint_ast::bind_call_args(name, &info.sigs, args) {
+                    Ok(slots) => slots,
+                    Err(message) => return self.err(Some(span), message),
+                };
+                // Arguments are evaluated in the order they are written; the
+                // registers are then put in parameter order.
+                let mut given: Vec<(usize, usize)> = slots.iter().enumerate().filter_map(|(p, a)| a.map(|a| (a, p))).collect();
+                given.sort();
+                let mut regs: Vec<Option<Reg>> = vec![None; info.params.len()];
+                for (arg_index, param) in given {
+                    regs[param] = Some(self.expr_as(tint_ast::arg_value(&args[arg_index]), info.params[param])?);
                 }
+                let mut ordered = Vec::with_capacity(regs.len());
+                for (param, reg) in regs.into_iter().enumerate() {
+                    ordered.push(match reg {
+                        Some(reg) => reg,
+                        None => {
+                            let default = info.defaults[param].expect("bind_call_args checked the default");
+                            self.default_arg(default, info.params[param])?
+                        }
+                    });
+                }
+                let regs = ordered;
                 let dst = self.new_reg(info.ret);
                 self.emit(Instr::Call { dst, func: info.id, args: regs });
                 return Ok(dst);
@@ -93,6 +121,21 @@ impl<'a> Lowerer<'a> {
 
         let callee = self.expr(target, None)?;
         self.call_closure_exprs(callee, args, span)
+    }
+
+    /// Lowers a parameter default at the call site. Only globals are visible
+    /// to it, never the caller's locals.
+    fn default_arg(&mut self, default: &Expr, ty: TyId) -> LResult<Reg> {
+        let hidden: Vec<_> = self
+            .stack
+            .iter_mut()
+            .map(|f| std::mem::replace(&mut f.scopes, vec![Default::default()]))
+            .collect();
+        let result = self.expr_as(default, ty);
+        for (f, scopes) in self.stack.iter_mut().zip(hidden) {
+            f.scopes = scopes;
+        }
+        result
     }
 
     fn variant_call(&mut self, call: &Expr, enum_name: &str, variant: &str, args: &[Expr], hint: Option<TyId>, span: Span) -> LResult<Reg> {

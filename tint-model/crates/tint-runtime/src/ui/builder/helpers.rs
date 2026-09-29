@@ -1,6 +1,6 @@
 use super::*;
 
-pub(super) fn theme_matches(name: &str, host: &mut impl EvalHost) -> bool {
+pub(crate) fn theme_matches(name: &str, host: &mut impl EvalHost) -> bool {
     match host.load_var("theme", Span::dummy()) {
         EvalValue::String(active) => active == name,
         _ => false,
@@ -11,7 +11,7 @@ pub(super) fn theme_matches(name: &str, host: &mut impl EvalHost) -> bool {
 /// `host`, and reports whether the node should be built at all. Only an
 /// explicit `false` (or `()`/unit, e.g. an unresolved variable) hides the
 /// node; a node with no `if{}` modifier always renders.
-pub(super) fn check_if<H: EvalHost>(modifiers: &[UiModifier], host: &mut H) -> bool {
+pub(crate) fn check_if<H: EvalHost>(modifiers: &[UiModifier], host: &mut H) -> bool {
     for m in modifiers {
         if m.path.len() == 1 && m.path[0] == "if" {
             if let UiModifierValue::Expr(cond) = &m.value {
@@ -28,7 +28,7 @@ pub(super) fn check_if<H: EvalHost>(modifiers: &[UiModifier], host: &mut H) -> b
 /// tint-parser/src/ui/block.rs) -- same shape as any other nested
 /// modifier, just repurposed to carry the loop variable's name alongside
 /// its expression.
-pub(super) fn find_for(modifiers: &[UiModifier]) -> Option<(String, &Expr)> {
+pub(crate) fn find_for(modifiers: &[UiModifier]) -> Option<(String, &Expr)> {
     modifiers.iter().find_map(|m| {
         if m.path.len() != 1 || m.path[0] != "for" {
             return None;
@@ -46,7 +46,7 @@ pub(super) fn find_for(modifiers: &[UiModifier]) -> Option<(String, &Expr)> {
 /// `find_for`, minus the extra loop-variable name -- `match{}` parses to a
 /// plain `UiModifierValue::Expr` (see tint-parser/src/ui/block.rs), unlike
 /// `for{}`'s `MiniMod`.
-pub(super) fn find_match(modifiers: &[UiModifier]) -> Option<&Expr> {
+pub(crate) fn find_match(modifiers: &[UiModifier]) -> Option<&Expr> {
     modifiers.iter().find_map(|m| {
         if m.path.len() != 1 || m.path[0] != "match" {
             return None;
@@ -63,7 +63,7 @@ pub(super) fn find_match(modifiers: &[UiModifier]) -> Option<&Expr> {
 /// `parse_block_case_node`; the label is recorded as a synthetic `case`
 /// attribute on the arm's own node). `_` is the wildcard arm, matched by
 /// `case_label_matches` below regardless of the scrutinee.
-pub(super) fn find_case_label(attributes: &[UiAttribute]) -> Option<String> {
+pub(crate) fn find_case_label(attributes: &[UiAttribute]) -> Option<String> {
     attributes.iter().find_map(|a| {
         if a.name != "case" {
             return None;
@@ -84,7 +84,7 @@ pub(super) fn find_case_label(attributes: &[UiAttribute]) -> Option<String> {
 /// pattern destructuring) -- matches this project's existing "narrow but
 /// real" scope for UI-tree control flow (`if{}`/`for{}}` are similarly
 /// plain, non-destructuring evaluations).
-pub(super) fn case_label_matches(label: &str, scrutinee: &EvalValue) -> bool {
+pub(crate) fn case_label_matches(label: &str, scrutinee: &EvalValue) -> bool {
     label == "_" || label == scrutinee.to_string()
 }
 
@@ -95,7 +95,7 @@ pub(super) fn case_label_matches(label: &str, scrutinee: &EvalValue) -> bool {
 /// like this got read at all was `UiPreviewNode.svelte`'s now-dead
 /// `node.attrs`/`node.onclick`, which nothing on the Rust side ever
 /// populated.
-pub(super) fn apply_events(tree: &mut UiTree, id: UiNodeId, attributes: &[UiAttribute]) {
+pub(crate) fn apply_events(tree: &mut UiTree, id: UiNodeId, attributes: &[UiAttribute]) {
     let on_click =
         find_handler(attributes, "click").or_else(|| find_handler(attributes, "pointer_down"));
     tree.set_events(
@@ -125,13 +125,13 @@ fn find_handler(attributes: &[UiAttribute], name: &str) -> Option<String> {
 /// `UiAttrValue::Literal` -- a real Tint string, not an identifier like
 /// `click||handler`) and records the raw markup on the tree node, so a
 /// renderer can show exactly the SVG the .tint source wrote, verbatim.
-pub(super) fn apply_svg(tree: &mut UiTree, id: UiNodeId, attributes: &[UiAttribute]) {
+pub(crate) fn apply_svg(tree: &mut UiTree, id: UiNodeId, attributes: &[UiAttribute]) {
     tree.set_svg(id, find_literal(attributes, "svg"));
 }
 
 /// Reads `tick||handler` with an optional `every||ms` interval (default
 /// 1000). The renderer owns the clock; the tree only records the request.
-pub(super) fn apply_tick(tree: &mut UiTree, id: UiNodeId, attributes: &[UiAttribute]) {
+pub(crate) fn apply_tick(tree: &mut UiTree, id: UiNodeId, attributes: &[UiAttribute]) {
     let handler = find_handler(attributes, "tick");
     let every_ms = handler.as_ref().map(|_| {
         find_literal(attributes, "every")
@@ -145,31 +145,31 @@ pub(super) fn apply_tick(tree: &mut UiTree, id: UiNodeId, attributes: &[UiAttrib
 /// Reads `route||"/path"` and leaves navigation as a renderer concern.
 /// Keeping this as a first-class field makes the syntax portable to DOM,
 /// native, and future renderers without treating the route as CSS.
-pub(super) fn apply_route(tree: &mut UiTree, id: UiNodeId, attributes: &[UiAttribute]) {
+pub(crate) fn apply_route(tree: &mut UiTree, id: UiNodeId, attributes: &[UiAttribute]) {
     tree.set_route(id, find_literal(attributes, "route"));
 }
 
 /// Reads target||"_blank" for a routed UI node.
-pub(super) fn apply_target(tree: &mut UiTree, id: UiNodeId, attributes: &[UiAttribute]) {
+pub(crate) fn apply_target(tree: &mut UiTree, id: UiNodeId, attributes: &[UiAttribute]) {
     tree.set_target(id, find_literal(attributes, "target"));
 }
 
 /// Reads ref||"name" for a stable DOM escape-hatch reference.
-pub(super) fn apply_reference(tree: &mut UiTree, id: UiNodeId, attributes: &[UiAttribute]) {
+pub(crate) fn apply_reference(tree: &mut UiTree, id: UiNodeId, attributes: &[UiAttribute]) {
     tree.set_reference(id, find_literal(attributes, "ref"));
 }
 
 /// Reads js||callback for a host-side click callback.
-pub(super) fn apply_js_handler(tree: &mut UiTree, id: UiNodeId, attributes: &[UiAttribute]) {
+pub(crate) fn apply_js_handler(tree: &mut UiTree, id: UiNodeId, attributes: &[UiAttribute]) {
     tree.set_js_handler(id, find_name(attributes, "js"));
 }
 
-pub(super) fn apply_asset(tree: &mut UiTree, id: UiNodeId, attributes: &[UiAttribute]) {
+pub(crate) fn apply_asset(tree: &mut UiTree, id: UiNodeId, attributes: &[UiAttribute]) {
     tree.set_asset(id, find_literal(attributes, "asset"));
     tree.set_sound(id, find_literal(attributes, "sound"));
 }
 
-pub(super) fn apply_key(tree: &mut UiTree, id: UiNodeId, modifiers: &[UiModifier]) {
+pub(crate) fn apply_key(tree: &mut UiTree, id: UiNodeId, modifiers: &[UiModifier]) {
     let key = modifiers.iter().find_map(|modifier| {
         if modifier.path.len() == 1 && modifier.path[0] == "key" {
             match &modifier.value {
@@ -216,7 +216,7 @@ fn find_name(attributes: &[UiAttribute], name: &str) -> Option<String> {
 /// characters `{tx}`. An expression that evaluates to nothing in scope
 /// (undefined variable) comes back as `Value::Unit`, which displays as
 /// `()` rather than panicking -- a visibly-incomplete render, not a crash.
-pub(super) fn render_ui_text<H: EvalHost>(text: &UiText, host: &mut H) -> String {
+pub(crate) fn render_ui_text<H: EvalHost>(text: &UiText, host: &mut H) -> String {
     let mut out = String::new();
     for part in &text.parts {
         match part {

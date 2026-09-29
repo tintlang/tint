@@ -27,6 +27,9 @@ pub enum SemanticErrorKind {
     WrongEventBinding,
     /// Strict mode: no type could be inferred here; add an annotation.
     CannotInfer(String),
+    /// A call that does not match the function it names (arity, unknown or
+    /// repeated named argument, missing argument).
+    BadCall(String),
     Unsupported,
 }
 

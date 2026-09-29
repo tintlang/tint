@@ -182,7 +182,7 @@ impl Parser {
             }
 
             TokenKind::Match => self.parse_match_expression(),
-            TokenKind::Pipe => self.parse_lambda(),
+            TokenKind::Pipe | TokenKind::OrOr => self.parse_lambda(),
 
             TokenKind::LBracket => self.parse_array_literal(),
             TokenKind::LParen => self.parse_paren_or_tuple(),
@@ -225,7 +225,7 @@ impl Parser {
         let cond = self.parse_expr()?;
         let then = self.parse_block()?;
         self.stream.expect(TokenKind::Else)?;
-        let else_ = self.parse_block()?;
+        let else_ = self.parse_else_branch()?;
         let span = Span::merge(start, else_.span);
         Ok(Expr::If {
             cond: Box::new(cond),

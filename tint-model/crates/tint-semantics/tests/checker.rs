@@ -675,3 +675,25 @@ fn unannotated_return_and_param_types_are_inferred() {
     let mixed = "fn show(x) { x }\nfn main() { show(1)\nshow(\"a\") }";
     assert!(errors_for(mixed).is_empty());
 }
+
+#[test]
+fn generic_function_infers_type_arguments_per_call() {
+    assert_clean("fn id<T>(x: T) -> T { x }\nfn main() { let a = id(1)\n let b = id(\"s\") }");
+}
+
+#[test]
+fn generic_function_rejects_conflicting_arguments() {
+    assert_type_mismatch("fn same<T>(a: T, b: T) -> T { a }\nfn main() { same(1, \"a\") }");
+}
+
+#[test]
+fn generic_parameter_is_opaque_in_the_body() {
+    assert_type_mismatch("fn bad<T>(x: T) -> T { x + x }");
+}
+
+#[test]
+fn generic_function_is_not_a_value() {
+    assert_error("fn id<T>(x: T) -> T { x }\nfn main() { let f = id }", |k| {
+        matches!(k, SemanticErrorKind::BadCall(m) if m.contains("generic"))
+    });
+}

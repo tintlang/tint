@@ -156,6 +156,31 @@ pub fn eval_stmt<H: EvalHost>(host: &mut H, stmt: &Stmt) -> Flow {
             Flow::Value(Value::Unit)
         }
 
+        Stmt::ForIn { var, iter, body, .. } => {
+            let items = match host.eval_expr(iter) {
+                Value::List(items) => items,
+                other => return Flow::Value(other),
+            };
+
+            for item in items {
+                host.push_scope();
+                host.define_var(var, item);
+
+                let flow = host.eval_block_flow(body);
+                host.pop_scope();
+
+                match flow {
+                    Flow::Continue => continue,
+                    Flow::Break => break,
+                    Flow::Return(v) => return Flow::Return(v),
+                    Flow::Propagate(v) => return Flow::Propagate(v),
+                    Flow::Value(_) => {}
+                }
+            }
+
+            Flow::Value(Value::Unit)
+        }
+
         Stmt::Match { expr, arms, .. } => {
             let v = host.eval_expr(expr);
 

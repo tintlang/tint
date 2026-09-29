@@ -574,6 +574,7 @@ dependencies = [
  "tint-ir",
  "tint-lexer",
  "tint-parser",
+ "tint-runtime",
  "tint-semantics",
 ]
 

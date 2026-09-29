@@ -73,5 +73,6 @@ impl User {
 
 User-defined generic structs and enums are checked strictly, including generic
 arity and field/variant payload types. Generic functions such as
-`identity<T>(value: T) -> T` are still future work. Resource borrowing is not
+`identity<T>(value: T) -> T` infer their type arguments per call; the typed IR
+compiles one instance per distinct set of arguments. Resource borrowing is not
 part of the current supported runtime.

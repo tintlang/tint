@@ -67,6 +67,14 @@ pub struct SemanticModel {
     pub variant_types: HashMap<(String, String), Vec<Type>>,
     /// Payload field names of every enum variant (`None` for positional ones).
     pub variant_names: HashMap<(String, String), Vec<Option<String>>>,
+    /// Type parameters of every generic function (`fn id<T>`), in order. Their
+    /// entries in `functions` mention them as `Type::Simple("T")`.
+    pub function_generics: HashMap<String, Vec<String>>,
+    /// For every call of a generic function, keyed by the address of the
+    /// call's target `Expr`: the types its type parameters were inferred as,
+    /// in `function_generics` order. Inside another generic function these
+    /// may mention that function's own parameters.
+    pub instances: HashMap<usize, Vec<Type>>,
 }
 
 /// Names exported by the project-wide UI environment.  A `.tn` file can be
@@ -236,6 +244,13 @@ pub struct SemanticChecker {
     ui_styles: HashSet<String>,
     ui_variants: HashSet<String>,
     fn_types: HashMap<String, (Vec<Type>, Type)>,
+    /// Parameter names and defaults of plain functions, for named arguments.
+    fn_sigs: HashMap<String, Vec<tint_ast::ParamSig>>,
+    /// Type parameters of generic functions.
+    fn_generics: HashMap<String, Vec<String>>,
+    /// Inferred type arguments of each call of a generic function, by the
+    /// address of the call target (see `SemanticModel::instances`).
+    instances: HashMap<usize, Vec<Type>>,
     struct_fields: HashMap<String, HashMap<String, Type>>,
     methods: HashMap<(String, String), (Vec<Type>, Type)>,
     enum_variants: HashMap<(String, String), Vec<Type>>,

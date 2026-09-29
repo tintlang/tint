@@ -4,7 +4,13 @@ use tint_lexer::TokenKind;
 
 impl Parser {
     pub(crate) fn parse_lambda(&mut self) -> PResult<Expr> {
-        let start = self.stream.next().span; // '|'
+        let opener = self.stream.next(); // '|' or '||'
+        let start = opener.span;
+        if opener.kind == TokenKind::OrOr {
+            let body = self.parse_expr()?;
+            let span = Span::merge(start, body.span());
+            return Ok(Expr::Lambda { params: Vec::new(), body: Box::new(body), span });
+        }
 
         let mut params = Vec::new();
         loop {

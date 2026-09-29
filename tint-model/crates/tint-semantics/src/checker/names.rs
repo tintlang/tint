@@ -8,6 +8,9 @@ impl SemanticChecker {
             ui_styles: HashSet::new(),
             ui_variants: HashSet::new(),
             fn_types: HashMap::new(),
+            fn_sigs: HashMap::new(),
+            fn_generics: HashMap::new(),
+            instances: HashMap::new(),
             struct_fields: HashMap::new(),
             methods: HashMap::new(),
             enum_variants: HashMap::new(),
@@ -74,6 +77,7 @@ impl SemanticChecker {
         self.errors.clear();
         self.inferred.clear();
         self.inferred_by_ptr.clear();
+        self.instances.clear();
         self.binding_types.clear();
         self.references.clear();
         self.symbols.clear();
@@ -109,6 +113,8 @@ impl SemanticChecker {
                 struct_fields: self.struct_fields.clone(),
                 variant_types: self.enum_variants.clone(),
                 variant_names: self.variant_fields.clone(),
+                function_generics: self.fn_generics.clone(),
+                instances: self.instances.clone(),
             },
         )
     }
@@ -212,6 +218,7 @@ impl SemanticChecker {
         for item in items {
             match item {
                 Item::Fn(f) | Item::ExportFn(f, _) => {
+                    self.generic_params.extend(f.generics.iter().cloned());
                     let params = f
                         .params
                         .iter()
@@ -241,6 +248,13 @@ impl SemanticChecker {
                         self.validate_decl_type(ty);
                     }
                     self.type_names.extend(f.generics.iter().cloned());
+                    for generic in &f.generics {
+                        self.generic_params.remove(generic);
+                    }
+                    if !f.generics.is_empty() {
+                        self.fn_generics.insert(f.name.clone(), f.generics.clone());
+                    }
+                    self.fn_sigs.insert(f.name.clone(), f.params.iter().map(|p| p.sig()).collect());
                     self.fn_types.insert(f.name.clone(), (params, ret));
                 }
                 Item::Const(c) => {
@@ -608,12 +622,29 @@ impl SemanticChecker {
     }
 
     fn check_fn_body(&mut self, f: &tint_ast::FnDecl) {
-        let ret = self
+        let (params, ret) = self
             .fn_types
             .get(&f.name)
-            .map(|sig| sig.1.clone())
-            .unwrap_or(Type::Unknown);
+            .cloned()
+            .unwrap_or((Vec::new(), Type::Unknown));
+        // Defaults are evaluated at the call site with only globals in scope.
+        for (param, ty) in f.params.iter().zip(&params) {
+            match &param.default {
+                Some(tint_ast::DefaultValue::Single(default)) => {
+                    let found = self.infer_expr_with(default, Some(ty));
+                    self.require_compatible(ty, &found, default.span());
+                }
+                Some(tint_ast::DefaultValue::Broadcast(default)) => {
+                    self.error(default.span(), SemanticErrorKind::Unsupported);
+                }
+                None => {}
+            }
+        }
+        self.generic_params.extend(f.generics.iter().cloned());
         self.check_body(f, None, ret);
+        for generic in &f.generics {
+            self.generic_params.remove(generic);
+        }
     }
 
     fn check_method_body(&mut self, f: &tint_ast::FnDecl, receiver: Type) {

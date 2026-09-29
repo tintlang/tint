@@ -1,0 +1,9 @@
+// Generic functions the checker rejects. The tree-walker is dynamically typed
+// and runs them; the typed IR rejects them at check time, so they live in a
+// file of their own.
+
+fn same<T>(a: T, b: T) -> T { a }
+
+// expect: 1
+// ir-expect-error: TypeMismatch
+fn conflicting_arguments() { same(1, "a") }

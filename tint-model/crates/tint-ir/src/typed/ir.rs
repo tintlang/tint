@@ -12,6 +12,7 @@
 //! visible through another (copy-on-write).
 
 use super::ty::{AdtId, NumKind, TyId, TypeTable};
+use super::ui::UiTemplate;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -245,6 +246,15 @@ pub enum Instr {
     Closure { dst: Reg, func: FuncId, captures: Vec<Reg> },
     GlobalGet { dst: Reg, global: GlobalId },
     GlobalSet { global: GlobalId, src: Reg },
+    /// Starts the element `Module::ui_templates[template]`. `values` fill its
+    /// non-`Unused` slots (`UiSlot`), in order.
+    UiOpen { template: u32, values: Vec<Reg> },
+    /// Finishes the innermost open element.
+    UiClose,
+    /// A text child (`src: string`) of the innermost open element.
+    UiText { src: Reg },
+    /// Activates the theme tokens `Module::ui_templates[template]`.
+    UiTokens { template: u32 },
 }
 
 impl Instr {
@@ -274,7 +284,7 @@ impl Instr {
             | CallClosure { dst, .. }
             | Closure { dst, .. }
             | GlobalGet { dst, .. } => Some(*dst),
-            Set { .. } | GlobalSet { .. } => None,
+            Set { .. } | GlobalSet { .. } | UiOpen { .. } | UiClose | UiText { .. } | UiTokens { .. } => None,
         }
     }
 
@@ -287,7 +297,7 @@ impl Instr {
         };
         let mut out = Vec::new();
         match self {
-            Const { .. } | GlobalGet { .. } => {}
+            Const { .. } | GlobalGet { .. } | UiClose | UiTokens { .. } => {}
             Mov { src, .. }
             | Not { src, .. }
             | Neg { src, .. }
@@ -295,7 +305,8 @@ impl Instr {
             | ToStr { src, .. }
             | Tag { src, .. }
             | Payload { src, .. }
-            | GlobalSet { src, .. } => out.push(*src),
+            | GlobalSet { src, .. }
+            | UiText { src } => out.push(*src),
             Bin { a, b, .. } | Cmp { a, b, .. } => {
                 out.push(*a);
                 out.push(*b);
@@ -313,6 +324,7 @@ impl Instr {
                 out.push(*src);
             }
             Rt { args, .. } | Host { args, .. } | Call { args, .. } => out.extend(args),
+            UiOpen { values, .. } => out.extend(values),
             CallClosure { callee, args, .. } => {
                 out.push(*callee);
                 out.extend(args);
@@ -375,6 +387,8 @@ pub enum FuncKind {
     Lambda,
     /// Evaluates the initializers of all globals.
     Init,
+    /// A `ui fn`: emits a tree (see `ui`) and returns unit.
+    Ui,
 }
 
 #[derive(Debug, Clone)]
@@ -414,6 +428,8 @@ pub struct Module {
     pub functions: HashMap<String, FuncId>,
     /// User methods by (type, name).
     pub methods: HashMap<(String, String), FuncId>,
+    /// Static parts of the UI elements the `Ui` functions emit.
+    pub ui_templates: Vec<UiTemplate>,
 }
 
 impl Module {

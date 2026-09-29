@@ -274,3 +274,96 @@ impl FnDecl {
         Ok(())
     }
 }
+
+impl DefaultValue {
+    /// The expression that is evaluated when the argument is omitted.
+    pub fn expr(&self) -> &Expr {
+        match self {
+            DefaultValue::Single(e) | DefaultValue::Broadcast(e) => e,
+        }
+    }
+}
+
+impl Param {
+    /// The bound name of a plain parameter (`x`, `mut x`, `x: T`).
+    pub fn name(&self) -> Option<&str> {
+        fn walk(p: &Pattern) -> Option<&str> {
+            match p {
+                Pattern::Ident(name, _) => Some(name),
+                Pattern::Mut { inner, .. } => walk(inner),
+                Pattern::Typed { pat, .. } => walk(pat),
+                _ => None,
+            }
+        }
+        walk(&self.pattern)
+    }
+
+    pub fn sig(&self) -> ParamSig {
+        ParamSig { name: self.name().map(str::to_owned), has_default: self.default.is_some() }
+    }
+}
+
+/// What a call site needs to know about a parameter.
+#[derive(Debug, Clone)]
+pub struct ParamSig {
+    pub name: Option<String>,
+    pub has_default: bool,
+}
+
+/// Matches call arguments to parameters: positional arguments fill the
+/// parameters in order, `name: value` arguments (`Expr::NamedArg`) fill by
+/// name, and any parameter left over must have a default. Returns, per
+/// parameter, the index of its argument in `args`, or `None` when the
+/// default applies. `Expr::NamedArg` values are the caller's to unwrap.
+pub fn bind_call_args(
+    fn_name: &str,
+    params: &[ParamSig],
+    args: &[Expr],
+) -> Result<Vec<Option<usize>>, String> {
+    let mut slots: Vec<Option<usize>> = vec![None; params.len()];
+    let mut next = 0;
+    for (index, arg) in args.iter().enumerate() {
+        match arg {
+            Expr::NamedArg { name, .. } => {
+                let Some(pos) = params.iter().position(|p| p.name.as_deref() == Some(name)) else {
+                    return Err(format!("`{fn_name}` has no parameter `{name}`"));
+                };
+                if slots[pos].is_some() {
+                    return Err(format!("argument `{name}` of `{fn_name}` is given twice"));
+                }
+                slots[pos] = Some(index);
+            }
+            _ => {
+                if next >= params.len() {
+                    return Err(format!(
+                        "`{fn_name}` takes {} arguments, got {}",
+                        params.len(),
+                        args.len()
+                    ));
+                }
+                if slots[next].is_some() {
+                    return Err(format!("argument {} of `{fn_name}` is given twice", next + 1));
+                }
+                slots[next] = Some(index);
+                next += 1;
+            }
+        }
+    }
+    for (param, slot) in params.iter().zip(&slots) {
+        if slot.is_none() && !param.has_default {
+            return Err(match &param.name {
+                Some(name) => format!("missing argument `{name}` in call of `{fn_name}`"),
+                None => format!("missing argument in call of `{fn_name}`"),
+            });
+        }
+    }
+    Ok(slots)
+}
+
+/// The value expression of an argument, without a `name:` wrapper.
+pub fn arg_value(arg: &Expr) -> &Expr {
+    match arg {
+        Expr::NamedArg { value, .. } => value,
+        other => other,
+    }
+}

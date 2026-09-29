@@ -42,3 +42,33 @@ fn lambda_as_argument() { apply(|x| x * 4, 3) }
 
 // expect: 6
 fn nested_calls() { square(1) + square(2) + 1 }
+
+// expect: 8
+fn default_param() { add_default(3) }
+fn add_default(a, b = 5) { a + b }
+
+// expect: 7
+fn default_overridden() { add_default(3, 4) }
+
+// expect: "Hello, Ann"
+fn default_string() { greet("Ann") }
+fn greet(name: string, prefix: string = "Hello") -> string { "{prefix}, {name}" }
+
+// expect: 12
+fn named_args_reordered() { add_default{b: 2, a: 10} }
+
+// expect: 129
+fn named_args_skip_default() { three{a: 1, c: 9} }
+fn three(a, b = 2, c = 3) { a * 100 + b * 10 + c }
+
+// expect: 123
+fn positional_then_named() { three{a: 1, b: 2, c: 3} }
+
+// expect: 25
+fn default_uses_global() { with_global(5) }
+const BASE: number = 20
+fn with_global(x) { x + BASE }
+fn with_global_default(x = BASE) { x }
+
+// expect: 20
+fn default_reads_global() { with_global_default() }

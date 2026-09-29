@@ -1,5 +1,4 @@
 // expect: 6
-// xfail: `for x in <list>` does not parse in logic fns (only `for i in a..b` ranges); UI `for { x in xs }` is separate
 fn for_over_list() {
     let mut total = 0
     let xs = [1, 2, 3]

@@ -107,3 +107,22 @@ fn examples_lowering_is_measured() {
     eprintln!("examples lowered cleanly: {ok}/{total}");
     assert!(total > 0);
 }
+
+#[test]
+fn generic_functions_are_instantiated_once_per_type_arguments() {
+    let src = "fn id<T>(x: T) -> T { x }\nfn unused<T>(x: T) -> T { x }\nfn main() -> number {\n let a = id(1)\n let b = id(2)\n let s = id(\"s\")\n let i: i32 = 3\n let c = id(i)\n return a + b\n}";
+    let lowered = lower(src);
+    assert!(lowered.errors.is_empty(), "{:?}", lowered.errors);
+    let mut names: Vec<_> = lowered.module.funcs.iter().map(|f| f.name.as_str()).filter(|n| n.starts_with("id<")).collect();
+    names.sort();
+    assert_eq!(names, ["id<i32>", "id<number>", "id<string>"]);
+    assert!(!lowered.module.funcs.iter().any(|f| f.name.starts_with("unused")));
+    assert_eq!(verify(&lowered.module), Vec::<String>::new());
+}
+
+#[test]
+fn generic_instantiation_that_never_ends_is_an_error() {
+    let src = "fn grow<T>(x: T, n: number) -> number {\n if n <= 0 { return 0 }\n return grow([x], n - 1)\n}\nfn main() -> number { grow(1, 3) }";
+    let lowered = lower(src);
+    assert!(lowered.errors.iter().any(|e| e.message.contains("instances")), "{:?}", lowered.errors);
+}

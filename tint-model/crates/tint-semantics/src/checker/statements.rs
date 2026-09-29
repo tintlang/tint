@@ -92,6 +92,29 @@ impl SemanticChecker {
                 self.visit_block_in_current_scope(body);
                 self.scopes.pop();
             }
+            Stmt::ForIn { var, iter, body, span } => {
+                let iter_ty = self.infer_expr(iter);
+                let elem = match &iter_ty {
+                    Type::Array(elem) => (**elem).clone(),
+                    Type::Unknown => Type::Unknown,
+                    other => {
+                        self.error(
+                            iter.span(),
+                            SemanticErrorKind::TypeMismatch {
+                                expected: "a list".into(),
+                                found: format!("{other:?}"),
+                            },
+                        );
+                        Type::Unknown
+                    }
+                };
+                self.scopes.push();
+                if !self.scopes.define(var, elem) {
+                    self.error(*span, SemanticErrorKind::DuplicateIdent(var.clone()));
+                }
+                self.visit_block_in_current_scope(body);
+                self.scopes.pop();
+            }
             Stmt::Match {
                 expr,
                 arms,

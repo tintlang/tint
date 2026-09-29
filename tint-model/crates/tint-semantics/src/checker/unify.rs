@@ -258,6 +258,11 @@ impl SemanticChecker {
             let ty = self.resolve(&ty);
             self.inferred_by_ptr.insert(key, ty);
         }
+        let instances: Vec<_> = self.instances.iter().map(|(k, v)| (*k, v.clone())).collect();
+        for (key, types) in instances {
+            let types = types.iter().map(|ty| self.resolve(ty)).collect();
+            self.instances.insert(key, types);
+        }
         let bindings: Vec<_> = self.binding_types.iter().map(|(k, v)| (*k, v.clone())).collect();
         for (key, ty) in bindings {
             let ty = self.resolve(&ty);
@@ -302,6 +307,11 @@ impl SemanticChecker {
         }
         for ty in self.binding_types.values_mut() {
             *ty = close(ty);
+        }
+        for types in self.instances.values_mut() {
+            for ty in types.iter_mut() {
+                *ty = close(ty);
+            }
         }
         for symbol in &mut self.symbols {
             symbol.ty = close(&symbol.ty);

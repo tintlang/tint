@@ -83,6 +83,14 @@ pub enum Stmt {
         span: Span,
     },
 
+    /// `for x in <list>`
+    ForIn {
+        var: String,
+        iter: Expr,
+        body: Block,
+        span: Span,
+    },
+
     Match {
         expr: Expr,
         arms: Vec<MatchArm>,
@@ -105,6 +113,7 @@ impl Stmt {
             Stmt::Break(span) => *span,
             Stmt::Continue(span) => *span,
             Stmt::For { span, .. } => *span,
+            Stmt::ForIn { span, .. } => *span,
             Stmt::Match { span, .. } => *span,
             Stmt::Return(_, span) => *span,
         }

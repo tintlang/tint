@@ -221,7 +221,7 @@ fn stmt_contains_loop(stmt: &tint_ast::Stmt) -> bool {
     use tint_ast::Stmt;
 
     match stmt {
-        Stmt::While { .. } | Stmt::Loop { .. } | Stmt::For { .. } => true,
+        Stmt::While { .. } | Stmt::Loop { .. } | Stmt::For { .. } | Stmt::ForIn { .. } => true,
         Stmt::If { then, else_, .. } => {
             block_contains_loop(then) || else_.as_ref().is_some_and(block_contains_loop)
         }
@@ -261,6 +261,7 @@ fn stmt_contains_lambda(stmt: &tint_ast::Stmt) -> bool {
         } => {
             expr_contains_lambda(start) || expr_contains_lambda(end) || block_contains_lambda(body)
         }
+        Stmt::ForIn { iter, body, .. } => expr_contains_lambda(iter) || block_contains_lambda(body),
         Stmt::Match { expr, arms, .. } => {
             expr_contains_lambda(expr)
                 || arms.iter().any(|arm| {
@@ -299,6 +300,9 @@ fn stmt_contains_try(stmt: &tint_ast::Stmt) -> bool {
             expr_contains_try(start)
                 || expr_contains_try(end)
                 || body.stmts.iter().any(stmt_contains_try)
+        }
+        Stmt::ForIn { iter, body, .. } => {
+            expr_contains_try(iter) || body.stmts.iter().any(stmt_contains_try)
         }
         Stmt::Match { expr, arms, .. } => {
             expr_contains_try(expr)

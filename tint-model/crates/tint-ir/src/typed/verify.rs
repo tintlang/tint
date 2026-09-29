@@ -3,6 +3,7 @@
 //! a wrong answer later.
 
 use super::ir::*;
+use super::ui::*;
 use super::ty::*;
 
 pub fn verify(module: &Module) -> Vec<String> {
@@ -352,6 +353,54 @@ impl<'m> Verifier<'m> {
             Instr::GlobalSet { global, src } => {
                 let g = self.module.globals.get(global.0 as usize).ok_or("missing global")?;
                 self.expect("global", *src, g.ty)
+            }
+            Instr::UiOpen { template, values } => {
+                let Some(UiTemplate::Element(e)) = self.module.ui_templates.get(*template as usize) else {
+                    return Err(format!("ui.open of a missing element template #{template}"));
+                };
+                let wanted: Vec<UiSlot> = e.slots.iter().copied().filter(|s| *s != UiSlot::Unused).collect();
+                if wanted.len() != values.len() {
+                    return Err(format!("ui.open {}: {} values for {} slots", e.tag, values.len(), wanted.len()));
+                }
+                for (slot, reg) in wanted.iter().zip(values) {
+                    let ok = match (slot, self.kind(self.ty(*reg))) {
+                        (UiSlot::Number, TyKind::Num(_)) => true,
+                        (UiSlot::Str, TyKind::Str) => true,
+                        (UiSlot::Bool, TyKind::Bool) => true,
+                        _ => false,
+                    };
+                    if !ok {
+                        return Err(format!("ui.open {}: a {:?} slot got {}", e.tag, slot, self.show(self.ty(*reg))));
+                    }
+                }
+                if self.func.kind != FuncKind::Ui {
+                    return Err("ui.open outside a ui fn".into());
+                }
+                Ok(())
+            }
+            Instr::UiClose => {
+                if self.func.kind != FuncKind::Ui {
+                    return Err("ui.close outside a ui fn".into());
+                }
+                Ok(())
+            }
+            Instr::UiText { src } => {
+                if self.func.kind != FuncKind::Ui {
+                    return Err("ui.text outside a ui fn".into());
+                }
+                if !matches!(self.kind(self.ty(*src)), TyKind::Str) {
+                    return Err("ui.text needs a string".into());
+                }
+                Ok(())
+            }
+            Instr::UiTokens { template } => {
+                if self.func.kind != FuncKind::Ui {
+                    return Err("ui.tokens outside a ui fn".into());
+                }
+                match self.module.ui_templates.get(*template as usize) {
+                    Some(UiTemplate::Tokens { .. }) => Ok(()),
+                    _ => Err(format!("ui.tokens of a missing token template #{template}")),
+                }
             }
         }
     }

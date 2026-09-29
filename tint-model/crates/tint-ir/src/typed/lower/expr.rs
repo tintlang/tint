@@ -320,7 +320,7 @@ impl<'a> Lowerer<'a> {
             }
             Expr::Try { expr: inner, span } => self.try_expr(inner, *span),
             Expr::Borrow { target, .. } => self.expr(target, hint),
-            Expr::NamedArg { span, .. } => self.err(Some(*span), "named arguments cannot be lowered yet"),
+            Expr::NamedArg { span, .. } => self.err(Some(*span), "a named argument outside a call of a known function"),
         }
     }
 
@@ -356,7 +356,7 @@ impl<'a> Lowerer<'a> {
         Ok(self.const_reg(ty, value))
     }
 
-    fn ident(&mut self, name: &str, span: Span) -> LResult<Reg> {
+    pub(super) fn ident(&mut self, name: &str, span: Span) -> LResult<Reg> {
         if let Some(reg) = self.resolve_local(name) {
             return Ok(self.mov(reg));
         }

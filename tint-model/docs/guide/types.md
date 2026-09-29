@@ -117,10 +117,8 @@ Full method set (`T` payload, `E` error):
 | `ok()`, `err()` | `Result` | `Option<T>`, `Option<E>` |
 | `unwrap_err()`, `expect_err(msg)` | `Result` | `E` |
 
-The checker and the typed IR support all of these. The tree-walking runtime
-(`tint run`) implements `unwrap`, `expect`, `is_*`, `unwrap_or`, `map` and
-`and_then` only. A lambda without parameters (`|| body`) does not parse yet,
-so `unwrap_or_else` on an `Option` needs a named function.
+The checker, the typed IR and the tree-walking runtime (`tint run`) all
+support these. A lambda without parameters is written `|| body`.
 
 ## Type aliases
 

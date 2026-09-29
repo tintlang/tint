@@ -12,6 +12,7 @@ pub use fmt::{debug, display, render};
 
 use super::ir::*;
 use super::ty::*;
+use super::ui::{UiEvent, UiValue};
 use std::collections::BTreeMap;
 use std::rc::Rc;
 
@@ -88,6 +89,8 @@ pub struct Interp<'m> {
     pub max_depth: usize,
     /// Remaining instruction budget; `None` is unlimited.
     pub steps_left: Option<u64>,
+    /// What `Ui` functions emitted, in order.
+    pub ui_events: Vec<UiEvent>,
 }
 
 impl<'m> Interp<'m> {
@@ -100,6 +103,7 @@ impl<'m> Interp<'m> {
             depth: 0,
             max_depth: 1500,
             steps_left: None,
+            ui_events: Vec::new(),
         }
     }
 
@@ -121,6 +125,39 @@ impl<'m> Interp<'m> {
         self.init()?;
         let ret = self.module.func(id).ret;
         Ok((self.call(id, args)?, ret))
+    }
+
+    /// Overwrites the global `name` (a `state` variable, `theme`, ...).
+    pub fn set_global(&mut self, name: &str, value: Val) -> Res<()> {
+        let index = self
+            .module
+            .globals
+            .iter()
+            .position(|g| g.name == name)
+            .ok_or_else(|| Trap::new(format!("unknown global `{name}`")))?;
+        self.globals[index] = value;
+        Ok(())
+    }
+
+    pub fn global(&self, name: &str) -> Option<&Val> {
+        let index = self.module.globals.iter().position(|g| g.name == name)?;
+        self.globals.get(index)
+    }
+
+    /// Calls the `ui fn` `name` (globals must be initialized: see `init`) and
+    /// returns what it emitted; feed that to `ui::replay`.
+    pub fn run_ui(&mut self, name: &str, args: Vec<Val>) -> Res<Vec<UiEvent>> {
+        let id = *self
+            .module
+            .functions
+            .get(name)
+            .ok_or_else(|| Trap::new(format!("unknown function `{name}`")))?;
+        if self.module.func(id).kind != FuncKind::Ui {
+            return Err(Trap::new(format!("`{name}` is not a ui fn")));
+        }
+        self.ui_events.clear();
+        self.call(id, args)?;
+        Ok(std::mem::take(&mut self.ui_events))
     }
 
     pub fn call(&mut self, id: FuncId, args: Vec<Val>) -> Res<Val> {
@@ -334,6 +371,27 @@ impl<'m> Interp<'m> {
             }
             Instr::GlobalGet { dst, global } => {
                 regs[dst.0 as usize] = self.globals[global.0 as usize].clone();
+            }
+            Instr::UiOpen { template, values } => {
+                let vals = values
+                    .iter()
+                    .map(|r| match &regs[r.0 as usize] {
+                        Val::Int(i) => Ok(UiValue::Number(*i as f64)),
+                        Val::Float(f) => Ok(UiValue::Number(*f)),
+                        Val::Str(s) => Ok(UiValue::Str(s.to_string())),
+                        Val::Bool(b) => Ok(UiValue::Bool(*b)),
+                        other => Err(bad("non-scalar UI value", other)),
+                    })
+                    .collect::<Res<Vec<_>>>()?;
+                self.ui_events.push(UiEvent::Open { template: *template, values: vals });
+            }
+            Instr::UiClose => self.ui_events.push(UiEvent::Close),
+            Instr::UiText { src } => {
+                let text = display(self.module, func.reg_ty(*src), &regs[src.0 as usize]);
+                self.ui_events.push(UiEvent::Text(text));
+            }
+            Instr::UiTokens { template } => {
+                self.ui_events.push(UiEvent::Tokens { template: *template });
             }
             Instr::GlobalSet { global, src } => {
                 self.globals[global.0 as usize] = regs[src.0 as usize].clone();

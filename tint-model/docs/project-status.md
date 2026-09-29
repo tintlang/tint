@@ -33,15 +33,16 @@ types such as `fn(i32, f32, bool) -> bool`, and passing named functions as value
 Conditional expressions use `if condition { value } else { value }`; a separate
 `condition` keyword is not needed. Default parameters
 use `=` canonically (`fn greet(name: string, prefix: string = "Hello")`); the
-older brace-default forms remain accepted. Calls such as `login { user: "Marek",
-password: "123" }` use the same known-type struct-initializer path rather than a
-separate named-argument grammar.
+older brace-default forms remain accepted. Named arguments use the brace call
+form: `login{user: "Marek", password: "123"}`, or with defaults skipped
+(`three{a: 1, c: 9}`); the checker, the tree-walker and the typed IR bind them
+the same way.
 
 **Lambdas:** lambdas work end to end through the tree-walking evaluator,
-including lexical capture and calling a lambda stored in a local. Functions
-whose bodies contain lambdas are routed through that evaluator because the SSA
-IR still lacks closure values and indirect calls; direct lambda lowering in IR
-remains future work.
+including lexical capture and calling a lambda stored in a local (`|| body`
+for no parameters). The typed IR lowers lambdas with closure conversion. The
+older SSA IR tier (`ir` feature) still lacks closure values, so functions with
+lambdas stay on the evaluator there.
 
 **Control flow:** `if/else`, `while`, `loop`, `for x in 0..10`, `return`, `break`,
 `continue`.
@@ -95,21 +96,30 @@ existing undefined-variable, duplicate-binding and immutability errors.
 Lambda parameters, `Option`/`Result` holes (`None {}`) and `?` are inferred, and on
 the conformance suite and the examples no expression is left `Unknown`
 (`tint check --strict` turns every remaining uninferred type into a
-`CannotInfer` error). Generic functions and every UI attribute's host-specific
-value contract remain future work. `tint check` reports errors as fatal;
+`CannotInfer` error). Generic functions are inferred per call (rigid type
+parameters inside their bodies). Every UI attribute's host-specific value
+contract remains future work. `tint check` reports errors as fatal;
 `tint run` reports them as non-fatal warnings and still executes.
 
 **Typed IR:** `tint-ir::typed` lowers the checked AST to a typed register CFG
 (closure conversion, monomorphised enums, layout contract, verifier) and runs it
 on a reference interpreter. The conformance suite passes on it and on the
-tree-walker. Not lowered yet: generic functions, default parameters, named
-arguments, `ui fn`, kernels.
+tree-walker. Generic functions are monomorphised on demand, default parameters
+and named arguments are bound at the call site, and `ui fn` lowers to a
+function that emits `UiOpen`/`UiText`/`UiClose` instructions (styles,
+components, variants and slots are expanded statically; `if{}`, `for{}`,
+`match{}`, themes and interpolations are ordinary IR). With the runtime feature
+`typed-ir`, `IrUiSink` turns the emitted stream into the same `UiTree` the
+tree-walking builder makes; `tests/ui_ir.rs` compares the two on the examples
+and on events. Kernels are not lowered: the checker and the tree-walker give
+them no semantics yet. Limits: expressions inside theme `tokens` are not
+evaluated, and non-scalar modifier values render as `auto` (as in the walker).
 
 **Map literals:** `map { a{1}, b{2} }`.
 
 **Generics:** `Option<T>` and `Result<T, E>` are supported by the checker and
-runtime (the checker and the typed IR know the full method set listed in
-`guide/types.md`; the tree-walker implements the first nine). User-defined generic `struct` and `enum` declarations now preserve
+runtime (the checker, the typed IR and the tree-walker all implement the full
+method set listed in `guide/types.md`). User-defined generic `struct` and `enum` declarations now preserve
 their parameters in the AST; the checker validates arity and substitutes
 generic parameters while checking fields and variant payloads.
 
@@ -133,8 +143,8 @@ modules and preserves the same source/entry contract for development and HMR.
 ## Not yet implemented or not supported end to end
 
 - Error handling is implemented through `Option<T>`, `Result<T, E>`, their
-  standard methods (`is_some`, `is_none`, `is_ok`, `is_err`, `unwrap_or`,
-  `map`, `and_then`), `expect`, `unwrap`, and postfix `?` propagation. A
+  standard methods (the full set in `guide/types.md`), and postfix `?`
+  propagation. A
   larger `throw`/`try`/`catch` error DSL remains future work.
 - Move-checking beyond the basic runtime model, including ordinary-value moves.
 - Broader component semantics and additional runtime behavior remain future work.

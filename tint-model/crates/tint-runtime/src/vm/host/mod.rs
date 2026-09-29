@@ -5,6 +5,7 @@ mod calls;
 mod compound;
 mod eval;
 mod match_values;
+mod option_result;
 mod patterns;
 mod stdlib;
 mod vars;
@@ -91,6 +92,16 @@ impl EvalHost for TintVM {
 
     fn call_fn(&mut self, name: &str, args: &[EvalValue], span: Span) -> EvalResult<EvalValue> {
         self.host_call_fn(name, args, span)
+    }
+
+    fn call_fn_named(
+        &mut self,
+        name: &str,
+        arg_exprs: &[tint_ast::Expr],
+        arg_vals: &[EvalValue],
+        span: Span,
+    ) -> EvalResult<EvalValue> {
+        self.host_call_fn_named(name, arg_exprs, arg_vals, span)
     }
 
     fn call_user_fn(

@@ -13,9 +13,11 @@ pub mod ir;
 pub mod layout;
 pub mod lower;
 pub mod ty;
+pub mod ui;
 pub mod verify;
 
 pub use interp::{Interp, Trap, Val};
 pub use ir::*;
 pub use lower::{lower_program, LowerError, Lowered};
 pub use ty::*;
+pub use ui::*;

@@ -9,6 +9,8 @@ license.workspace = true
 # evaluator is the single execution engine.
 default = []
 ir = ["dep:tint-ir"]
+# Builds UI trees from the typed IR (`tint_ir::typed`) instead of the AST.
+typed-ir = ["dep:tint-ir"]
 
 [dependencies]
 tint-ast = { path = "../tint-ast" }
@@ -27,3 +29,4 @@ taffy = "0.14.0"
 
 [dev-dependencies]
 tint-ir = { path = "../tint-ir" }
+tint-runtime = { path = ".", features = ["typed-ir"] }

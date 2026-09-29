@@ -1,0 +1,17 @@
+// Calls that do not match their function. The typed IR rejects them at check
+// time, so they live in a file of their own (a rejected program takes down
+// every case in its file).
+
+// expect-error: missing argument
+// ir-expect-error: missing argument
+fn missing_argument() { add_default() }
+
+// expect-error: no parameter
+// ir-expect-error: no parameter
+fn unknown_named_argument() { add_default{a: 1, z: 2} }
+
+// expect-error: given twice
+// ir-expect-error: given twice
+fn duplicate_named_argument() { add_default{a: 1, a: 2} }
+
+fn add_default(a, b = 5) { a + b }

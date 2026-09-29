@@ -35,6 +35,7 @@ pub(crate) fn walk_stmt(stmt: &Stmt, f: &mut dyn FnMut(Node) -> bool) -> bool {
         Stmt::For { start, end, body, .. } => {
             walk_expr(start, f) || walk_expr(end, f) || walk_block(body, f)
         }
+        Stmt::ForIn { iter, body, .. } => walk_expr(iter, f) || walk_block(body, f),
         Stmt::Match { expr, arms, .. } => walk_expr(expr, f) || walk_arms(arms, f),
         Stmt::Return(e, _) => walk_expr(e, f),
         Stmt::Break(_) | Stmt::Continue(_) => false,

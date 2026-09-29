@@ -14,6 +14,19 @@ impl TintVM {
             return f(args);
         }
 
+        // A bare `Some(x)` / `Ok(x)` / `Err(x)` builds the variant, unless a
+        // user function of that name exists.
+        if let ("Some" | "Ok" | "Err", 1, false) =
+            (name, args.len(), self.logic_functions.contains_key(name))
+        {
+            let enum_name = if name == "Some" { "Option" } else { "Result" };
+            return Ok(EvalValue::EnumInstance {
+                enum_name: enum_name.into(),
+                variant: name.into(),
+                args: args.to_vec(),
+            });
+        }
+
         // 1) builtins (math, print, etc.)
         if let Ok(v) = call_builtin(self, name, args, span) {
             return Ok(v);
@@ -51,6 +64,37 @@ impl TintVM {
             return f(args);
         }
 
+        let slots = args.iter().cloned().map(Some).collect();
+        self.host_call_user_fn_slots(name, slots, span)
+    }
+
+    /// A call whose arguments were matched by name (`f{b: 2, a: 1}`).
+    pub(super) fn host_call_fn_named(
+        &mut self,
+        name: &str,
+        arg_exprs: &[tint_ast::Expr],
+        arg_vals: &[EvalValue],
+        span: Span,
+    ) -> EvalResult<EvalValue> {
+        let invalid = |msg: String| tint_evaluator::errors::EvalError::InvalidOp { msg, span };
+        let Some(func) = self.logic_functions.get(name).cloned() else {
+            return Err(invalid(format!("named arguments need a user function, `{name}` is not one")));
+        };
+        let sigs: Vec<_> = func.params.iter().map(|p| p.sig()).collect();
+        let bound = tint_ast::bind_call_args(name, &sigs, arg_exprs).map_err(invalid)?;
+        let slots = bound.into_iter().map(|slot| slot.map(|i| arg_vals[i].clone())).collect();
+        self.host_call_user_fn_slots(name, slots, span)
+    }
+
+    /// One slot per parameter (missing trailing slots count as `None`); a
+    /// `None` slot takes the parameter's default, evaluated before the
+    /// callee's scope exists.
+    fn host_call_user_fn_slots(
+        &mut self,
+        name: &str,
+        slots: Vec<Option<EvalValue>>,
+        span: Span,
+    ) -> EvalResult<EvalValue> {
         let func = match self.logic_functions.get(name).cloned() {
             Some(f) => f,
             None => {
@@ -60,6 +104,21 @@ impl TintVM {
                 })
             }
         };
+
+        let mut args = Vec::with_capacity(func.params.len());
+        for (index, param) in func.params.iter().enumerate() {
+            match slots.get(index).cloned().flatten() {
+                Some(value) => args.push(value),
+                None => match &param.default {
+                    Some(default) => args.push(self.eval_expr(default.expr())),
+                    // A `call_fn` error is swallowed by the evaluator (it then
+                    // tries the name as a variable), so this one is a panic
+                    // like the parameter type errors below.
+                    None => panic!("missing argument {} in call of `{name}`", index + 1),
+                },
+            }
+        }
+        let args = &args[..];
 
         self.scopes.push();
         self.treewalk_call_depth += 1;
@@ -73,7 +132,12 @@ impl TintVM {
                 }
                 _ => arg.clone(),
             };
-            bind_pattern(self, &param.pattern, &value);
+            if func.generics.is_empty() {
+                bind_pattern(self, &param.pattern, &value);
+            } else {
+                // A type parameter is not enforced at run time.
+                bind_pattern(self, &erase_type_params(&param.pattern, &func.generics), &value);
+            }
         }
 
         // execute
@@ -209,6 +273,10 @@ impl TintVM {
             }
         }
 
+        if let Some(result) = self.option_result_method(&receiver, method, args, span) {
+            return result.map(|value| (receiver, value));
+        }
+
         if let Some(result) = self.collection_method(&receiver, method, args, span) {
             return result;
         }
@@ -333,6 +401,21 @@ impl TintVM {
 
             other => panic!("host_call_value not supported: {:?}", other),
         }
+    }
+}
+
+/// `x: T` as plain `x` when `T` is one of `generics`.
+fn erase_type_params(pattern: &tint_ast::Pattern, generics: &[String]) -> tint_ast::Pattern {
+    use tint_ast::{Pattern, Type};
+    match pattern {
+        Pattern::Typed { pat, ty: Type::Simple(name), .. } if generics.contains(name) => {
+            erase_type_params(pat, generics)
+        }
+        Pattern::Mut { inner, span } => Pattern::Mut {
+            inner: Box::new(erase_type_params(inner, generics)),
+            span: *span,
+        },
+        other => other.clone(),
     }
 }
 

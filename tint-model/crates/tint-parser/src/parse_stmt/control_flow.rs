@@ -18,7 +18,7 @@ impl Parser {
         let then_block = self.parse_block()?;
 
         let else_block = if self.stream.consume_if(TokenKind::Else) {
-            Some(self.parse_block()?)
+            Some(self.parse_else_branch()?)
         } else {
             None
         };
@@ -90,6 +90,16 @@ impl Parser {
 
         let start_expr = self.parse_expr()?;
 
+        if !self.stream.check(TokenKind::DotDot) {
+            let body = self.parse_block()?;
+            let end = body.span;
+            return Ok(Stmt::ForIn {
+                var,
+                iter: start_expr,
+                body,
+                span: Span::merge(start, end),
+            });
+        }
         self.stream.expect(TokenKind::DotDot)?;
         let end_expr = self.parse_expr()?;
 
@@ -106,4 +116,14 @@ impl Parser {
         })
     }
     // LHS for assignment:  a, a.b, a[x]
+
+    /// After `else`: a block, or `if ...` chained as a block holding that `if`.
+    pub(crate) fn parse_else_branch(&mut self) -> PResult<Block> {
+        if self.stream.peek_kind() != TokenKind::If {
+            return self.parse_block();
+        }
+        let stmt = self.parse_if_stmt()?;
+        let span = stmt.span();
+        Ok(Block { stmts: vec![stmt], span })
+    }
 }

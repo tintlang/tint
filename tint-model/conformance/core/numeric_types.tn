@@ -10,3 +10,10 @@ fn cast_fractional_float_to_i32_is_an_error() { 3.9 as i32 }
 
 // expect: -5i32
 fn negation_then_cast() { let x = 5; -x as i32 }
+
+// expect: 7i32
+fn typed_default_param() { bump(5) }
+fn bump(x: i32, step: i32 = 2) -> i32 { x + step }
+
+// expect: 9i32
+fn typed_named_arg() { bump{step: 4, x: 5} }

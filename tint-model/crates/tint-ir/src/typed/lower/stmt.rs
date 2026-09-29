@@ -160,6 +160,38 @@ impl<'a> Lowerer<'a> {
                 self.switch_to(exit);
                 Ok(())
             }
+            Stmt::ForIn { var, iter, body, span } => {
+                let list = self.expr(iter, None)?;
+                let TyKind::List(elem) = self.tk(self.reg_ty(list)) else {
+                    return self.err(Some(*span), "`for` over a non-list");
+                };
+                let (num, bool_ty) = (self.num_ty(NumKind::Num), self.bool_ty());
+                let n = self.rt(RtFn::ListLen, vec![list], num);
+                let counter = self.const_reg(num, Const::Float(0.0));
+                let (head, body_b, step, exit) =
+                    (self.new_block(), self.new_block(), self.new_block(), self.new_block());
+                self.terminate(Term::Jump(head));
+                self.switch_to(head);
+                let more = self.new_reg(bool_ty);
+                self.emit(Instr::Cmp { dst: more, op: CmpOp::Lt, a: counter, b: n });
+                self.terminate(Term::Branch { cond: more, then_: body_b, else_: exit });
+                self.switch_to(body_b);
+                self.push_scope();
+                let item = self.new_reg(elem);
+                self.emit(Instr::Get { dst: item, base: list, proj: Proj::Index(counter) });
+                self.f().define(var, item);
+                let outcome = self.loop_body(body, exit, step);
+                self.pop_scope();
+                outcome?;
+                self.terminate(Term::Jump(step));
+                self.switch_to(step);
+                let one = self.const_reg(num, Const::Float(1.0));
+                let next = self.arith(BinOp::Add, NumKind::Num, num, counter, one);
+                self.emit(Instr::Mov { dst: counter, src: next });
+                self.terminate(Term::Jump(head));
+                self.switch_to(exit);
+                Ok(())
+            }
             Stmt::Break(span) => {
                 let Some((exit, _)) = self.f().loops.last().copied() else {
                     return self.err(Some(*span), "`break` outside a loop");

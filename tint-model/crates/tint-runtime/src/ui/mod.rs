@@ -1,6 +1,8 @@
 // ui/runtime.rs
 
 pub mod builder;
+#[cfg(feature = "typed-ir")]
+pub mod ir_sink;
 pub mod layout;
 pub mod render;
 pub mod style;

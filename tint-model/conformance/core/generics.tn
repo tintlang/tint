@@ -1,0 +1,66 @@
+// Generic functions: one body, instantiated for each set of type arguments.
+
+fn id<T>(x: T) -> T { x }
+
+fn first<T>(xs: Vec<T>) -> T { xs[0] }
+
+fn twice<T>(x: T) -> Vec<T> { [x, x] }
+
+fn wrap<T>(x: T) -> Vec<T> { twice(x) }
+
+fn apply<T, U>(x: T, f: fn(T) -> U) -> U { f(x) }
+
+fn count_down<T>(x: T, n: number) -> T {
+    if n <= 0 { x } else { count_down(x, n - 1) }
+}
+
+struct Boxed<T> { v: T }
+
+fn unbox<T>(b: Boxed<T>) -> T { b.v }
+
+fn boxed<T>(v: T) -> Boxed<T> { Boxed { v: v } }
+
+fn or_default<T>(o: Option<T>, fallback: T) -> T { o.unwrap_or(fallback) }
+
+// expect: 5
+fn generic_number() { id(5) }
+
+// expect: "s"
+fn generic_string() { id("s") }
+
+// expect: 1
+fn same_fn_two_instances() {
+    let s = id("s")
+    let n = id(1)
+    n
+}
+
+// expect: 2
+fn generic_over_list() { first([2, 3]) + first([0]) }
+
+// expect: "a-a"
+fn generic_over_list_of_strings() { first(twice("a")) + "-" + first(wrap("a")) }
+
+// expect: 5
+fn instance_calls_instance() { wrap(5).len() + 3 }
+
+// expect: 12
+fn function_argument() { apply(4, |n| n * 3) }
+
+// expect: "4!"
+fn two_type_parameters() { apply(4, |n| "{n}!") }
+
+// expect: 7
+fn recursive_instance() { count_down(7, 3) }
+
+// expect: 3
+fn generic_struct() { unbox(Boxed { v: 3 }) }
+
+// expect: "x"
+fn generic_returning_generic_struct() { unbox(boxed("x")) }
+
+// expect: 9
+fn generic_with_option() { or_default(Option::None {}, 9) }
+
+// expect: "no"
+fn generic_with_option_string() { or_default(Option::None {}, "no") }

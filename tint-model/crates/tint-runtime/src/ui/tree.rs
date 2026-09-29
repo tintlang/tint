@@ -175,9 +175,19 @@ impl UiTree {
         host: &mut H,
         tokens: &HashMap<String, UiModifierValue>,
     ) -> UiNodeId {
+        self.create_styled_node_with_eval(tag, modifiers, &mut |expr| host.eval_expr(expr), tokens)
+    }
+
+    pub fn create_styled_node_with_eval(
+        &mut self,
+        tag: String,
+        modifiers: &[tint_ast::UiModifier],
+        eval: &mut dyn FnMut(&tint_ast::Expr) -> tint_evaluator::Value,
+        tokens: &HashMap<String, UiModifierValue>,
+    ) -> UiNodeId {
         let id = self.create_node(tag.clone());
         let (mut style, hover_style, breakpoints) =
-            super::style::resolve_style_with_host_and_tokens(modifiers, host, tokens);
+            super::style::resolve_style_with_eval(modifiers, eval, tokens);
         super::style::apply_container_defaults(&tag, &mut style);
         let node = &mut self.nodes[id];
         node.tint_source = format!(

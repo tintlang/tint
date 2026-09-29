@@ -12,13 +12,14 @@ mod calls;
 mod expr;
 mod pattern;
 mod stmt;
+mod ui;
 
 use super::ir::*;
 use super::ty::*;
 use super::verify;
 use builder::FnB;
 use std::collections::{HashMap, HashSet};
-use tint_ast::{EnumDecl, FnBody, FnDecl, Item, Pattern, Program, Span, Stmt, StructDecl};
+use tint_ast::{EnumDecl, FnBody, FnDecl, Item, Pattern, Program, Span, Stmt, StructDecl, UiFnDecl};
 use tint_semantics::{SemanticModel, Type};
 
 #[derive(Debug, Clone)]
@@ -51,7 +52,7 @@ pub struct Lowered {
     /// Items that could not be lowered. Their functions exist in the module
     /// but only trap.
     pub errors: Vec<LowerError>,
-    /// Items left out on purpose (`ui fn`, kernels).
+    /// Items left out on purpose (kernels: nothing defines what they mean yet).
     pub skipped: Vec<String>,
 }
 
@@ -71,10 +72,13 @@ pub(crate) struct EnumInfo {
 }
 
 #[derive(Clone)]
-pub(crate) struct FnInfo {
+pub(crate) struct FnInfo<'a> {
     pub id: FuncId,
     pub params: Vec<TyId>,
     pub ret: TyId,
+    pub sigs: Vec<tint_ast::ParamSig>,
+    /// The default of each parameter, evaluated at the call site.
+    pub defaults: Vec<Option<&'a tint_ast::Expr>>,
 }
 
 #[derive(Clone)]
@@ -93,7 +97,12 @@ pub(crate) struct Lowerer<'a> {
     pub module: Module,
     pub structs: HashMap<String, StructInfo>,
     pub enums: HashMap<String, EnumInfo>,
-    pub fns: HashMap<String, FnInfo>,
+    pub fns: HashMap<String, FnInfo<'a>>,
+    /// Generic functions, instantiated on demand (see `fn_instance`).
+    pub generic_fns: HashMap<String, &'a FnDecl>,
+    pub instances: HashMap<(String, Vec<TyId>), FnInfo<'a>>,
+    /// Instances whose bodies are still to be lowered.
+    pub pending: Vec<FnJob<'a>>,
     pub methods: HashMap<(String, String), MethodInfo>,
     pub globals: HashMap<String, GlobalId>,
     pub stack: Vec<FnB>,
@@ -105,13 +114,16 @@ pub(crate) struct Lowerer<'a> {
 
 /// Lowers every logic item of `program`. `model` must come from checking this
 /// very `program` value (expression types are keyed by node address).
-pub fn lower_program(program: &Program, model: &SemanticModel) -> Lowered {
+pub fn lower_program<'a>(program: &'a Program, model: &'a SemanticModel) -> Lowered {
     let mut lowerer = Lowerer {
         model,
         module: Module::default(),
         structs: HashMap::new(),
         enums: HashMap::new(),
         fns: HashMap::new(),
+        generic_fns: HashMap::new(),
+        instances: HashMap::new(),
+        pending: Vec::new(),
         methods: HashMap::new(),
         globals: HashMap::new(),
         stack: Vec::new(),
@@ -140,10 +152,13 @@ fn flatten<'p>(items: &'p [Item], out: &mut Vec<&'p Item>) {
 }
 
 /// A function or method that has to be lowered.
-struct FnJob<'p> {
+pub(crate) struct FnJob<'p> {
     decl: &'p FnDecl,
     owner: Option<String>,
     id: FuncId,
+    /// An instance of a generic function: its signature and what its type
+    /// parameters stand for.
+    instance: Option<(FnInfo<'p>, HashMap<String, TyId>)>,
 }
 
 impl<'a> Lowerer<'a> {
@@ -155,7 +170,7 @@ impl<'a> Lowerer<'a> {
         LowerError { message: message.into(), span, item: self.item.clone() }
     }
 
-    fn run(&mut self, program: &Program, errors: &mut Vec<LowerError>, skipped: &mut Vec<String>) {
+    fn run(&mut self, program: &'a Program, errors: &mut Vec<LowerError>, skipped: &mut Vec<String>) {
         let mut items = Vec::new();
         flatten(&program.items, &mut items);
 
@@ -194,23 +209,40 @@ impl<'a> Lowerer<'a> {
                         global_inits.push(item);
                     }
                 }
+                Item::UiFn(f) => {
+                    self.item = f.name.clone();
+                    if let Err(e) = self.declare_ui_globals(f) {
+                        errors.push(e);
+                    }
+                }
                 _ => {}
             }
         }
 
         // Signatures of functions and methods.
         let mut jobs: Vec<FnJob> = Vec::new();
+        let mut ui_jobs: Vec<(&'a UiFnDecl, FuncId)> = Vec::new();
         for item in &items {
             match item {
                 Item::Fn(f) | Item::ExportFn(f, _) => {
                     self.item = f.name.clone();
+                    if !f.generics.is_empty() {
+                        self.generic_fns.insert(f.name.clone(), f);
+                        continue;
+                    }
                     match self.declare_fn(f) {
-                        Ok(id) => jobs.push(FnJob { decl: f, owner: None, id }),
+                        Ok(id) => jobs.push(FnJob { decl: f, owner: None, id, instance: None }),
                         Err(e) => errors.push(e),
                     }
                 }
-                Item::UiFn(f) => skipped.push(format!("ui fn {}", f.name)),
-                Item::Kernel(k) => skipped.push(format!("kernel {}", k.name)),
+                Item::UiFn(f) => {
+                    self.item = f.name.clone();
+                    match self.declare_ui_fn(f) {
+                        Ok(id) => ui_jobs.push((f, id)),
+                        Err(e) => errors.push(e),
+                    }
+                }
+                Item::Kernel(k) => skipped.push(format!("kernel {} (no semantics defined in the checker or the tree-walker)", k.name)),
                 _ => {}
             }
         }
@@ -229,21 +261,40 @@ impl<'a> Lowerer<'a> {
                     self.item = format!("{owner}.{}", method.name);
                     let inout = mutating.contains(&(owner.clone(), method.name.clone()));
                     match self.declare_method(&owner, method, inout) {
-                        Ok(id) => jobs.push(FnJob { decl: method, owner: Some(owner.clone()), id }),
+                        Ok(id) => jobs.push(FnJob { decl: method, owner: Some(owner.clone()), id, instance: None }),
                         Err(e) => errors.push(e),
                     }
                 }
             }
         }
 
-        // Bodies.
-        for job in jobs {
-            self.item = match &job.owner {
-                Some(owner) => format!("{owner}.{}", job.decl.name),
-                None => job.decl.name.clone(),
+        for (f, id) in &ui_jobs {
+            self.item = f.name.clone();
+            if let Err(e) = self.lower_ui_fn(f, *id) {
+                self.stack.clear();
+                self.fail_function(*id, &e);
+                errors.push(e);
+            }
+        }
+
+        // Bodies. Lowering a call of a generic function may add instances.
+        loop {
+            if jobs.is_empty() {
+                jobs.append(&mut self.pending);
+                if jobs.is_empty() {
+                    break;
+                }
+            }
+            let job = jobs.remove(0);
+            self.item = match (&job.owner, &job.instance) {
+                (Some(owner), _) => format!("{owner}.{}", job.decl.name),
+                (None, Some(_)) => self.module.funcs[job.id.0 as usize].name.clone(),
+                (None, None) => job.decl.name.clone(),
             };
+            let depth = self.subst.len();
             if let Err(e) = self.lower_fn(&job) {
                 self.stack.clear();
+                self.subst.truncate(depth);
                 self.fail_function(job.id, &e);
                 errors.push(e);
             }
@@ -252,7 +303,7 @@ impl<'a> Lowerer<'a> {
         // Global initializers.
         if !self.module.globals.is_empty() {
             self.item = "<globals>".into();
-            if let Err(e) = self.lower_init(&global_inits) {
+            if let Err(e) = self.lower_init(&global_inits, &ui_jobs.iter().map(|(f, _)| *f).collect::<Vec<_>>()) {
                 self.stack.clear();
                 errors.push(e);
             }
@@ -476,10 +527,7 @@ impl<'a> Lowerer<'a> {
         id
     }
 
-    fn declare_fn(&mut self, f: &FnDecl) -> LResult<FuncId> {
-        if !f.generics.is_empty() {
-            return self.err(Some(f.span), "generic functions cannot be lowered yet");
-        }
+    fn declare_fn(&mut self, f: &'a FnDecl) -> LResult<FuncId> {
         let (params, ret) = match self.model.functions.get(&f.name) {
             Some(sig) => sig.clone(),
             None => return self.err(Some(f.span), "no signature recorded"),
@@ -488,7 +536,9 @@ impl<'a> Lowerer<'a> {
         let ret = self.conv(&ret)?;
         let id = self.reserve_func(&f.name, FuncKind::Fn, ret);
         self.module.functions.insert(f.name.clone(), id);
-        self.fns.insert(f.name.clone(), FnInfo { id, params, ret });
+        let sigs = f.params.iter().map(|p| p.sig()).collect();
+        let defaults = f.params.iter().map(|p| p.default.as_ref().map(|d| d.expr())).collect();
+        self.fns.insert(f.name.clone(), FnInfo { id, params, ret, sigs, defaults });
         Ok(id)
     }
 
@@ -536,10 +586,16 @@ impl<'a> Lowerer<'a> {
                 param_tys.extend(info.params.iter().copied());
             }
             None => {
-                let info = self.fns[&decl.name].clone();
+                let info = match &job.instance {
+                    Some((info, _)) => info.clone(),
+                    None => self.fns[&decl.name].clone(),
+                };
                 info_ret = info.ret;
                 param_tys.extend(info.params.iter().copied());
             }
+        }
+        if let Some((_, subst)) = &job.instance {
+            self.subst.push(subst.clone());
         }
         let kind = match &job.owner {
             Some(_) => FuncKind::Method { inout_self: inout },
@@ -554,9 +610,6 @@ impl<'a> Lowerer<'a> {
         }
         let mut destructure: Vec<(usize, Reg)> = Vec::new();
         for (index, (param, ty)) in decl.params.iter().zip(&param_tys).enumerate() {
-            if param.default.is_some() {
-                return self.err(Some(decl.span), "default parameter values cannot be lowered yet");
-            }
             let reg = self.new_reg(*ty);
             self.f().params.push(reg);
             match strip_pattern(&param.pattern) {
@@ -585,10 +638,55 @@ impl<'a> Lowerer<'a> {
         let fb = self.stack.pop().unwrap();
         let func = fb.finish(self.module.funcs[job.id.0 as usize].ret);
         self.module.funcs[job.id.0 as usize] = func;
+        if job.instance.is_some() {
+            self.subst.pop();
+        }
         Ok(())
     }
 
-    fn lower_init(&mut self, inits: &[&Item]) -> LResult<()> {
+    /// The instance of generic function `name` for the type arguments `targs`
+    /// (in the order of its type parameters). Created, and queued for
+    /// lowering, the first time it is asked for.
+    pub fn fn_instance(&mut self, name: &str, targs: Vec<TyId>, span: Span) -> LResult<FnInfo<'a>> {
+        let key = (name.to_string(), targs);
+        if let Some(info) = self.instances.get(&key) {
+            return Ok(info.clone());
+        }
+        const LIMIT: usize = 1024;
+        if self.instances.len() >= LIMIT {
+            return self.err(Some(span), format!("more than {LIMIT} instances of generic functions (does `{name}` instantiate itself with ever larger types?)"));
+        }
+        let Some(decl) = self.generic_fns.get(name).copied() else {
+            return self.err(Some(span), format!("`{name}` is not a generic function"));
+        };
+        let (generics, sig) = match (self.model.function_generics.get(name), self.model.functions.get(name)) {
+            (Some(g), Some(sig)) => (g.clone(), sig.clone()),
+            _ => return self.err(Some(span), format!("no signature recorded for `{name}`")),
+        };
+        if generics.len() != key.1.len() {
+            return self.err(Some(span), format!("`{name}` takes {} type arguments, got {}", generics.len(), key.1.len()));
+        }
+        let subst: HashMap<String, TyId> = generics.into_iter().zip(key.1.iter().copied()).collect();
+        self.subst.push(subst.clone());
+        let converted = (|| -> LResult<(Vec<TyId>, TyId)> {
+            let params = sig.0.iter().map(|t| self.conv(t)).collect::<LResult<Vec<_>>>()?;
+            Ok((params, self.conv(&sig.1)?))
+        })();
+        self.subst.pop();
+        let (params, ret) = converted?;
+        let shown: Vec<String> = key.1.iter().map(|t| self.show(*t)).collect();
+        let mangled = format!("{name}<{}>", shown.join(", "));
+        let id = self.reserve_func(&mangled, FuncKind::Fn, ret);
+        self.module.functions.insert(mangled, id);
+        let sigs = decl.params.iter().map(|p| p.sig()).collect();
+        let defaults = decl.params.iter().map(|p| p.default.as_ref().map(|d| d.expr())).collect();
+        let info = FnInfo { id, params, ret, sigs, defaults };
+        self.instances.insert(key, info.clone());
+        self.pending.push(FnJob { decl, owner: None, id, instance: Some((info.clone(), subst)) });
+        Ok(info)
+    }
+
+    fn lower_init(&mut self, inits: &[&Item], ui_fns: &[&'a UiFnDecl]) -> LResult<()> {
         let unit = self.module.types.unit();
         let id = self.reserve_func("<init>", FuncKind::Init, unit);
         self.stack.push(FnB::new("<init>".into(), FuncKind::Init, unit));
@@ -629,6 +727,8 @@ impl<'a> Lowerer<'a> {
                 _ => {}
             }
         }
+        self.item = "<ui state>".into();
+        self.lower_ui_state_inits(ui_fns)?;
         let value = self.unit_reg();
         self.terminate(Term::Return(value));
         let fb = self.stack.pop().unwrap();

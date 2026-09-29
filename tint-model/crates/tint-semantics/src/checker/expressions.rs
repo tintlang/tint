@@ -57,6 +57,18 @@ impl SemanticChecker {
                     name: id.clone(),
                     span: *span,
                 });
+                if !self.fn_generics.is_empty()
+                    && self.scopes.lookup(id).is_none()
+                    && self.fn_generics.contains_key(id)
+                {
+                    self.error(
+                        *span,
+                        SemanticErrorKind::BadCall(format!(
+                            "generic function `{id}` must be called; it cannot be used as a value"
+                        )),
+                    );
+                    return Type::Unknown;
+                }
                 self.scopes
                     .lookup(id)
                     .or_else(|| {
@@ -750,7 +762,46 @@ impl SemanticChecker {
                 return self.call_with(&local, args, span);
             }
             if let Some((params, ret)) = self.fn_types.get(name).cloned() {
-                let arg_types = self.infer_args(args, &params);
+                // A generic function is instantiated afresh at every call.
+                let (params, ret) = match self.fn_generics.get(name).cloned() {
+                    Some(generics) => {
+                        let vars: Vec<Type> = generics
+                            .iter()
+                            .map(|g| self.fresh(span, format!("the type argument `{g}` of `{name}`")))
+                            .collect();
+                        let subst: HashMap<String, Type> = generics.into_iter().zip(vars.iter().cloned()).collect();
+                        self.instances.insert(target as *const Expr as usize, vars);
+                        (
+                            params.iter().map(|p| substitute_type(p, &subst)).collect(),
+                            substitute_type(&ret, &subst),
+                        )
+                    }
+                    None => (params, ret),
+                };
+                let sigs = self.fn_sigs.get(name).cloned().unwrap_or_default();
+                let slots = if sigs.len() == params.len() {
+                    tint_ast::bind_call_args(name, &sigs, args)
+                } else {
+                    Err(format!("`{name}` cannot be called here"))
+                };
+                let arg_types = match slots {
+                    Ok(slots) => slots
+                        .iter()
+                        .zip(&params)
+                        .map(|(slot, param)| match slot {
+                            Some(i) => self.infer_expr_with(tint_ast::arg_value(&args[*i]), Some(param)),
+                            // The default was checked against the parameter at its declaration.
+                            None => param.clone(),
+                        })
+                        .collect::<Vec<_>>(),
+                    Err(message) => {
+                        self.error(span, SemanticErrorKind::BadCall(message));
+                        for arg in args {
+                            self.infer_expr(tint_ast::arg_value(arg));
+                        }
+                        params.clone()
+                    }
+                };
                 self.check_call_args(&(String::new(), name.clone()), &params, &arg_types, span);
                 self.record(target, &Type::Fn(Box::new(ret.clone()), params));
                 return ret;
