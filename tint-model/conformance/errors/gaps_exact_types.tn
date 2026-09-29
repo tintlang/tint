@@ -1,0 +1,7 @@
+// expect: 7i32
+// xfail-tree-walker: `let x: i32 = 7` stores an untyped Number; exact numeric type is not applied to typed let bindings
+fn typed_let_i32() { let x: i32 = 7; x }
+
+// expect: 1.5f32
+// xfail-tree-walker: `let x: f32 = 1.5` stores an untyped Number
+fn typed_let_f32() { let x: f32 = 1.5; x }

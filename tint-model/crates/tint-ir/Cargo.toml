@@ -6,3 +6,8 @@ license.workspace = true
 
 [dependencies]
 tint-ast = { path = "../tint-ast" }
+tint-semantics = { path = "../tint-semantics" }
+
+[dev-dependencies]
+tint-lexer = { path = "../tint-lexer" }
+tint-parser = { path = "../tint-parser" }

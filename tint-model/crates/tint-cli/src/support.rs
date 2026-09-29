@@ -34,6 +34,10 @@ pub(crate) fn semantic_check(loaded: &Loaded) -> Vec<SemanticError> {
     loaded.resolved.check().0
 }
 
+fn strict_semantic_check(loaded: &Loaded) -> Vec<SemanticError> {
+    loaded.resolved.check_strict().0
+}
+
 pub(crate) fn report_semantic_error(source: &str, error: &SemanticError) {
     let start = error.span.start.offset.min(source.len());
     let end = error.span.end.offset.min(source.len());
@@ -53,12 +57,19 @@ pub(crate) fn has_fn(program: &Program, name: &str) -> bool {
     })
 }
 
-pub(crate) fn check_command(path: Option<&String>) {
-    let path = require_arg(path, "tint check <file.tn>");
+pub(crate) fn check_command(args: &[String]) {
+    // `--strict`: also report every type the checker could not infer.
+    let strict = args.iter().any(|arg| arg == "--strict");
+    let path = args.iter().find(|arg| !arg.starts_with("--"));
+    let path = require_arg(path, "tint check [--strict] <file.tn>");
     let loaded = crate::module_loader::load(path);
     let program = &loaded.program;
 
-    let errors = semantic_check(&loaded);
+    let errors = if strict {
+        strict_semantic_check(&loaded)
+    } else {
+        semantic_check(&loaded)
+    };
     if !errors.is_empty() {
         for error in &errors {
             report_semantic_error(&loaded.entry_source, error);

@@ -6,9 +6,9 @@ All notable changes to Tint are documented here.
 
 - UI rendering is much cheaper per frame. The browser renderer keeps the previous render tree and diffs in Rust, touching the DOM only where something changed. The builder reuses a pure subtree (no calls, blocks, lambdas or `if`/`match` expressions) when none of the outer variables it read has changed, and shares it as an `Rc` so the renderer can skip it by pointer. `UiRenderNode.children` is now `Vec<Rc<UiRenderNode>>`; `UiSession::render`/`dispatch` return `Vec<Rc<UiRenderNode>>` (`UiSession::set_reuse(false)` turns reuse off). Pong frame time went from 11.5 ms to 1.4 ms in headless Chromium.
 - The tree-walking evaluator is the single execution engine on the runtime path. The SSA IR moved behind the optional `ir` cargo feature of `tint-runtime` (off by default).
-- Added an engine-agnostic conformance suite (`tint-model/conformance/*.tn`, run by `tint-runtime/tests/conformance.rs`); known language gaps are recorded as expected failures.
+- Added an engine-agnostic conformance suite (`tint-model/conformance/<category>/*.tn`, run by `tint-runtime/tests/conformance.rs` on the tree-walker and on the typed IR); known language gaps live in `conformance/errors/` and are recorded as expected failures.
 - Added methods on lists, strings, and maps (see `docs/guide/collections.md`) and `tick||`/`every||` timers.
-- Checker typing: return types of functions/methods without `-> T` are inferred, unannotated parameters take their type from call sites (when all agree), `frame||` handlers get `dt: number` and `key_down||`/`key_up||` get `key: string`, `&mut self` is recognised as `self`, and `state` initialisers give handlers typed state. Share of expressions left `Unknown` on the census corpus: 32% -> 5.4% (`cargo test -p tint-semantics --test type_census -- --nocapture --ignored`). Still open: lambda parameters and `Option`/`Result` holes such as `None {}`.
+- Checker typing is complete on the conformance suite and the examples: no expression is left `Unknown` (census 32% -> 0%; `cargo test -p tint-semantics --test type_census -- --nocapture --ignored`). Return types of functions/methods without `-> T` are inferred, unannotated parameters take their type from call sites (when all agree), lambda parameters are inferred from the call they are passed to, `Option`/`Result` holes such as `None {}` are resolved from context, `?` unifies the error type with the enclosing function's, `frame||` handlers get `dt: number` and `key_down||`/`key_up||` get `key: string`, `&mut self` is recognised as `self`, and `state` initialisers give handlers typed state. `tint check --strict` additionally reports every expression whose type cannot be inferred (`CannotInfer`).
 - Functions and UI functions are stored as `Rc`, so calling a function or rendering a `ui fn` no longer deep-clones its AST.
 - Pong: the field is four wall rectangles instead of 288 cells (818 -> 53 DOM nodes), and the overlays are no longer rendered 12 times each (a `for{y in rows}` modifier was repeating the whole field).
 - Added native terminal I/O: `print`, `println`, `read_line`, `parse_number`, and Unicode-aware `read_key`.
@@ -16,7 +16,19 @@ All notable changes to Tint are documented here.
 - Added typed numeric values: `i32`, `i64`, `u8`, `u32`, `u64`, `f32`, and `f64`, with explicit `as` conversions and range checks.
 - Added typed `const` declarations.
 - Added `Option<T>`/`Result<T, E>` flow with `expect`, `unwrap`, postfix `?`, `is_some`, `is_none`, `is_ok`, `is_err`, `unwrap_or`, `map`, and `and_then`.
+- The checker knows the full `Option`/`Result` method set: `unwrap`, `expect`, `is_some`/`is_none`/`is_ok`/`is_err`, `is_some_and`/`is_ok_and`/`is_err_and`, `unwrap_or`, `unwrap_or_else`, `map`, `map_or`, `and_then`, `filter`, `or`, `or_else`, `ok_or`, `ok_or_else`, `map_err`, `ok`, `err`, `unwrap_err`, `expect_err`. A method of the other type (`is_some` on a `Result`) and a bare `Option`/`Result` annotation without type arguments are errors. The tree-walker still implements only the original nine (up to `and_then`); the rest run on the typed IR only.
+- Added a typed IR (`tint-ir::typed`): interned types, monomorphised enums, a register CFG with a verifier, lowering from the checked AST (closures, `inout` methods, places, `?`) and a reference interpreter. It covers the whole conformance suite; generic functions, default parameters, named arguments, `ui fn` and kernels are not lowered yet. The older dynamic IR is unchanged.
 - Added strict generic user-defined `struct` and `enum` types with checked type arguments and payloads.
+
+### Fixed
+
+- `%` now works in the evaluator and in IR constant folding.
+- `+` with a string on either side concatenates in the evaluator (previously only the IR VM did).
+- Nested string literals inside interpolations (`"{xs.join(" ")}"`) no longer break the lexer and parser, in both plain strings and UI text.
+- String escapes `\n`, `\t`, `\r`, `\0` are turned into the real characters.
+- Unary operators apply to the whole postfix chain: `-x.y()` and `!xs.is_empty()` work, and `-1 as u32` is `(-1) as u32`.
+- `every||180` accepts a bare number as an attribute value.
+- `&mut self` is recognised as `self` in the checker.
 
 ## [0.1.1] - 2026-09-28
 

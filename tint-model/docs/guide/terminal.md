@@ -38,7 +38,9 @@ returned directly. Control and navigation keys use stable names such as
 uses the supplied message when the value is `Err`, while `unwrap` requires no
 arguments. Both methods return the payload from `Ok`. `Option` and `Result`
 also provide `is_some`/`is_none`, `is_ok`/`is_err`, `unwrap_or`, `map`, and
-`and_then`; their callback and payload types are checked statically.
+`and_then` at runtime; their callback and payload types are checked
+statically. The checker knows more methods (see `guide/types.md`), but the
+runtime does not run them yet.
 
 ## Loops
 

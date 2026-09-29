@@ -36,8 +36,34 @@ impl ResolvedProgram {
         Vec<tint_semantics::SemanticError>,
         tint_semantics::SemanticModel,
     ) {
+        self.check_with(false)
+    }
+
+    /// Like `check`, but every expression whose type cannot be inferred is an
+    /// error (`CannotInfer`), so a clean result means a fully typed program.
+    pub fn check_strict(
+        &self,
+    ) -> (
+        Vec<tint_semantics::SemanticError>,
+        tint_semantics::SemanticModel,
+    ) {
+        self.check_with(true)
+    }
+
+    fn check_with(
+        &self,
+        strict: bool,
+    ) -> (
+        Vec<tint_semantics::SemanticError>,
+        tint_semantics::SemanticModel,
+    ) {
         let context = self.context();
-        let mut checker = tint_semantics::SemanticChecker::new(Default::default());
+        let mut checker = tint_semantics::SemanticChecker::new(
+            tint_semantics::prelude::CheckerContext {
+                strict,
+                ..Default::default()
+            },
+        );
         checker.check_with_context(&self.program, &context)
     }
 }

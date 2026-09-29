@@ -1,6 +1,6 @@
 use crate::errors::{SemanticError, SemanticErrorKind};
 use crate::prelude::{CheckerContext, Mode};
-use crate::type_table::Type;
+use crate::type_table::{is_numeric_name, Type};
 use std::collections::{HashMap, HashSet};
 use tint_ast::{
     Block, EnumVariant, Expr, FnBody, Item, MatchArm, Pattern, PatternField, Program, Span, Stmt,
@@ -42,6 +42,31 @@ pub struct SemanticModel {
     pub expressions: Vec<TypedExpr>,
     pub symbols: Vec<Symbol>,
     pub references: Vec<Reference>,
+    /// Final type of every checked expression, keyed by the address of the
+    /// `Expr` node in the `Program` that was checked (see `type_of`). Unlike
+    /// spans, addresses stay unique when several files are flattened into one
+    /// program.
+    pub by_expr: HashMap<usize, Type>,
+    /// Resolved signature of every top-level function: parameter types
+    /// (unannotated ones inferred) and return type.
+    pub functions: HashMap<String, (Vec<Type>, Type)>,
+    /// Resolved signature of every method, keyed by (type name, method name).
+    /// The receiver is not part of the parameter list.
+    pub methods: HashMap<(String, String), (Vec<Type>, Type)>,
+    /// Resolved type of every `state` variable and top-level binding.
+    pub globals: HashMap<String, Type>,
+    /// Resolved type of every name bound by a pattern (`let`, parameters,
+    /// match arms, lambda parameters), keyed by the binding's span.
+    pub bindings: HashMap<(usize, usize), Type>,
+    /// Resolved field types of every struct, by struct name. Generic
+    /// parameters stay `Type::Simple("T")`; fields declared without a type
+    /// carry the type their uses gave them. Declaration order is the AST's.
+    pub struct_fields: HashMap<String, HashMap<String, Type>>,
+    /// Resolved payload types of every enum variant, keyed by
+    /// (enum, variant), including the built-in `Option` and `Result`.
+    pub variant_types: HashMap<(String, String), Vec<Type>>,
+    /// Payload field names of every enum variant (`None` for positional ones).
+    pub variant_names: HashMap<(String, String), Vec<Option<String>>>,
 }
 
 /// Names exported by the project-wide UI environment.  A `.tn` file can be
@@ -64,9 +89,40 @@ impl SemanticModel {
             .map(|typed| &typed.ty)
     }
 
+    /// Type of one expression node of the program that was checked.
+    pub fn type_of(&self, expr: &Expr) -> Option<&Type> {
+        self.by_expr.get(&(expr as *const Expr as usize))
+    }
+
+    /// True when no expression in the model has an unknown type.
+    pub fn is_fully_typed(&self) -> bool {
+        self.by_expr.values().all(|ty| !ty.has_unknown())
+    }
+
     pub fn symbol_named(&self, name: &str) -> Option<&Symbol> {
         self.symbols.iter().find(|symbol| symbol.name == name)
     }
+}
+
+/// Where an inference variable came from, for `CannotInfer` diagnostics.
+#[derive(Debug, Clone)]
+struct VarInfo {
+    span: Span,
+    what: String,
+    /// Holes such as `None {}`, `[]` or a diverging branch may stay open;
+    /// they default to `unit` once nothing else constrains them.
+    default_unit: bool,
+}
+
+/// A constraint that cannot be solved until its receiver's type is known.
+#[derive(Debug, Clone)]
+enum Deferred {
+    Method { recv: Type, method: String, args: Vec<Type>, ret: Type, span: Span },
+    Field { recv: Type, field: String, ret: Type, span: Span },
+    Index { recv: Type, index: Type, ret: Type, span: Span },
+    TupleIndex { recv: Type, index: usize, ret: Type, span: Span },
+    Try { recv: Type, ret: Type, span: Span },
+    Arith { op: String, left: Type, right: Type, ret: Type, spans: (Span, Span) },
 }
 
 // Scope management for variable tracking. Frame 0 is never popped -- it
@@ -120,6 +176,14 @@ impl Scopes {
         }
     }
 
+    /// `let x = ...` again in the same scope shadows the earlier `x`.
+    fn redefine(&mut self, name: &str, ty: Type) {
+        if let Some(scope) = self.scopes.last_mut() {
+            scope.insert(name.to_string(), ty);
+            self.mutable.last_mut().unwrap().remove(name);
+        }
+    }
+
     fn lookup(&self, name: &str) -> Option<Type> {
         for scope in self.scopes.iter().rev() {
             if let Some(ty) = scope.get(name) {
@@ -142,15 +206,6 @@ impl Scopes {
         for (scope, mutable) in self.scopes.iter().rev().zip(self.mutable.iter_mut().rev()) {
             if scope.contains_key(name) {
                 mutable.insert(name.to_string());
-                return;
-            }
-        }
-    }
-
-    fn update_type(&mut self, name: &str, ty: Type) {
-        for scope in self.scopes.iter_mut().rev() {
-            if scope.contains_key(name) {
-                scope.insert(name.to_string(), ty);
                 return;
             }
         }
@@ -190,21 +245,40 @@ pub struct SemanticChecker {
     generic_params_by_type: HashMap<String, Vec<String>>,
     generic_params: HashSet<String>,
     current_return: Option<Type>,
-    /// Set while inferring the return type of an unannotated function:
-    /// collects the type of every `return` expression seen in the body.
-    observed_returns: Option<Vec<Type>>,
-    /// Argument types seen at call sites of functions/methods whose
-    /// parameters are unannotated; keyed by fn name or (Type, method).
-    /// Only filled while inferring (`record_calls`).
-    call_args: HashMap<(String, String), Vec<Vec<Type>>>,
-    record_calls: bool,
+    /// Field names of struct-style enum variants (`None` for positional ones),
+    /// in declaration order, parallel to `enum_variants`.
+    variant_fields: HashMap<(String, String), Vec<Option<String>>>,
+    /// Struct fields declared without a type (`struct S { a }`): their type
+    /// comes from how they are used, and constructors may leave them out.
+    untyped_fields: HashSet<(String, String)>,
+    ui_fn_names: HashSet<String>,
+    /// For each function ("", name) and method (type, name): which
+    /// parameters were written without a type.
+    unannotated: HashMap<(String, String), Vec<bool>>,
+    /// Unannotated parameters that call sites use with different types.
+    /// They stay open (`Unknown`) and strict mode asks for an annotation.
+    polymorphic: HashMap<(String, String), Vec<usize>>,
+    /// Element type of the `for{}` modifier just visited, for its children.
+    for_item: Option<Type>,
+    /// Set while binding a `let`: a repeated name shadows instead of clashing.
+    rebind_allowed: bool,
+    /// Type variable of every top-level `let`, by the span of its pattern.
+    global_lets: HashMap<(usize, usize), Type>,
+    /// Unification state: `subst[v]` is what inference variable `v` stands for.
+    subst: Vec<Option<Type>>,
+    var_info: Vec<VarInfo>,
+    /// Method calls, field reads, ... whose receiver was not known yet.
+    deferred: Vec<Deferred>,
     errors: Vec<SemanticError>,
     inferred: HashMap<(usize, usize), TypedExpr>,
+    inferred_by_ptr: HashMap<usize, Type>,
+    binding_types: HashMap<(usize, usize), Type>,
     references: Vec<Reference>,
     symbols: Vec<Symbol>,
     external_context: SemanticContext,
 }
 
+include!("unify.rs");
 include!("names.rs");
 include!("patterns.rs");
 include!("statements.rs");

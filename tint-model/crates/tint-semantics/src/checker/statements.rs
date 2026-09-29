@@ -10,13 +10,14 @@ impl SemanticChecker {
                 // Init is checked against the scope BEFORE the new
                 // binding exists, so `let x = x` correctly flags `x` as
                 // unknown instead of seeing its own not-yet-bound name.
-                let found = self.infer_expr(init.expr());
                 if let Some(declared) = ty {
                     let expected = self.ast_type(Some(declared));
+                    let found = self.infer_expr_with(init.expr(), Some(&expected));
                     self.require_compatible(&expected, &found, init.span());
-                    self.bind_pattern_typed(pattern, expected);
+                    self.bind_let(pattern, expected);
                 } else {
-                    self.bind_pattern_typed(pattern, found);
+                    let found = self.infer_expr(init.expr());
+                    self.bind_let(pattern, found);
                 }
                 self.mark_pattern_mutable(pattern);
             }
@@ -27,7 +28,7 @@ impl SemanticChecker {
                     }
                 }
                 let lhs_ty = self.infer_expr(lhs);
-                let rhs_ty = self.infer_expr(rhs);
+                let rhs_ty = self.infer_expr_with(rhs, Some(&lhs_ty));
                 self.require_compatible(&lhs_ty, &rhs_ty, rhs.span());
             }
             Stmt::CompoundAssign {
@@ -96,15 +97,13 @@ impl SemanticChecker {
                 arms,
                 span: _,
             } => {
-                self.visit_expr(expr);
-                self.check_match_arms(arms);
+                let scrutinee = self.infer_expr(expr);
+                self.check_match_arms(&scrutinee, arms);
             }
             Stmt::Return(e, span) => {
-                let found = self.infer_expr(e);
-                if let Some(seen) = self.observed_returns.as_mut() {
-                    seen.push(found.clone());
-                }
-                if let Some(expected) = self.current_return.clone() {
+                let expected = self.current_return.clone();
+                let found = self.infer_expr_with(e, expected.as_ref());
+                if let Some(expected) = expected {
                     self.require_compatible(&expected, &found, *span);
                 }
             }
@@ -112,10 +111,16 @@ impl SemanticChecker {
         }
     }
 
-    fn check_match_arms(&mut self, arms: &[MatchArm]) {
+    fn bind_let(&mut self, pattern: &Pattern, ty: Type) {
+        self.rebind_allowed = true;
+        self.bind_pattern_typed(pattern, ty);
+        self.rebind_allowed = false;
+    }
+
+    fn check_match_arms(&mut self, scrutinee: &Type, arms: &[MatchArm]) {
         for arm in arms {
             self.scopes.push();
-            self.bind_pattern(&arm.pattern);
+            self.bind_pattern_typed(&arm.pattern, scrutinee.clone());
             if let Some(guard) = &arm.guard {
                 self.visit_expr(guard);
             }

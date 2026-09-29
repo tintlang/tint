@@ -14,16 +14,28 @@ fn sources() -> Vec<String> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let mut out = Vec::new();
     for dir in ["conformance", "examples"] {
-        if let Ok(read) = std::fs::read_dir(root.join(dir)) {
-            let mut paths: Vec<_> = read.filter_map(|e| e.ok()).map(|e| e.path()).collect();
-            paths.sort();
-            out.extend(paths.into_iter().filter(|p| p.extension().is_some_and(|e| e == "tn")).map(|p| p.display().to_string()));
-        }
+        let mut paths = Vec::new();
+        collect(&root.join(dir), dir == "conformance", &mut paths);
+        paths.sort();
+        out.extend(paths.into_iter().map(|p| p.display().to_string()));
     }
     if let Ok(extra) = std::env::var("TINT_CENSUS_FILES") {
         out.extend(extra.split(':').filter(|s| !s.is_empty()).map(String::from));
     }
     out
+}
+
+fn collect(dir: &Path, recursive: bool, out: &mut Vec<std::path::PathBuf>) {
+    let Ok(read) = std::fs::read_dir(dir) else { return };
+    for path in read.filter_map(|e| e.ok()).map(|e| e.path()) {
+        if path.is_dir() {
+            if recursive {
+                collect(&path, recursive, out);
+            }
+        } else if path.extension().is_some_and(|e| e == "tn") {
+            out.push(path);
+        }
+    }
 }
 
 #[test]
@@ -54,6 +66,7 @@ fn census() {
             }
         }
         println!("{path}: {t} exprs, {u} unknown, {} errors", errors.len());
+        if std::env::var("TINT_CENSUS_VERBOSE").is_ok() { for e in &errors { let l = source[..e.span.start.offset.min(source.len())].matches('\n').count()+1; println!("    ERR L{l}: {:?}", e.kind); } for typed in &model.expressions { if contains_unknown(&typed.ty) { let l = source[..typed.span.start.offset].matches('\n').count()+1; let text: String = source.get(typed.span.start.offset..typed.span.end.offset).unwrap_or("?").replace('\n', " ").chars().take(60).collect(); println!("    L{l}: {:?} <- {text}", typed.ty); } } }
         total += t;
         unknown += u;
     }
@@ -74,4 +87,30 @@ fn contains_unknown(ty: &Type) -> bool {
         Type::Fn(ret, params) => contains_unknown(ret) || params.iter().any(contains_unknown),
         _ => false,
     }
+}
+
+/// Stage 0 done-criterion: on the conformance suite and the examples no
+/// expression is left `Unknown`, and strict mode has nothing to complain about.
+#[test]
+fn conformance_and_examples_are_fully_typed() {
+    let mut checked = 0;
+    for path in sources() {
+        let source = std::fs::read_to_string(&path).unwrap();
+        let tokens = collect_tokens(&mut Lexer::new(&source));
+        let Ok(program) = Parser::new(tokens).parse_program() else { continue };
+        let ctx = CheckerContext { strict: true, ..Default::default() };
+        let (errors, model) = SemanticChecker::new(ctx).check_with_model(&program);
+        let open: Vec<_> = errors
+            .iter()
+            .filter(|e| matches!(e.kind, tint_semantics::errors::SemanticErrorKind::CannotInfer(_)))
+            .collect();
+        assert!(open.is_empty(), "{path}: could not infer: {open:?}");
+        assert!(model.is_fully_typed(), "{path}: expressions left unknown");
+        assert!(
+            model.expressions.iter().all(|typed| !contains_unknown(&typed.ty)),
+            "{path}: expressions left unknown"
+        );
+        checked += 1;
+    }
+    assert!(checked > 20, "only {checked} files were checked");
 }

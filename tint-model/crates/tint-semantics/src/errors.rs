@@ -25,6 +25,8 @@ pub enum SemanticErrorKind {
     NestedBorrow,
     MissingMatchArms,
     WrongEventBinding,
+    /// Strict mode: no type could be inferred here; add an annotation.
+    CannotInfer(String),
     Unsupported,
 }
 

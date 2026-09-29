@@ -1,0 +1,94 @@
+// Option / Result methods beyond the tree-walker's set.
+
+// xfail-tree-walker: method not implemented
+// expect: "boom"
+fn res_unwrap_or_else() {
+    let r: Result<string, string> = Result::Err { error: "boom" }
+    r.unwrap_or_else(|e| e)
+}
+
+// xfail-tree-walker: method not implemented
+// expect: true
+fn opt_is_some_and() {
+    let o: Option<number> = Some(5)
+    o.is_some_and(|x| x > 3)
+}
+
+// xfail-tree-walker: method not implemented
+// expect: false
+fn res_is_err_and() {
+    let r: Result<number, string> = Result::Ok { value: 1 }
+    r.is_err_and(|e| e == "x")
+}
+
+// xfail-tree-walker: method not implemented
+// expect: 11
+fn res_map_or() {
+    let r: Result<number, string> = Result::Ok { value: 5 }
+    r.map_or(0, |x| x + 6)
+}
+
+// xfail-tree-walker: method not implemented
+// expect: true
+fn opt_filter_drops() {
+    let o: Option<number> = Some(2)
+    o.filter(|x| x > 5).is_none()
+}
+
+// xfail-tree-walker: method not implemented
+// expect: 9
+fn opt_or_takes_other() {
+    let o: Option<number> = Option::None
+    o.or(Some(9)).unwrap()
+}
+
+// xfail-tree-walker: method not implemented
+// expect: "missing"
+fn opt_ok_or_error() {
+    let o: Option<number> = Option::None
+    match o.ok_or("missing") {
+        Ok { value } => "fine",
+        Err { error } => error,
+    }
+}
+
+// xfail-tree-walker: method not implemented
+// expect: 3
+fn opt_ok_or_ok() {
+    let o: Option<number> = Some(3)
+    o.ok_or("missing").unwrap()
+}
+
+// xfail-tree-walker: method not implemented
+// expect: "bad!"
+fn res_map_err() {
+    let r: Result<number, string> = Result::Err { error: "bad" }
+    r.map_err(|e| e + "!").unwrap_err()
+}
+
+// xfail-tree-walker: method not implemented
+// expect: 4
+fn res_ok_some() {
+    let r: Result<number, string> = Result::Ok { value: 4 }
+    r.ok().unwrap()
+}
+
+// xfail-tree-walker: method not implemented
+// expect: "e"
+fn res_err_some() {
+    let r: Result<number, string> = Result::Err { error: "e" }
+    r.err().unwrap()
+}
+
+// xfail-tree-walker: method not implemented
+// expect: 5
+fn res_or_else() {
+    let r: Result<number, string> = Result::Err { error: "e" }
+    r.or_else(|e| Result::Ok { value: 5 }).unwrap()
+}
+
+// expect: 6
+fn res_and_then_chain() {
+    let r: Result<number, string> = Result::Ok { value: 2 }
+    r.and_then(|x| Result::Ok { value: x * 3 }).unwrap()
+}

@@ -1,4 +1,5 @@
 // expect: 42
+// ir-expect: 42f32
 fn some_unwrap() {
     let v: Option<f32> = Option::Some { value: 42.0 }
     v.unwrap()
@@ -11,6 +12,7 @@ fn none_is_none() {
 }
 
 // expect: 7
+// ir-expect: 7f32
 fn ok_unwrap() {
     let r: Result<f32, string> = Result::Ok { value: 7.0 }
     r.unwrap()
@@ -35,6 +37,7 @@ fn match_result_err() {
 }
 
 // expect: 42
+// ir-expect: 42f32
 fn question_mark_success() {
     let v = unwrap_or_fail()
     match v {

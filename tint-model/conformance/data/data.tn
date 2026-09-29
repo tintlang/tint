@@ -19,12 +19,14 @@ fn area(shape) {
 }
 
 // expect: 7
+// ir-expect: 7i32
 fn struct_field() {
     let p = Point { x: 3, y: 4 }
     p.x + p.y
 }
 
 // expect: 7
+// ir-expect: 7i32
 fn impl_method() {
     let p = Point { x: 3, y: 4 }
     p.sum()
@@ -62,6 +64,7 @@ fn unit_enum_match() {
 enum Screen { Menu, Playing }
 
 // expect: 25
+// ir-expect: 25i32
 fn tuple_enum_variant() {
     let e = Event::Move(3, 4)
     match e {

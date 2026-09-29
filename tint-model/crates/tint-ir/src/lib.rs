@@ -5,6 +5,7 @@ pub mod ir;
 pub mod opcode;
 pub mod passes;
 pub mod ssa;
+pub mod typed;
 pub mod vm;
 
 pub use compiler::SsaCompiler;

@@ -1,0 +1,8 @@
+// Parse gap: a lambda without parameters (`|| body`) is not accepted.
+
+// xfail: `||` lambda does not parse
+// expect: 7
+fn opt_unwrap_or_else_none() {
+    let o: Option<number> = Option::None
+    o.unwrap_or_else(|| 7)
+}

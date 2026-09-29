@@ -1,0 +1,7 @@
+// Behaviour the tree-walker has only because it is dynamically typed. The
+// typed IR rejects these programs before running them, so they live in a file
+// of their own (a rejected program takes down every case in its file).
+
+// expect-error: sort
+// ir-expect-error: type error
+fn sort_mixed_is_an_error() { [1, "a"].sort() }

@@ -11,7 +11,17 @@
 //! fn sum() { 40 + 2 }
 //! ```
 //!
-//! `xfail` is placed on its own line between the `expect` line and the `fn`.
+//! Directives sit on their own lines between the `expect` line and the `fn`.
+//! Three more narrow them to one engine:
+//!
+//! ```text
+//! // xfail-tree-walker: reason   known gap of the tree-walker only
+//! // ir-expect: 42f32            what the typed IR renders instead (it is
+//! //                             statically typed: `f32` stays `f32`)
+//! // ir-expect-error: text       the typed IR rejects the program or fails
+//! //                             with this message instead
+//! ```
+//!
 //! Each case runs on a fresh VM with the whole file loaded, so cases may
 //! share helper functions declared in the same file.
 //!
@@ -28,6 +38,11 @@ use tint_runtime::vm::TintVM;
 
 trait Engine {
     fn name(&self) -> &'static str;
+    /// Statically typed engines may render differently where the tree-walker
+    /// is loose about number types (see `ir-expect`).
+    fn typed_ir(&self) -> bool {
+        false
+    }
     /// Run `entry` (zero args) from `source`; return the rendered result or an error message.
     fn run(&self, source: &str, entry: &str) -> Result<String, String>;
 }
@@ -64,8 +79,54 @@ impl Engine for TreeWalker {
     }
 }
 
+/// Parse, check strictly, lower to the typed IR and run it on the reference
+/// interpreter.
+struct TypedIr;
+
+impl Engine for TypedIr {
+    fn name(&self) -> &'static str {
+        "typed-ir"
+    }
+
+    fn typed_ir(&self) -> bool {
+        true
+    }
+
+    fn run(&self, source: &str, entry: &str) -> Result<String, String> {
+        let source = source.to_owned();
+        let entry = entry.to_owned();
+        // Deep recursion in the interpreter needs more than a test thread's stack.
+        let handle = std::thread::Builder::new()
+            .stack_size(64 * 1024 * 1024)
+            .spawn(move || run_typed_ir(&source, &entry))
+            .expect("spawn");
+        handle.join().unwrap_or_else(|_| Err("panic".into()))
+    }
+}
+
+fn run_typed_ir(source: &str, entry: &str) -> Result<String, String> {
+    let tokens = collect_tokens(&mut Lexer::new(source));
+    let program = Parser::new(tokens)
+        .parse_program()
+        .map_err(|e| format!("parse error: {e:?}"))?;
+    let ctx = tint_semantics::prelude::CheckerContext { strict: true, ..Default::default() };
+    let (errors, model) = tint_semantics::SemanticChecker::new(ctx).check_with_model(&program);
+    if !errors.is_empty() {
+        return Err(format!("type error: {errors:?}"));
+    }
+    let lowered = tint_ir::typed::lower_program(&program, &model);
+    if !lowered.errors.is_empty() {
+        let messages: Vec<String> = lowered.errors.iter().map(|e| e.to_string()).collect();
+        return Err(format!("lowering error: {}", messages.join("; ")));
+    }
+    let mut interp = tint_ir::typed::Interp::new(&lowered.module);
+    interp.steps_left = Some(200_000_000);
+    let (value, ty) = interp.run(entry, Vec::new()).map_err(|trap| trap.to_string())?;
+    Ok(tint_ir::typed::interp::render(&lowered.module, ty, &value))
+}
+
 fn engines() -> Vec<Box<dyn Engine>> {
-    vec![Box::new(TreeWalker)]
+    vec![Box::new(TreeWalker), Box::new(TypedIr)]
 }
 
 /// Canonical text form shared by all engines.
@@ -129,21 +190,34 @@ struct Case {
     file: String,
     entry: String,
     expectation: Expectation,
+    /// Overrides `expectation` for the statically typed IR.
+    ir_expectation: Option<Expectation>,
+    /// Known gap of every engine.
     xfail: Option<String>,
+    /// Known gap of the tree-walker only.
+    xfail_tree_walker: Option<String>,
 }
 
 fn parse_cases(path: &Path) -> (String, Vec<Case>) {
     let source = fs::read_to_string(path).unwrap();
-    let file = path.file_name().unwrap().to_string_lossy().into_owned();
+    let file = path.strip_prefix(conformance_dir()).unwrap_or(path).to_string_lossy().into_owned();
     let mut cases = Vec::new();
     let mut pending: Option<Expectation> = None;
     let mut xfail: Option<String> = None;
+    let mut xfail_tree_walker: Option<String> = None;
+    let mut ir_expectation: Option<Expectation> = None;
     for line in source.lines() {
         let trimmed = line.trim();
         if let Some(rest) = trimmed.strip_prefix("// expect-error:") {
             pending = Some(Expectation::Error(rest.trim().to_owned()));
         } else if let Some(rest) = trimmed.strip_prefix("// expect:") {
             pending = Some(Expectation::Value(rest.trim().to_owned()));
+        } else if let Some(rest) = trimmed.strip_prefix("// ir-expect-error:") {
+            ir_expectation = Some(Expectation::Error(rest.trim().to_owned()));
+        } else if let Some(rest) = trimmed.strip_prefix("// ir-expect:") {
+            ir_expectation = Some(Expectation::Value(rest.trim().to_owned()));
+        } else if let Some(rest) = trimmed.strip_prefix("// xfail-tree-walker:") {
+            xfail_tree_walker = Some(rest.trim().to_owned());
         } else if let Some(rest) = trimmed.strip_prefix("// xfail:") {
             xfail = Some(rest.trim().to_owned());
         } else if let Some(rest) = trimmed.strip_prefix("fn ") {
@@ -156,10 +230,14 @@ fn parse_cases(path: &Path) -> (String, Vec<Case>) {
                     file: file.clone(),
                     entry,
                     expectation,
+                    ir_expectation: ir_expectation.take(),
                     xfail: xfail.take(),
+                    xfail_tree_walker: xfail_tree_walker.take(),
                 });
             }
             xfail = None;
+            xfail_tree_walker = None;
+            ir_expectation = None;
         }
     }
     (source, cases)
@@ -169,13 +247,22 @@ fn conformance_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../conformance")
 }
 
+/// Every `.tn` file under `dir`, category folders included.
+fn collect_cases(dir: &Path, out: &mut Vec<PathBuf>) {
+    for entry in fs::read_dir(dir).expect("conformance directory") {
+        let path = entry.unwrap().path();
+        if path.is_dir() {
+            collect_cases(&path, out);
+        } else if path.extension().is_some_and(|e| e == "tn") {
+            out.push(path);
+        }
+    }
+}
+
 #[test]
 fn conformance_suite() {
-    let mut files: Vec<PathBuf> = fs::read_dir(conformance_dir())
-        .expect("conformance directory")
-        .map(|e| e.unwrap().path())
-        .filter(|p| p.extension().is_some_and(|e| e == "tn"))
-        .collect();
+    let mut files = Vec::new();
+    collect_cases(&conformance_dir(), &mut files);
     files.sort();
     assert!(!files.is_empty(), "no conformance files found");
 
@@ -188,17 +275,25 @@ fn conformance_suite() {
             for case in cases {
                 total += 1;
                 let actual = engine.run(&source, &case.entry);
-                let matched = match (&case.expectation, &actual) {
+                let expectation = match (&case.ir_expectation, engine.typed_ir()) {
+                    (Some(over), true) => over,
+                    _ => &case.expectation,
+                };
+                let known_gap = if engine.typed_ir() {
+                    case.xfail.as_ref()
+                } else {
+                    case.xfail.as_ref().or(case.xfail_tree_walker.as_ref())
+                };
+                let matched = match (expectation, &actual) {
                     (Expectation::Value(want), Ok(got)) => want == got,
                     (Expectation::Error(want), Err(got)) => got.contains(want.as_str()),
                     _ => false,
                 };
                 let label = format!("[{}] {}::{}", engine.name(), case.file, case.entry);
-                match (&case.xfail, matched) {
+                match (known_gap, matched) {
                     (None, true) => {}
                     (None, false) => failures.push(format!(
-                        "{label}: expected {:?}, got {actual:?}",
-                        case.expectation
+                        "{label}: expected {expectation:?}, got {actual:?}"
                     )),
                     (Some(_), false) => {
                         xfailed += 1;

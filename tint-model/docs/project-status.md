@@ -92,15 +92,24 @@ function/lambda types; checks operators, conditions, assignments, explicit
 returns, function arguments, struct fields, method arguments and UI
 state/interpolation expressions; and reports `TypeMismatch` alongside the
 existing undefined-variable, duplicate-binding and immutability errors.
-Unknown types remain permissive where declarations are intentionally untyped;
-generic functions and every UI attribute's host-specific value contract remain
-future work. `tint check` reports errors as fatal;
+Lambda parameters, `Option`/`Result` holes (`None {}`) and `?` are inferred, and on
+the conformance suite and the examples no expression is left `Unknown`
+(`tint check --strict` turns every remaining uninferred type into a
+`CannotInfer` error). Generic functions and every UI attribute's host-specific
+value contract remain future work. `tint check` reports errors as fatal;
 `tint run` reports them as non-fatal warnings and still executes.
+
+**Typed IR:** `tint-ir::typed` lowers the checked AST to a typed register CFG
+(closure conversion, monomorphised enums, layout contract, verifier) and runs it
+on a reference interpreter. The conformance suite passes on it and on the
+tree-walker. Not lowered yet: generic functions, default parameters, named
+arguments, `ui fn`, kernels.
 
 **Map literals:** `map { a{1}, b{2} }`.
 
 **Generics:** `Option<T>` and `Result<T, E>` are supported by the checker and
-runtime. User-defined generic `struct` and `enum` declarations now preserve
+runtime (the checker and the typed IR know the full method set listed in
+`guide/types.md`; the tree-walker implements the first nine). User-defined generic `struct` and `enum` declarations now preserve
 their parameters in the AST; the checker validates arity and substitutes
 generic parameters while checking fields and variant payloads.
 
@@ -142,8 +151,8 @@ modules and preserves the same source/entry contract for development and HMR.
 
 ## Roadmap
 
-A typed end-to-end semantic checker (now covering `fn`, `ui fn`, and
-`impl` method bodies with conservative handling for still-untyped features),
+A typed end-to-end semantic checker (covering `fn`, `ui fn`, and `impl`
+method bodies; fully inferred on the conformance suite and the examples),
 a real standalone build that embeds the WASM runtime, a
 module system with grouped/aliased/wildcard `use` imports, and `match{}`
 evaluation in UI trees (`case label { ... }`/`case _ { ... }` children --

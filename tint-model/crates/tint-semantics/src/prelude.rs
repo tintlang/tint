@@ -9,4 +9,7 @@ pub enum Mode {
 pub struct CheckerContext {
     pub mode: Mode,
     pub inside_borrow: bool,
+    /// Report every expression whose type could not be inferred
+    /// (`CannotInfer`) instead of leaving it `Unknown`.
+    pub strict: bool,
 }

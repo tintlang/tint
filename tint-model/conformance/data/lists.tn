@@ -75,6 +75,3 @@ fn sort_does_not_mutate_receiver() {
     let ys = xs.reverse()
     xs
 }
-
-// expect-error: sort
-fn sort_mixed_is_an_error() { [1, "a"].sort() }

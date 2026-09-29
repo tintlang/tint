@@ -89,10 +89,38 @@ let failed = parsed.is_err()
 ```
 
 `is_some`/`is_none` apply to `Option<T>`; `is_ok`/`is_err` apply to
-`Result<T, E>`. `unwrap_or` returns the payload or its fallback value. `map`
-transforms a successful payload and preserves failure, while `and_then`
-returns the callback's `Option`/`Result` and preserves failure. Callback
-signatures and payload types are checked statically.
+`Result<T, E>`; calling one on the other type is a type error. `unwrap_or`
+returns the payload or its fallback value. `map` transforms a successful
+payload and preserves failure, while `and_then` returns the callback's
+`Option`/`Result` and preserves failure. Callback signatures and payload types
+are checked statically. A bare `Option` or `Result` without type arguments is
+an error.
+
+Full method set (`T` payload, `E` error):
+
+| Method | On | Returns |
+|---|---|---|
+| `unwrap()`, `expect(msg)` | both | `T` |
+| `is_some()`, `is_none()` | `Option` | `bool` |
+| `is_ok()`, `is_err()` | `Result` | `bool` |
+| `is_some_and(f)`, `is_ok_and(f)` | `Option`, `Result` | `bool` |
+| `is_err_and(f)` | `Result` | `bool` |
+| `unwrap_or(v)` | both | `T` |
+| `unwrap_or_else(f)` | both (`f` takes `E` for `Result`) | `T` |
+| `map(f)` | both | same kind, new payload |
+| `map_or(d, f)` | both | type of `d`/`f` |
+| `and_then(f)` | both | `f`'s `Option`/`Result` |
+| `filter(f)` | `Option` | `Option<T>` |
+| `or(o)`, `or_else(f)` | both | same kind |
+| `ok_or(e)`, `ok_or_else(f)` | `Option` | `Result<T, E>` |
+| `map_err(f)` | `Result` | `Result<T, F>` |
+| `ok()`, `err()` | `Result` | `Option<T>`, `Option<E>` |
+| `unwrap_err()`, `expect_err(msg)` | `Result` | `E` |
+
+The checker and the typed IR support all of these. The tree-walking runtime
+(`tint run`) implements `unwrap`, `expect`, `is_*`, `unwrap_or`, `map` and
+`and_then` only. A lambda without parameters (`|| body`) does not parse yet,
+so `unwrap_or_else` on an `Option` needs a named function.
 
 ## Type aliases
 

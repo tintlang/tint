@@ -20,7 +20,8 @@ impl SemanticChecker {
         }
         self.scopes.push();
         for param in &f.params {
-            self.bind_pattern_typed(&param.pattern, self.ast_type(param.ty.as_ref()));
+            let ty = self.param_type(&f.name, param);
+            self.bind_pattern_typed(&param.pattern, ty);
         }
         // The `state` names themselves are already bound into the
         // PERSISTENT base scope by `collect_top_level_names` (see that
@@ -32,7 +33,9 @@ impl SemanticChecker {
         // = starting_value` should still flag an unknown `starting_value`.
         for state in &f.state {
             let state_ty = self.infer_expr(&state.init);
-            self.scopes.update_type(&state.name, state_ty);
+            if let Some(declared) = self.scopes.lookup(&state.name) {
+                self.require_compatible(&declared, &state_ty, state.init.span());
+            }
         }
         for node in &f.body {
             self.visit_ui_style_declarations(node);
@@ -110,20 +113,7 @@ impl SemanticChecker {
             } => {
                 let iterable_ty = self.infer_expr(iterable);
                 self.scopes.push();
-                let item_ty = match iterable_ty {
-                    Type::Array(item) => *item,
-                    Type::Unknown => Type::Unknown,
-                    found => {
-                        self.error(
-                            iterable.span(),
-                            SemanticErrorKind::TypeMismatch {
-                                expected: "array".into(),
-                                found: format!("{:?}", found),
-                            },
-                        );
-                        Type::Unknown
-                    }
-                };
+                let item_ty = self.iterable_item(&iterable_ty, iterable.span());
                 self.scopes.define(var, item_ty);
                 for child in body {
                     self.visit_ui_node_or_expr(child);
@@ -143,8 +133,9 @@ impl SemanticChecker {
     fn visit_ui_children_with_for(&mut self, modifiers: &[UiModifier], children: &[UiNodeOrExpr]) {
         match find_for_loop_var(modifiers) {
             Some(var) => {
+                let item = self.for_item.take().unwrap_or(Type::Unknown);
                 self.scopes.push();
-                self.scopes.define(&var, Type::Unknown);
+                self.scopes.define(&var, item);
                 for child in children {
                     self.visit_ui_node_or_expr(child);
                 }
@@ -154,6 +145,31 @@ impl SemanticChecker {
                 for child in children {
                     self.visit_ui_node_or_expr(child);
                 }
+            }
+        }
+    }
+
+    /// Element type of something iterated by `for`; an open type is taken to
+    /// be a list.
+    fn iterable_item(&mut self, iterable: &Type, span: Span) -> Type {
+        match self.shallow(iterable) {
+            Type::Array(item) => *item,
+            Type::Var(_) => {
+                let item = self.fresh(span, "the element type of a loop");
+                self.unify(iterable, &Type::Array(Box::new(item.clone())));
+                item
+            }
+            Type::Unknown => Type::Unknown,
+            found => {
+                let found = self.resolve(&found);
+                self.error(
+                    span,
+                    SemanticErrorKind::TypeMismatch {
+                        expected: "array".into(),
+                        found: type_name(&found),
+                    },
+                );
+                Type::Unknown
             }
         }
     }
@@ -185,22 +201,21 @@ impl SemanticChecker {
                 // could meaningfully check.
                 UiAttrValue::Literal(_) => {}
                 UiAttrValue::Ident(name) => {
-                    if self.record_calls {
-                        // Host-invoked handlers: the argument types are fixed
-                        // by the runtime (`frame||` gets `dt`, key events
-                        // get the key name).
-                        let args = match attr.name.as_str() {
-                            "frame" => Some(vec![Type::Number]),
-                            "key_down" | "key_up" => Some(vec![Type::String]),
-                            "click" | "pointer_down" | "pointer_up" | "hover_in" | "hover_out"
-                            | "tick" => Some(Vec::new()),
-                            _ => None,
-                        };
-                        if let Some(args) = args {
-                            self.call_args
-                                .entry((String::new(), name.clone()))
-                                .or_default()
-                                .push(args);
+                    // Host-invoked handlers: the argument types are fixed by
+                    // the runtime (`frame||` gets `dt`, key events get the
+                    // key name).
+                    let args = match attr.name.as_str() {
+                        "frame" => Some(vec![Type::Number]),
+                        "key_down" | "key_up" => Some(vec![Type::String]),
+                        "click" | "pointer_down" | "pointer_up" | "hover_in" | "hover_out"
+                        | "tick" => Some(Vec::new()),
+                        _ => None,
+                    };
+                    if let (Some(args), Some((params, _))) = (args, self.fn_types.get(name).cloned()) {
+                        if params.len() == args.len() {
+                            for (param, arg) in params.iter().zip(&args) {
+                                self.require_compatible(param, arg, attr.span);
+                            }
                         }
                     }
                     if matches!(
@@ -246,15 +261,7 @@ impl SemanticChecker {
                 if let UiModifierValue::MiniMod { value, .. } = &m.value {
                     if let UiModifierValue::Expr(expr) = value.as_ref() {
                         let ty = self.infer_expr(expr);
-                        if !matches!(ty, Type::Array(_) | Type::Unknown) {
-                            self.error(
-                                expr.span(),
-                                SemanticErrorKind::TypeMismatch {
-                                    expected: "array".into(),
-                                    found: format!("{:?}", ty),
-                                },
-                            );
-                        }
+                        self.for_item = Some(self.iterable_item(&ty, expr.span()));
                     }
                 }
             }
