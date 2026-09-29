@@ -1,0 +1,113 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    name: Verify release
+    uses: ./.github/workflows/ci.yml
+
+  cli:
+    name: CLI (${{ matrix.target }})
+    needs: verify
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            binary: tint
+            archive: tint-${{ github.ref_name }}-x86_64-unknown-linux-gnu.tar.gz
+          - os: macos-13
+            target: x86_64-apple-darwin
+            binary: tint
+            archive: tint-${{ github.ref_name }}-x86_64-apple-darwin.tar.gz
+          - os: macos-14
+            target: aarch64-apple-darwin
+            binary: tint
+            archive: tint-${{ github.ref_name }}-aarch64-apple-darwin.tar.gz
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            binary: tint.exe
+            archive: tint-${{ github.ref_name }}-x86_64-pc-windows-msvc.zip
+    defaults:
+      run:
+        working-directory: tint-model
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check tag matches VERSION
+        shell: bash
+        run: test "${GITHUB_REF_NAME#v}" = "$(tr -d '[:space:]' < ../VERSION)"
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build CLI
+        run: cargo build --release --locked -p tint-cli --target ${{ matrix.target }}
+
+      - name: Package Unix binary
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          mkdir -p release
+          cp target/${{ matrix.target }}/release/${{ matrix.binary }} release/${{ matrix.binary }}
+          tar -C release -czf ../${{ matrix.archive }} ${{ matrix.binary }}
+
+      - name: Package Windows binary
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force release | Out-Null
+          Copy-Item "target/${{ matrix.target }}/release/${{ matrix.binary }}" "release/${{ matrix.binary }}"
+          Compress-Archive -Path "release/${{ matrix.binary }}" -DestinationPath "../${{ matrix.archive }}"
+
+      - name: Create checksum
+        if: runner.os != 'Windows'
+        working-directory: tint-model
+        shell: bash
+        run: sha256sum "../${{ matrix.archive }}" > "../${{ matrix.archive }}.sha256"
+
+      - name: Create checksum (Windows)
+        if: runner.os == 'Windows'
+        working-directory: tint-model
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash "../${{ matrix.archive }}" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  ${{ matrix.archive }}" | Out-File "../${{ matrix.archive }}.sha256" -Encoding ascii
+
+      - name: Upload CLI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tint-${{ matrix.target }}
+          path: |
+            tint-model/${{ matrix.archive }}
+            tint-model/${{ matrix.archive }}.sha256
+          if-no-files-found: error
+
+  github-release:
+    name: Publish GitHub Release
+    needs: cli
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download CLI artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          pattern: tint-*
+          merge-multiple: true
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: release-assets/*

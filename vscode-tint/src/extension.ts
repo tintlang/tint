@@ -38,7 +38,7 @@ export function activate(context: vscode.ExtensionContext) {
     const tintCLI = findTintCLI();
     if (!tintCLI) {
         vscode.window.showWarningMessage(
-            'Tint CLI not found. Install it with: cargo install --path tint-model/crates/tint-cli (run from the repo root)'
+            'Tint CLI not found. Install a release from: https://github.com/tintlang/tint/releases'
         );
     }
 

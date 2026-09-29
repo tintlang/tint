@@ -1,8 +1,8 @@
 {
   "name": "tint-lang",
   "displayName": "Tint Language",
-  "description": "Syntax highlighting and tools for the Tint UI programming language",
-  "version": "0.1.1",
+  "description": "Syntax highlighting and development tools for the Tint programming language",
+  "version": "0.1.2",
   "publisher": "tintlang",
   "license": "MIT",
   "icon": "icon.png",
@@ -10,6 +10,17 @@
     "type": "git",
     "url": "https://github.com/tintlang/tint"
   },
+  "homepage": "https://github.com/tintlang/tint#readme",
+  "bugs": {
+    "url": "https://github.com/tintlang/tint/issues"
+  },
+  "keywords": [
+    "tint",
+    "tintlang",
+    "programming language",
+    "declarative ui",
+    "ui"
+  ],
   "engines": {
     "vscode": "^1.80.0"
   },

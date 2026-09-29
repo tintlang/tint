@@ -93,10 +93,9 @@ For an installed release, `tint` is a prebuilt binary; end users do not need
 Cargo or a manual CLI rebuild.
 
 ```bash
-# Build the CLI
-cd tint-model
-cargo build -p tint-cli --release
-export PATH="$PWD/target/release:$PATH"
+# macOS/Linux: install the latest release and verify its checksum
+curl -fsSL https://raw.githubusercontent.com/tintlang/tint/main/scripts/install-tint.sh | bash
+export PATH="$HOME/.local/bin:$PATH"
 
 # Check syntax
 tint check app.tn
@@ -114,13 +113,38 @@ tint build app.tn [ui_fn] -o app.html
 tint repl
 ```
 
+Release assets are published for Linux x86_64, macOS x86_64, macOS Apple
+Silicon, and Windows x86_64. On Windows, download the `.zip` asset from the
+[GitHub Releases page](https://github.com/tintlang/tint/releases) and put
+`tint.exe` somewhere on `PATH`.
+
+On Windows PowerShell, the latest verified release can be installed with:
+
+```powershell
+irm https://raw.githubusercontent.com/tintlang/tint/main/scripts/install-tint.ps1 | iex
+```
+
+> Windows installer не тестировался на реальной Windows-системе; проверены
+> PowerShell-код и структура release workflow.
+
+If Rust is already installed, the development build can also be installed
+directly from the repository:
+
+```bash
+cargo install --git https://github.com/tintlang/tint.git --package tint-cli --bin tint
+```
+
 ### VSCode Extension
 
-1. Install from marketplace (coming soon) or manually:
+1. Install the published extension from the
+   [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=tintlang.tint-lang).
+
+   For a local build instead:
    ```bash
    cd vscode-tint
    npm install && npm run compile
-   code --install-extension ./tint-lang-0.1.1.vsix
+   npx @vscode/vsce package
+   code --install-extension ./tint-lang-0.1.2.vsix
    ```
 
 2. Open a `.tn` file

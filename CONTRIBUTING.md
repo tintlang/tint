@@ -14,6 +14,28 @@ Before committing a release-version change, verify the workspace with:
 cargo check --manifest-path tint-model/Cargo.toml --workspace --locked
 ```
 
+### Publishing a CLI release
+
+GitHub Actions builds and publishes CLI archives for Linux x86_64, macOS
+x86_64, macOS Apple Silicon, and Windows x86_64 when a matching version tag is
+pushed. The tag must use the `v` prefix and match `VERSION` exactly.
+
+```bash
+# VERSION is the single source of truth.
+node scripts/sync-version.mjs
+git diff --check
+git tag "v$(tr -d '[:space:]' < VERSION)"
+git push origin "v$(tr -d '[:space:]' < VERSION)"
+```
+
+The release workflow waits for the full CI suite, builds the four platform
+archives, creates SHA-256 checksum files, and creates a GitHub Release with
+generated release notes. It does not publish npm packages or the VS Code
+extension yet.
+
+The Windows installer has not been tested on a real Windows system yet; only
+the PowerShell source and the release workflow structure have been checked.
+
 ## Tint model development
 
 To run the current CLI without accidentally using an older globally installed

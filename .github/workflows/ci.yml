@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    name: Rust (${{ matrix.check }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        check:
+          - check
+          - test
+    defaults:
+      run:
+        working-directory: tint-model
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Check workspace
+        if: matrix.check == 'check'
+        run: cargo check --workspace --locked
+
+      - name: Run tests
+        if: matrix.check == 'test'
+        run: cargo test --workspace --locked
+
+  sandbox:
+    name: Sandbox build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tint-model/sandbox
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tint-model/sandbox/package-lock.json
+
+      - run: npm ci
+      - run: npm run build
+      - run: npm run build:smoke
+
+  vscode:
+    name: VS Code extension
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: vscode-tint
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: vscode-tint/package-lock.json
+
+      - run: npm ci
+      - run: npm run compile
+      - run: npm run lint
+      - run: npm pack --dry-run
+
+  npm-packages:
+    name: npm package (${{ matrix.package }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [tint-runtime, tint-vite, tint-react, tint-svelte]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Check package contents
+        working-directory: tint-model/packages/${{ matrix.package }}
+        run: npm pack --dry-run

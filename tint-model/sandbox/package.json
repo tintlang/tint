@@ -1,7 +1,7 @@
 {
   "name": "tint-sandbox",
   "private": true,
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Local browser sandbox for Tint, backed by the tint-wasm crate.",
   "type": "module",
   "scripts": {

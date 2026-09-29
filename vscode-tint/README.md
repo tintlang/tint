@@ -1,58 +1,88 @@
-# Tint Language for VSCode
+# Tint Language for Visual Studio Code
 
-Syntax highlighting and development tools for the [Tint](https://github.com/tintlang/tint) UI programming language.
+Syntax highlighting and development tools for [Tint](https://github.com/tintlang/tint),
+a statically typed language for declarative UI and general logic.
 
 ## Features
 
-- **Syntax highlighting** for `.tn` files
-- **Build to HTML** - compile your Tint UI code to standalone HTML with embedded WASM
-- **Syntax checking** - validate your code without running it
-- **Live preview** - preview compiled UI directly in VSCode
+- Syntax highlighting for `.tn` files
+- Syntax checking through the Tint CLI
+- Build Tint UI files to standalone HTML with embedded WASM
+- Preview generated HTML in a VS Code webview
+- Experimental hover information, diagnostics, and go-to-definition
+- Tint file and icon theme support
 
 ## Installation
 
-### From CLI
+Install **Tint Language** from the
+[Visual Studio Code Marketplace](https://marketplace.visualstudio.com/items?itemName=tintlang.tint-lang).
 
-If you have the Tint CLI installed:
+The extension provides syntax highlighting immediately. To use build and
+syntax-check commands, install the Tint CLI from the
+[GitHub Releases page](https://github.com/tintlang/tint/releases). On macOS or
+Linux, the latest release can be installed with:
 
 ```bash
-cargo install --path /path/to/tint/tint-model/crates/tint-cli
+curl -fsSL https://raw.githubusercontent.com/tintlang/tint/main/scripts/install-tint.sh | bash
+export PATH="$HOME/.local/bin:$PATH"
 ```
 
-Then install this extension from VSCode marketplace (or manually).
+If Rust is already installed, install the CLI directly from the repository:
 
-### Manual Installation
-
-1. Clone the [tintlang/tint](https://github.com/tintlang/tint) repository
-2. Navigate to `vscode-tint` directory
-3. Run `npm install` && `npm run compile`
-4. Run `code --install-extension tint-lang-0.1.1.vsix`
+```bash
+cargo install --git https://github.com/tintlang/tint.git --package tint-cli --bin tint
+```
 
 ## Commands
 
-- **Tint: Build to HTML** (Cmd+Shift+B) - Compile current file to HTML
-- **Tint: Check syntax** - Validate syntax without building
-- **Tint: Show preview** - Display the built HTML in a webview
+Open a `.tn` file, then use the Command Palette (`Cmd+Shift+P` /
+`Ctrl+Shift+P`):
+
+- **Tint: Build to HTML** — compile the current file to standalone HTML.
+- **Tint: Check syntax** — validate the current file without running it.
+- **Tint: Show preview** — open the most recently built HTML in a webview.
+
+On macOS, **Tint: Build to HTML** is also available with `Cmd+Shift+B`.
 
 ## Example
 
-Create a file `app.tn`:
+Create `app.tn`:
 
 ```tint
 ui fn App() {
-    Column { padding::24 gap::16
+    Column {
+        layout::{ direction::column, padding::24, gap::16 }
         Text { text::{18, bold} "Hello Tint!" }
         Button { click||do_thing "Click me" }
-        Card { radius::12 background::#f0f0f0
-            Text { "Nested content" }
-        }
     }
 }
 ```
 
-Press Cmd+Shift+B to build it into an HTML file.
+Run **Tint: Build to HTML**, then use **Tint: Show preview**.
 
 ## Requirements
 
-- Tint CLI (`tint` command available in PATH)
-- VSCode 1.80+
+- VS Code 1.80 or newer
+- Tint CLI in `PATH` for build and syntax-check commands
+- The optional `tint-analyzer` binary for experimental hover, diagnostics,
+  and go-to-definition support
+
+The analyzer integration is experimental and currently requires a locally
+built or installed analyzer binary. Syntax highlighting and the CLI commands
+work without it.
+
+## Manual development installation
+
+```bash
+git clone https://github.com/tintlang/tint.git
+cd tint/vscode-tint
+npm install
+npm run compile
+npx @vscode/vsce package
+code --install-extension tint-lang-0.1.2.vsix
+```
+
+## Support
+
+Report bugs and request features in
+[GitHub Issues](https://github.com/tintlang/tint/issues).
