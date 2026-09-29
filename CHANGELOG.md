@@ -4,6 +4,8 @@ All notable changes to Tint are documented here.
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-09-30
+
 - UI rendering is much cheaper per frame. The browser renderer keeps the previous render tree and diffs in Rust, touching the DOM only where something changed. The builder reuses a pure subtree (no calls, blocks, lambdas or `if`/`match` expressions) when none of the outer variables it read has changed, and shares it as an `Rc` so the renderer can skip it by pointer. `UiRenderNode.children` is now `Vec<Rc<UiRenderNode>>`; `UiSession::render`/`dispatch` return `Vec<Rc<UiRenderNode>>` (`UiSession::set_reuse(false)` turns reuse off). Pong frame time went from 11.5 ms to 1.4 ms in headless Chromium.
 - The tree-walking evaluator is the single execution engine on the runtime path. The SSA IR moved behind the optional `ir` cargo feature of `tint-runtime` (off by default).
 - Added an engine-agnostic conformance suite (`tint-model/conformance/<category>/*.tn`, run by `tint-runtime/tests/conformance.rs` on the tree-walker and on the typed IR); known language gaps live in `conformance/errors/` and are recorded as expected failures.

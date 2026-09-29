@@ -124,8 +124,8 @@ On Windows PowerShell, the latest verified release can be installed with:
 irm https://raw.githubusercontent.com/tintlang/tint/main/scripts/install-tint.ps1 | iex
 ```
 
-> Windows installer не тестировался на реальной Windows-системе; проверены
-> PowerShell-код и структура release workflow.
+> The Windows installer has not been tested on a real Windows system; only the
+> PowerShell source and release workflow structure have been checked.
 
 If Rust is already installed, the development build can also be installed
 directly from the repository:
