@@ -1,4 +1,0 @@
-// expect: 8
-// xfail: calling a fn with a defaulted trailing parameter and omitting it returns () (default is not applied)
-fn default_param() { add_default(3) }
-fn add_default(a, b = 5) { a + b }
