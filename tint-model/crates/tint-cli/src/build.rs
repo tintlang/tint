@@ -72,6 +72,13 @@ fn build_file(path: &str, entry: Option<&str>, output: Option<&str>) {
         format!("{}.html", stem)
     });
 
+    if let Some(dir) = Path::new(&output).parent().filter(|d| !d.as_os_str().is_empty()) {
+        if let Err(error) = fs::create_dir_all(dir) {
+            eprintln!("error creating '{}': {}", dir.display(), error);
+            std::process::exit(1);
+        }
+    }
+
     if let Err(error) = fs::write(
         &output,
         standalone_html(&combined_source, entry, &loaded.program.app_meta()),
