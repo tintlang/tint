@@ -41,20 +41,17 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: tint-model/sandbox
+        working-directory: tint-model
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: tint-model/sandbox/package-lock.json
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
 
-      - run: npm ci
-      - run: npm run build
-      - run: npm run build:smoke
+      - name: Check and build the site
+        run: |
+          cargo run -q -p tint-cli -- check sandbox/src/site.tn
+          cargo run -q -p tint-cli -- build sandbox/src/site.tn -o "$RUNNER_TEMP/site.html"
 
   vscode:
     name: VS Code extension
