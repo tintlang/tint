@@ -28,9 +28,11 @@ subject.
 - [`guide/terminal.md`](guide/terminal.md) — CLI development workflow, terminal I/O,
   `read_key`, and `while`/`loop`
 - `events.md` — current UI events and handlers
+- [`guide/routing.md`](guide/routing.md) — `app { title, lang }`, `route_path`, the client router and width breakpoints
 
 **UI** (`ui/`) — the declarative UI layer
 - `ui-syntax.md` — Tint block nodes, state, themes, imports, grid, and routes
+- `text-and-preview.md` — `TextArea`, `Preview`, text natives, storage and `include_str`
 - `modifiers.md` — the `::` modifier syntax and semantic groups (`layout`, `paint`, `motion`)
 - `styling.md` — the currently implemented layout, paint, gradient, blur, and hover modifiers
 - `animations.md` — current transition and hover behavior
@@ -44,9 +46,10 @@ subject.
 - [`guide/escape-hatches.md`](guide/escape-hatches.md) — DOM refs and JavaScript callbacks
 - `blocks.md` — UI block control flow currently supported by the parser
 
-The browser sandbox is a Tint-rendered app. Run `npm run dev:all` from
-`tint-model/sandbox` for Vite HMR, nested `.tn` import reloads, and automatic
-Rust/WASM rebuilds. The landing page is `/`; the workbench is `/sandbox`.
+The site and sandbox are one Tint program with no HTML, JS or CSS files. Run
+`npm run dev` from `tint-model/sandbox` (it runs `tint dev src/site.tn`); after
+Rust changes run `npm run wasm`. The landing page is `/`; the workbench is
+`/sandbox`.
 
 GPU/WebGPU rendering, Tint2D, tensors, async execution, resource borrowing,
 kits, and the full module system are planned or parser-level experiments. Their

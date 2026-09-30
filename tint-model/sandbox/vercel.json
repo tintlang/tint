@@ -1,8 +1,5 @@
 {
-  "rewrites": [
-    { "source": "/sandbox", "destination": "/app.html?route=/sandbox" },
-    { "source": "/sandbox/", "destination": "/app.html?route=/sandbox" },
-    { "source": "/pong", "destination": "/pong.html" },
-    { "source": "/pong/", "destination": "/pong.html" }
-  ]
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }

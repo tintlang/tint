@@ -1,0 +1,26 @@
+ui fn App() {
+    Card {
+        layout::{ padding::24 }
+        paint::{
+            radius::20,
+            gradient::{ angle::135, from::#6c5ce7, to::#8b7cf0 },
+            border::{1, #8b7cf0}
+        }
+        motion::{ hover::{ scale::1.03, shadow::"0 16px 40px rgba(0,0,0,.35)" } }
+        Column {
+            layout::{ direction::column }
+            Row {
+                layout::{ direction::row, gap::12, margin.b::4 }
+                Text { text::{12, #d8d2f7} "TOTAL BALANCE" }
+                Text { text::{12, bold, white} "VISA" }
+            }
+            Text { text::{34, bold, white} layout::{ margin.b::28 } "$4,218.90" }
+            Text { text::{15, #d8d2f7} layout::{ margin.b::4 } "•••• •••• •••• 4821" }
+            Row {
+                layout::{ direction::row, gap::12 }
+                Text { text::{13, white} "Name Surname" }
+                Text { text::{13, #d8d2f7} "12/29" }
+            }
+        }
+    }
+}

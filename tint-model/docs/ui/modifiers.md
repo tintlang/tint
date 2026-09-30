@@ -111,6 +111,24 @@ Hero {
 }
 ```
 
+## Keyword properties
+
+These CSS properties have no typed Tint form. They take a bare word
+(`cursor::pointer`) or a string (`outline::"2px solid #fff"`), and work in
+`layout`, `paint`, `hover` and breakpoint blocks alike:
+
+`cursor`, `pointer-events`, `touch-action`, `user-select`, `outline`,
+`box-sizing`, `align-self`, `flex-wrap`, `text-align`, `appearance`,
+`transform-origin`, `color-scheme`, `caret-color`, `letter-spacing`, `word-break`, `font-style`, `animation` (and its `animation-*` longhands).
+
+Sizes accept numbers (pixels) or strings: `min-width`, `min-height`,
+`max-width`, `max-height`, `inset` (`min-height::"100dvh"`). `flex`,
+`flex-shrink` and `aspect-ratio` accept a number or a string.
+
+Tint also injects a zero-specificity reset for its own nodes (`box-sizing:
+border-box`, links inherit color and have no underline), so an app needs no
+stylesheet for it; any stylesheet you add wins.
+
 ## Paint
 
 ```tn
@@ -160,7 +178,8 @@ ui fn App() {
 `.tn` imports are currently expanded by the sandbox loader before the normal
 Tint parser runs.
 
-The landing entry is `sandbox/src/main.tn`. Its HTML shell only mounts the
-runtime; page structure, themes, imports, and font selection are expressed in
-Tint. The small `sandbox/src/main.js` file remains as the browser adapter for
-WASM, CodeMirror, and the live preview.
+The site entry is `sandbox/src/site.tn`. It is the whole program: page
+structure, routes, themes, imports, fonts, the code editor and the live preview
+are all Tint. `tint dev src/site.tn` serves it and `tint build src/site.tn`
+produces one HTML file; there are no hand-written HTML, JS or CSS files. See
+[text-and-preview.md](text-and-preview.md) for `TextArea` and `Preview`.

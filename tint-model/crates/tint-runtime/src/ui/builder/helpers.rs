@@ -142,6 +142,33 @@ pub(crate) fn apply_tick(tree: &mut UiTree, id: UiNodeId, attributes: &[UiAttrib
     tree.set_tick(id, handler, every_ms);
 }
 
+/// Reads `pointer_start||`, `pointer_move||` and `pointer_up||`: a press that
+/// starts on this node and the pointer moves/release that follow it. Each
+/// handler receives the pointer's viewport `x` and `y`.
+pub(crate) fn apply_pointer(tree: &mut UiTree, id: UiNodeId, attributes: &[UiAttribute]) {
+    tree.set_pointer(
+        id,
+        find_handler(attributes, "pointer_start"),
+        find_handler(attributes, "pointer_move"),
+        find_handler(attributes, "pointer_up"),
+    );
+}
+
+/// Reads `input||handler` (receives the field's new text) and `submit||handler`
+/// (Ctrl/Cmd+Enter inside it) for a `TextArea`.
+pub(crate) fn apply_input(tree: &mut UiTree, id: UiNodeId, attributes: &[UiAttribute]) {
+    tree.set_input(
+        id,
+        find_handler(attributes, "input"),
+        find_handler(attributes, "submit"),
+    );
+}
+
+/// Reads `entry||"Name"` for a `Preview`: which `ui fn` of its source to show.
+pub(crate) fn apply_preview(tree: &mut UiTree, id: UiNodeId, attributes: &[UiAttribute]) {
+    tree.set_preview_entry(id, find_literal(attributes, "entry"));
+}
+
 /// Reads `route||"/path"` and leaves navigation as a renderer concern.
 /// Keeping this as a first-class field makes the syntax portable to DOM,
 /// native, and future renderers without treating the route as CSS.

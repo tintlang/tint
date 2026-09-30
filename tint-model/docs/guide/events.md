@@ -84,3 +84,19 @@ Button {
 
 Use only named `click||`, `hover_in||`, and `hover_out||` attributes for event
 handlers. Visual hover changes belong in `motion`/`hover` modifiers.
+
+## Dragging
+
+`pointer_start||` on a node begins a drag when the primary button goes down on
+it. While the button stays down, `pointer_move||` and `pointer_up||` (declared
+on any node) receive the pointer position, even outside the original node.
+All three handlers take the viewport coordinates `(x, y)`.
+
+```tn
+fn grab(x, y) { start_x = x  start_w = width }
+fn drag(x, y) { width = start_w + (start_x - x) }
+
+Handle { cursor::col-resize touch-action::none pointer_start||grab pointer_move||drag }
+```
+
+Moves outside a drag are not delivered, so idle mouse movement never re-renders.

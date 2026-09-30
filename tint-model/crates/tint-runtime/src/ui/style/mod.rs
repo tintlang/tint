@@ -106,6 +106,23 @@ pub fn apply_container_defaults(tag: &str, style: &mut StyleList) {
 /// window size".
 const BREAKPOINT_NAMES: [&str; 4] = ["mobile", "tablet", "laptop", "desktop"];
 
+/// A named screen size (`mobile`, ...) or a width threshold: `max-560` applies
+/// while the viewport is at most 560px wide, `min-800` from 800px up. Matching
+/// blocks are layered over the base style in source order, like CSS media
+/// queries, so write `max-*` blocks from the largest to the smallest.
+pub fn is_breakpoint_name(name: &str) -> bool {
+    BREAKPOINT_NAMES.contains(&name) || breakpoint_threshold(name).is_some()
+}
+
+/// `max-560` -> `Some((false, 560))`, `min-800` -> `Some((true, 800))`.
+pub fn breakpoint_threshold(name: &str) -> Option<(bool, u32)> {
+    let (is_min, digits) = match name.strip_prefix("max-") {
+        Some(rest) => (false, rest),
+        None => (true, name.strip_prefix("min-")?),
+    };
+    digits.parse().ok().map(|width| (is_min, width))
+}
+
 /// Splits a node's modifiers into: its base style, its `hover::{...}`
 /// style (if any), and one resolved `StyleList` per breakpoint name that
 /// was actually used (`mobile::{...}` etc. -- see `BREAKPOINT_NAMES`).
@@ -141,7 +158,7 @@ pub fn resolve_style(modifiers: &[UiModifier]) -> (StyleList, StyleList, Vec<(St
             continue;
         }
 
-        if m.path.len() == 1 && BREAKPOINT_NAMES.contains(&m.path[0].as_str()) {
+        if m.path.len() == 1 && is_breakpoint_name(&m.path[0]) {
             let mut bp_style = Vec::new();
             if let UiModifierValue::Tuple(items) = &m.value {
                 apply_group_items("layout", items, &mut bp_style);
@@ -241,6 +258,87 @@ fn apply_nested_style(value: &UiModifierValue, out: &mut StyleList) {
             }
         }
     }
+}
+
+/// Resolves the items of an `app { page::{ ... } }` block (plain modifiers,
+/// like inside `layout::{ ... }`) into CSS properties for the host `<body>`.
+/// `@font-face` and `@keyframes` rules from `app { font.X::{ } keyframes.y::{ } }`.
+pub fn app_at_rules(meta: &tint_ast::AppMeta) -> String {
+    fn clean(text: &str) -> String {
+        text.replace(['"', '\\', '{', '}', ';'], "")
+    }
+    fn item<'a>(items: &'a [UiModifierValue], name: &str) -> Option<&'a UiModifierValue> {
+        items.iter().find_map(|item| match item {
+            UiModifierValue::MiniMod { key, value } if key.len() == 1 && key[0] == name => {
+                Some(&**value)
+            }
+            _ => None,
+        })
+    }
+    fn text(value: &UiModifierValue) -> Option<String> {
+        match value {
+            UiModifierValue::String(s) | UiModifierValue::Ident(s) => Some(clean(s)),
+            UiModifierValue::Number(n) => Some(n.to_string()),
+            _ => None,
+        }
+    }
+    let mut css = String::new();
+    for (family, items) in &meta.fonts {
+        let Some(src) = item(items, "src").and_then(text) else {
+            continue;
+        };
+        let src = if src.contains("url(") || src.contains("local(") {
+            src
+        } else {
+            let format = match src.rsplit('.').next() {
+                Some("woff2") => " format(\"woff2\")",
+                Some("woff") => " format(\"woff\")",
+                Some("ttf") => " format(\"truetype\")",
+                Some("otf") => " format(\"opentype\")",
+                _ => "",
+            };
+            format!("url(\"{src}\"){format}")
+        };
+        css.push_str(&format!(
+            "@font-face{{font-family:\"{}\";src:{src};font-display:{};",
+            clean(family),
+            item(items, "display")
+                .and_then(text)
+                .unwrap_or_else(|| "swap".into())
+        ));
+        if let Some(weight) = item(items, "weight").and_then(text) {
+            css.push_str(&format!("font-weight:{weight};"));
+        }
+        if let Some(style) = item(items, "style").and_then(text) {
+            css.push_str(&format!("font-style:{style};"));
+        }
+        css.push('}');
+    }
+    for (name, frames) in &meta.keyframes {
+        css.push_str(&format!("@keyframes {}{{", clean(name)));
+        for (selector, items) in frames {
+            let selector = match selector.strip_prefix('p') {
+                Some(percent) if !percent.is_empty() => {
+                    format!("{}%", clean(&percent.replace('_', ".")))
+                }
+                _ => clean(selector),
+            };
+            css.push_str(&selector);
+            css.push('{');
+            for (property, value) in resolve_page_style(items) {
+                css.push_str(&format!("{property}:{value};"));
+            }
+            css.push('}');
+        }
+        css.push('}');
+    }
+    css
+}
+
+pub fn resolve_page_style(items: &[UiModifierValue]) -> StyleList {
+    let mut out = Vec::new();
+    apply_group_items("layout", items, &mut out);
+    out
 }
 
 fn apply_group_items(group: &str, items: &[UiModifierValue], out: &mut StyleList) {

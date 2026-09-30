@@ -2,7 +2,8 @@
 import "./landing-actions.tn";
 
 ui fn Landing() {
-    state theme = "dark"
+    state theme = storage_get_or("theme", "dark")
+    state code = include_str("./demo-app.tn")
     import "./chrome.tn";
 
     style HeroLayout {
@@ -32,14 +33,14 @@ ui fn Landing() {
     }
 
     style CodePanelBase {
-        layout::{ grow::1, direction::column, padding::24, min-width::0, overflow::hidden }
+        layout::{ grow::1, direction::column, padding::24, min-width::0, min-height::280, overflow::hidden }
         paint::{ radius::16, background::@panel-bg, border::{1, @panel-border}, color::@panel-text }
         font-family::"ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
         size::13
     }
 
     style PreviewPanelBase {
-        layout::{ grow::1, direction::column, align::center, justify::center, padding::24, min-width::0, overflow::hidden }
+        layout::{ grow::1, direction::column, align::center, justify::center, padding::24, min-width::0, min-height::280, overflow::hidden }
         paint::{ radius::16, background::@panel-alt, border::{1, @panel-border} }
     }
 
@@ -89,6 +90,7 @@ ui fn Landing() {
     }
 
     Page {
+        color-scheme::{ theme }
         layout::{ direction::column }
         paint::{ background::@page-bg }
         import "./topbar.tn";

@@ -1,7 +1,26 @@
 use super::*;
 
 impl Parser {
+    /// `-72` in a modifier value: a minus sign directly followed by a number.
+    fn parse_negative_number(&mut self) -> Option<UiModifierValue> {
+        if self.stream.peek().kind != TokenKind::Minus {
+            return None;
+        }
+        let checkpoint = self.stream.checkpoint();
+        self.stream.next();
+        if self.stream.peek().kind == TokenKind::Number {
+            let tok = self.stream.next();
+            let v: f64 = tok.lexeme.parse().unwrap();
+            return Some(UiModifierValue::Number(-v));
+        }
+        self.stream.restore(checkpoint);
+        None
+    }
+
     pub(crate) fn parse_modifier_value_rhs(&mut self) -> PResult<UiModifierValue> {
+        if let Some(value) = self.parse_negative_number() {
+            return Ok(value);
+        }
         match self.stream.peek().kind {
             TokenKind::Number => {
                 let tok = self.stream.next();
@@ -83,6 +102,9 @@ impl Parser {
     }
 
     pub(crate) fn parse_single_mod_value(&mut self) -> PResult<UiModifierValue> {
+        if let Some(value) = self.parse_negative_number() {
+            return Ok(value);
+        }
         match self.stream.peek().kind {
             TokenKind::Number => {
                 let tok = self.stream.next();

@@ -188,6 +188,35 @@ impl TintVM {
             }))
         });
 
+        self.register_native("tint_highlight", |args| {
+            Ok(text_natives::highlight(&string_arg(
+                args,
+                0,
+                "tint_highlight",
+            )?))
+        });
+        self.register_native("line_count", |args| {
+            Ok(EvalValue::Number(text_natives::line_count(&string_arg(
+                args,
+                0,
+                "line_count",
+            )?)))
+        });
+        self.register_native("max_line_len", |args| {
+            Ok(EvalValue::Number(text_natives::max_line_len(&string_arg(
+                args,
+                0,
+                "max_line_len",
+            )?)))
+        });
+        self.register_native("line_numbers", |args| {
+            Ok(EvalValue::String(text_natives::line_numbers(&string_arg(
+                args,
+                0,
+                "line_numbers",
+            )?)))
+        });
+
         let storage_get = Rc::clone(&storage);
         self.register_native("storage_get", move |args| {
             let key = string_arg(args, 0, "storage_get")?;
@@ -197,6 +226,19 @@ impl TintVM {
                 .cloned()
                 .map(EvalValue::String)
                 .unwrap_or(EvalValue::Unit))
+        });
+
+        let storage_get_or = Rc::clone(&storage);
+        self.register_native("storage_get_or", move |args| {
+            let key = string_arg(args, 0, "storage_get_or")?;
+            let default = string_arg(args, 1, "storage_get_or")?;
+            Ok(EvalValue::String(
+                storage_get_or
+                    .borrow()
+                    .get(&key)
+                    .cloned()
+                    .unwrap_or(default),
+            ))
         });
 
         let storage_set = Rc::clone(&storage);

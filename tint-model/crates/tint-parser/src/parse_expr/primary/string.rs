@@ -6,7 +6,7 @@ impl Parser {
         let t = self.stream.next();
 
         if !t.lexeme.contains('{') {
-            return Ok(Expr::String(t.lexeme, t.span));
+            return Ok(Expr::String(unmark_braces(&t.lexeme), t.span));
         }
 
         self.parse_interpolated_string(t.lexeme, t.span)
@@ -49,7 +49,7 @@ impl Parser {
             match chars[i] {
                 '{' => {
                     if !buf.is_empty() {
-                        parts.push(Text(buf.clone()));
+                        parts.push(Text(unmark_braces(&buf)));
                         buf.clear();
                     }
 
@@ -77,9 +77,14 @@ impl Parser {
         }
 
         if !buf.is_empty() {
-            parts.push(Text(buf));
+            parts.push(Text(unmark_braces(&buf)));
         }
 
         Ok(Expr::InterpolatedString { parts, span })
     }
+}
+
+/// Restores braces the lexer marked as escaped (`\{`, `\}`).
+fn unmark_braces(text: &str) -> String {
+    text.replace('\u{E000}', "{").replace('\u{E001}', "}")
 }

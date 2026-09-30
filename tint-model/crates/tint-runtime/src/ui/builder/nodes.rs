@@ -121,6 +121,9 @@ impl UiBuilder {
         apply_svg(&mut self.tree, id, attributes);
         apply_route(&mut self.tree, id, attributes);
         apply_tick(&mut self.tree, id, attributes);
+        apply_pointer(&mut self.tree, id, attributes);
+        apply_input(&mut self.tree, id, attributes);
+        apply_preview(&mut self.tree, id, attributes);
         apply_target(&mut self.tree, id, attributes);
         apply_reference(&mut self.tree, id, attributes);
         apply_js_handler(&mut self.tree, id, attributes);
@@ -336,6 +339,9 @@ impl UiBuilder {
         apply_svg(&mut self.tree, id, attributes);
         apply_route(&mut self.tree, id, attributes);
         apply_tick(&mut self.tree, id, attributes);
+        apply_pointer(&mut self.tree, id, attributes);
+        apply_input(&mut self.tree, id, attributes);
+        apply_preview(&mut self.tree, id, attributes);
         apply_target(&mut self.tree, id, attributes);
         apply_reference(&mut self.tree, id, attributes);
         apply_js_handler(&mut self.tree, id, attributes);

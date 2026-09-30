@@ -1,0 +1,15 @@
+// The whole site is one Tint program: each page is a `ui fn`, and `route.*`
+// tells the browser host which one to render for which URL.
+import "./editor/editor-fns.tn";
+import "./landing/landing.tn";
+import "./tint-pong/pong.tn";
+import "./sandbox.tn";
+
+app {
+    lang::"en"
+    router::on
+    page::{ margin::0, font-family::"-apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif" }
+    route.Landing::{ path::"/", title::"Tint" }
+    route.PongGame::{ path::"/pong", title::"Tint Pong" }
+    route.Sandbox::{ path::"/sandbox", title::"Tint Sandbox" }
+}

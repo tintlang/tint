@@ -2,66 +2,18 @@
 impl DomSession {
     #[wasm_bindgen(constructor)]
     pub fn new(source: &str, ui_fn_name: &str, container_id: &str) -> DomSession {
-        match InnerSession::new(source, ui_fn_name) {
-            Ok(session) => {
-                let shared = Rc::new(Shared {
-                    session: RefCell::new(session),
-                    container_id: container_id.to_string(),
-                    resize_timeout: Cell::new(None),
-                    frame_handler: RefCell::new(None),
-                    raf_active: Cell::new(false),
-                    key_down_handler: RefCell::new(None),
-                    key_up_handler: RefCell::new(None),
-                    key_down_bound: Cell::new(false),
-                    key_up_bound: Cell::new(false),
-                    last_frame_time: Cell::new(None),
-                    timers: RefCell::new(Vec::new()),
-                    retained: RefCell::new(None),
-                });
-                bind_resize_listener(&shared);
-                DomSession {
-                    shared: Some(shared),
-                    init_error: None,
-                }
-            }
-            Err(e) => DomSession {
-                shared: None,
-                init_error: Some(e),
-            },
-        }
+        Self::from_inner(
+            InnerSession::new_with_storage(source, ui_fn_name, load_browser_storage()),
+            container_id,
+            false,
+        )
     }
 
     /// Creates a session from a versioned Tint bytecode blob. The browser
     /// host can choose source mode for development and this mode for release
     /// artifacts without changing the DOM/session API.
     pub fn from_bytecode(bytes: &[u8], ui_fn_name: &str, container_id: &str) -> DomSession {
-        match InnerSession::from_bytecode(bytes, ui_fn_name) {
-            Ok(session) => {
-                let shared = Rc::new(Shared {
-                    session: RefCell::new(session),
-                    container_id: container_id.to_string(),
-                    resize_timeout: Cell::new(None),
-                    frame_handler: RefCell::new(None),
-                    raf_active: Cell::new(false),
-                    key_down_handler: RefCell::new(None),
-                    key_up_handler: RefCell::new(None),
-                    key_down_bound: Cell::new(false),
-                    key_up_bound: Cell::new(false),
-                    last_frame_time: Cell::new(None),
-                    timers: RefCell::new(Vec::new()),
-                    retained: RefCell::new(None),
-                });
-                bind_resize_listener(&shared);
-                DomSession {
-                    shared: Some(shared),
-                    init_error: None,
-                }
-            }
-            Err(e) => DomSession {
-                shared: None,
-                init_error: Some(e),
-            },
-        }
+        Self::from_inner(InnerSession::from_bytecode(bytes, ui_fn_name), container_id, false)
     }
 
     /// Re-renders the session's current tree into the container,
@@ -253,4 +205,57 @@ struct HttpRequestJson {
     id: u64,
     method: String,
     url: String,
+}
+
+impl DomSession {
+    /// Shared constructor tail. A `nested` session (inside a `Preview`) never
+    /// touches the host page: no title/body/history, no keyboard capture.
+    fn from_inner(
+        session: Result<InnerSession, String>,
+        container_id: &str,
+        nested: bool,
+    ) -> DomSession {
+        match session {
+            Ok(session) => {
+                let shared = Rc::new(Shared {
+                    session: RefCell::new(session),
+                    container_id: container_id.to_string(),
+                    resize_timeout: Cell::new(None),
+                    frame_handler: RefCell::new(None),
+                    raf_active: Cell::new(false),
+                    key_down_handler: RefCell::new(None),
+                    key_up_handler: RefCell::new(None),
+                    key_down_bound: Cell::new(false),
+                    pointer_move_handler: RefCell::new(None),
+                    pointer_up_handler: RefCell::new(None),
+                    pointer_bound: Cell::new(false),
+                    dragging: Cell::new(false),
+                    nested,
+                    previews: RefCell::new(std::collections::HashMap::new()),
+                    preview_seq: Cell::new(0),
+                    key_up_bound: Cell::new(false),
+                    last_frame_time: Cell::new(None),
+                    timers: RefCell::new(Vec::new()),
+                    retained: RefCell::new(None),
+                });
+                bind_resize_listener(&shared);
+                if !nested {
+                    apply_app_meta(&shared);
+                    bind_navigation(&shared);
+                }
+                DomSession {
+                    shared: Some(shared),
+                    init_error: None,
+                }
+            }
+            Err(e) => DomSession {
+                shared: None,
+                init_error: Some(e),
+            },
+        }
+    }
+
+    pub(crate) fn new_nested(source: &str, ui_fn_name: &str, container_id: &str) -> DomSession {
+        Self::from_inner(InnerSession::new(source, ui_fn_name), container_id, true)
+    }
 }

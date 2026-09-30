@@ -151,6 +151,22 @@ impl Parser {
 
             TokenKind::Import => return self.parse_import(),
 
+            // `app { title::"...", lang::"..." }`: `app` is a contextual word,
+            // not a keyword, so it stays usable as an ordinary identifier.
+            TokenKind::Ident
+                if self.stream.peek().lexeme == "app"
+                    && self.stream.peek_n_kind(1) == TokenKind::LBrace =>
+            {
+                let start = self.stream.next().span;
+                self.stream.expect(TokenKind::LBrace)?;
+                let (_, modifiers) = self.parse_modifier_list_block()?;
+                let end = self.stream.expect(TokenKind::RBrace)?.span;
+                Ok(Item::App(AppDecl {
+                    modifiers,
+                    span: Span::merge(start, end),
+                }))
+            }
+
             TokenKind::Let => {
                 let start = self.stream.next().span;
                 let stmt = self.parse_let_stmt(start)?;

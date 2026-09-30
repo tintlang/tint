@@ -46,6 +46,12 @@ pub struct UiElement {
     pub on_frame: Option<String>,
     /// Handler from `tick||handler`, run every `every_ms` milliseconds.
     pub on_tick: Option<String>,
+    pub on_pointer_start: Option<String>,
+    pub on_pointer_move: Option<String>,
+    pub on_pointer_up: Option<String>,
+    pub on_input: Option<String>,
+    pub preview_entry: Option<String>,
+    pub on_submit: Option<String>,
     /// Interval from `every||ms` (used with `tick||`).
     pub every_ms: Option<f64>,
     pub asset: Option<String>,
@@ -94,6 +100,12 @@ impl UiElement {
             on_key_up: None,
             on_frame: None,
             on_tick: None,
+            on_pointer_start: None,
+            on_pointer_move: None,
+            on_pointer_up: None,
+            on_input: None,
+            preview_entry: None,
+            on_submit: None,
             every_ms: None,
             asset: None,
             key: None,
@@ -222,6 +234,33 @@ impl UiTree {
             node.on_key_down = on_key_down;
             node.on_key_up = on_key_up;
             node.on_frame = on_frame;
+        }
+    }
+
+    pub fn set_preview_entry(&mut self, id: UiNodeId, entry: Option<String>) {
+        if let Some(node) = self.nodes.get_mut(id) {
+            node.preview_entry = entry;
+        }
+    }
+
+    pub fn set_input(&mut self, id: UiNodeId, on_input: Option<String>, on_submit: Option<String>) {
+        if let Some(node) = self.nodes.get_mut(id) {
+            node.on_input = on_input;
+            node.on_submit = on_submit;
+        }
+    }
+
+    pub fn set_pointer(
+        &mut self,
+        id: UiNodeId,
+        start: Option<String>,
+        on_move: Option<String>,
+        up: Option<String>,
+    ) {
+        if let Some(node) = self.nodes.get_mut(id) {
+            node.on_pointer_start = start;
+            node.on_pointer_move = on_move;
+            node.on_pointer_up = up;
         }
     }
 

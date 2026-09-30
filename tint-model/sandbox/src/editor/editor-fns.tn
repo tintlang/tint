@@ -1,0 +1,33 @@
+// Code editor pieces shared by the landing demo and the sandbox.
+// `editor.tn` is spliced into a `ui fn` that has `state code` and `theme`.
+
+fn on_code_edit(text) {
+    code = text
+    if route_path == "/sandbox" { storage_set("sandbox-code", text) }
+}
+
+fn hl_style(cls) {
+    if cls == "comment" { return "italic" }
+    return "normal"
+}
+
+// Token colors, matching the sandbox's dark and light palettes.
+fn hl_color(cls, theme) {
+    if theme == "light" {
+        if cls == "keyword" || cls == "opkw" { return "#6c5ce7" }
+        if cls == "string" { return "#218739" }
+        if cls == "number" || cls == "atom" { return "#b45309" }
+        if cls == "type" || cls == "fn" { return "#1769aa" }
+        if cls == "comment" || cls == "op" || cls == "punct" { return "#777777" }
+        if cls == "gutter" { return "#9a9a9a" }
+        return "#353535"
+    }
+    if cls == "keyword" || cls == "opkw" { return "#a29bfe" }
+    if cls == "string" { return "#8fd19e" }
+    if cls == "number" || cls == "atom" { return "#f5a623" }
+    if cls == "type" || cls == "fn" { return "#7db8ff" }
+    if cls == "comment" { return "#7a7a7a" }
+    if cls == "op" || cls == "punct" { return "#9a9a9a" }
+    if cls == "gutter" { return "#6a6a6a" }
+    return "#d0d0d0"
+}

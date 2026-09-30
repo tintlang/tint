@@ -154,8 +154,8 @@ modules and preserves the same source/entry contract for development and HMR.
   (relative paths, grouped-with-`as`-in-one-statement ergonomics beyond
   what's already supported, a real external-package concept) remains
   future work.
-- The browser sandbox is a working prototype. `npm run dev:all` watches nested
-  `.tn` imports and rebuilds Rust/WASM changes automatically.
+- The browser sandbox is a working prototype written entirely in `.tn`
+  (`tint dev sandbox/src/site.tn`); `npm run wasm` rebuilds the embedded runtime.
 - The serialized program format is versioned and functional, but its first
   payload is still a serialized Tint program rather than compact SSA bytecode.
 

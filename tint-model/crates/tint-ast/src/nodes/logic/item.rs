@@ -2,6 +2,7 @@ use crate::pattern::Pattern;
 use crate::AttributeList;
 use crate::Span;
 use crate::Stmt;
+use crate::UiModifier;
 use crate::UiNode;
 
 use super::{expr::Expr, stmt::Block, types::Type};
@@ -16,6 +17,14 @@ pub struct UseDecl {
     /// `use a::*;` -- `path` names a MODULE (not `module::item`); every
     /// exported item in it is imported under its own bare name.
     pub wildcard: bool,
+    pub span: Span,
+}
+
+/// `app { title::"Tint Pong", lang::"en" }` -- page metadata declared in the
+/// program itself, so no hand-written HTML `<head>` is needed.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AppDecl {
+    pub modifiers: Vec<UiModifier>,
     pub span: Span,
 }
 
@@ -98,6 +107,7 @@ pub enum Item {
     Mod(ModDecl),
     Use(UseDecl),
     Import(ImportDecl),
+    App(AppDecl),
     GlobalLet(Stmt),
     Impl(ImplBlock),
     TypeAlias(TypeAliasDecl),

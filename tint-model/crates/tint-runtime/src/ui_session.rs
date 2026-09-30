@@ -28,12 +28,18 @@ use crate::vm::{HttpRequest, TintVM};
 /// can flip an `if{ viewport_width < 640 } { ... }` branch.
 pub const VIEWPORT_WIDTH_VAR: &str = "viewport_width";
 
+/// Name of the variable holding the current URL path (`"/"`, `"/pong"`, ...).
+/// The host keeps it current with `set_route_path` on load and on every
+/// navigation, so `if{route_path == "/pong"}` picks the page to render.
+pub const ROUTE_PATH_VAR: &str = "route_path";
+
 pub struct UiSession {
     vm: TintVM,
     ui_fn_name: String,
     /// Reuse unchanged subtrees between renders (default). Turning it off
     /// rebuilds everything every time; results are identical either way.
     reuse: bool,
+    app_meta: tint_ast::AppMeta,
 }
 
 impl UiSession {
@@ -42,11 +48,21 @@ impl UiSession {
     /// session's persistent scope. Fails if the source doesn't parse or
     /// no `ui fn` named `ui_fn_name` exists in it.
     pub fn new(source: &str, ui_fn_name: &str) -> Result<Self, String> {
+        Self::new_with_storage(source, ui_fn_name, HashMap::new())
+    }
+
+    /// Like `new`, with host storage loaded before any `state` initializer
+    /// runs, so `state code = storage_get_or("code", "")` sees saved values.
+    pub fn new_with_storage(
+        source: &str,
+        ui_fn_name: &str,
+        storage: HashMap<String, String>,
+    ) -> Result<Self, String> {
         let tokens = collect_tokens(&mut Lexer::new(source));
         let mut parser = Parser::new(tokens);
         let program = parser.parse_program().map_err(|e| format!("{:?}", e))?;
 
-        Self::from_program(program, ui_fn_name)
+        Self::from_program_with_storage(program, ui_fn_name, storage)
     }
 
     /// Builds a session from a serialized Tint program. This uses the same
@@ -61,6 +77,14 @@ impl UiSession {
     /// build tools and the WASM bytecode host share exactly one initialization
     /// path.
     pub fn from_program(program: Program, ui_fn_name: &str) -> Result<Self, String> {
+        Self::from_program_with_storage(program, ui_fn_name, HashMap::new())
+    }
+
+    pub fn from_program_with_storage(
+        program: Program,
+        ui_fn_name: &str,
+        storage: HashMap<String, String>,
+    ) -> Result<Self, String> {
         let semantic_errors = SemanticChecker::new(CheckerContext::default()).check(&program);
         if !semantic_errors.is_empty() {
             return Err(format!("semantic errors: {:?}", semantic_errors));
@@ -74,8 +98,10 @@ impl UiSession {
             return Err(format!("Unknown ui fn '{}'", ui_fn_name));
         }
 
+        let app_meta = program.app_meta();
         let outcome = catch_unwind(AssertUnwindSafe(|| {
             let mut vm = TintVM::new();
+            vm.hydrate_storage(storage);
             vm.run_program(&program);
 
             // `run_program` may already have auto-mounted this same
@@ -95,6 +121,9 @@ impl UiSession {
             }
 
             vm.define_var(VIEWPORT_WIDTH_VAR, EvalValue::Number(1440.0));
+            if matches!(vm.load_var(ROUTE_PATH_VAR, Span::dummy()), EvalValue::Unit) {
+                vm.define_var(ROUTE_PATH_VAR, EvalValue::String("/".to_string()));
+            }
             // `theme::dark { ... }` / `theme::light { ... }` selects from
             // this ordinary state value. Applications can change it from a
             // click handler just like any other state variable.
@@ -110,6 +139,7 @@ impl UiSession {
                 vm,
                 ui_fn_name: ui_fn_name.to_string(),
                 reuse: true,
+                app_meta,
             }),
             Err(panic) => Err(panic_message(panic)),
         }
@@ -124,6 +154,63 @@ impl UiSession {
     pub fn set_viewport_width(&mut self, width: f64) {
         self.vm
             .define_var(VIEWPORT_WIDTH_VAR, EvalValue::Number(width));
+    }
+
+    /// Updates `route_path` (see `ROUTE_PATH_VAR`); takes effect on the next
+    /// `render()`/`dispatch()`.
+    pub fn set_route_path(&mut self, path: &str) {
+        self.vm
+            .define_var(ROUTE_PATH_VAR, EvalValue::String(path.to_string()));
+    }
+
+    /// Page metadata from the program's `app { ... }` declaration.
+    pub fn app_meta(&self) -> &tint_ast::AppMeta {
+        &self.app_meta
+    }
+
+    /// CSS for the host `<body>` from `app { page::{ ... } }`.
+    pub fn page_style(&self) -> Vec<(String, String)> {
+        crate::ui::style::resolve_page_style(&self.app_meta.page)
+    }
+
+    /// The route declared for `path` (`app { route.Ui::"/path" }`), if any.
+    pub fn route_for_path(&self, path: &str) -> Option<&tint_ast::RouteDecl> {
+        self.app_meta.routes.iter().find(|route| route.path == path)
+    }
+
+    pub fn ui_fn_name(&self) -> &str {
+        &self.ui_fn_name
+    }
+
+    /// Makes `name` the rendered root `ui fn`, initializing its `state`.
+    /// A `theme` already set by the previous page is kept, so switching pages
+    /// doesn't flip dark/light.
+    pub fn switch_ui_fn(&mut self, name: &str) -> Result<(), String> {
+        if name == self.ui_fn_name {
+            return Ok(());
+        }
+        let vm = &mut self.vm;
+        let Some(function) = vm.ui_functions.get(name) else {
+            return Err(format!("Unknown ui fn '{}'", name));
+        };
+        let decls = function.state.clone();
+        let outcome = catch_unwind(AssertUnwindSafe(|| {
+            for decl in &decls {
+                if decl.name == "theme" {
+                    continue;
+                }
+                let value = vm.eval_expr(&decl.init);
+                vm.define_var(&decl.name, value);
+            }
+        }));
+        outcome.map_err(panic_message)?;
+        self.ui_fn_name = name.to_string();
+        Ok(())
+    }
+
+    /// `@font-face`/`@keyframes` rules declared in `app { }`.
+    pub fn app_css(&self) -> String {
+        crate::ui::style::app_at_rules(&self.app_meta)
     }
 
     /// Enables or disables subtree reuse between renders.

@@ -42,6 +42,17 @@ fn push_length_or_raw(out: &mut StyleList, prop: &str, value: &UiModifierValue) 
     }
 }
 
+// `flex::1`, `aspect-ratio::1.5` (a number) or `aspect-ratio::"16 / 9"` (a string).
+fn push_number_or_raw(out: &mut StyleList, prop: &str, value: &UiModifierValue) {
+    match value {
+        UiModifierValue::Number(n) => out.push((prop.to_string(), trim_num(*n))),
+        UiModifierValue::String(s) | UiModifierValue::Ident(s) => {
+            out.push((prop.to_string(), s.clone()))
+        }
+        _ => {}
+    }
+}
+
 fn push_raw(out: &mut StyleList, prop: &str, value: &UiModifierValue) {
     if let UiModifierValue::Number(n) = value {
         out.push((prop.to_string(), trim_num(*n)));

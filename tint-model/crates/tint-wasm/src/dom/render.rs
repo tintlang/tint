@@ -34,10 +34,20 @@ fn build_node(
         el.set_attribute("data-tint-js", handler)?;
     }
 
-    if let Some(svg) = &node.svg {
+    if node.tag == "Preview" {
+        set_preview_attributes(&el, node)?;
+    } else if let Some(svg) = &node.svg {
         el.set_inner_html(svg);
     } else if let Some(text) = &node.text {
-        el.set_text_content(Some(text));
+        if let Some(area) = el.dyn_ref::<web_sys::HtmlTextAreaElement>() {
+            area.set_value(text);
+            let _ = el.set_attribute("spellcheck", "false");
+            let _ = el.set_attribute("autocapitalize", "off");
+            let _ = el.set_attribute("autocomplete", "off");
+            let _ = el.set_attribute("wrap", "off");
+        } else {
+            el.set_text_content(Some(text));
+        }
     }
 
     // Base = UA reset (buttons only) + whatever the language actually
@@ -58,7 +68,7 @@ fn build_node(
     // Layer the current viewport's breakpoint style (if the node has
     // one) on top of the base style -- last-write-wins per property,
     // same as a CSS media query overriding a base rule.
-    if let Some((_, bp_style)) = node.breakpoints.iter().find(|(name, _)| name == breakpoint) {
+    for bp_style in matching_breakpoints(node, breakpoint) {
         base_props.extend(bp_style.iter().cloned());
     }
 
@@ -121,6 +131,12 @@ fn build_node(
     }
     if let Some(handler) = node.on_hover_leave.clone() {
         bind_dispatch(&el, "mouseleave", handler, shared, None);
+    }
+    if let Some(handler) = node.on_pointer_start.clone() {
+        bind_pointer_start(&el, handler, shared);
+    }
+    if node.tag == "TextArea" {
+        bind_text_area(&el, node.on_input.clone(), node.on_submit.clone(), shared);
     }
     if let Some(handler) = node.on_key_down.clone() {
         bind_key_dispatch("keydown", handler, shared);
@@ -200,7 +216,143 @@ fn play_sound(src: &str) {
     let _ = document;
 }
 
+/// Runs `handler(text)` against the session and re-mounts the result.
+fn dispatch_text(shared: &Rc<Shared>, handler: &str, text: String) {
+    let args = [tint_evaluator::Value::String(text)];
+    let tree = match shared.session.try_borrow_mut() {
+        Ok(mut session) => match session.dispatch_with_args(handler, &args) {
+            Ok(tree) => tree,
+            Err(e) => {
+                web_sys::console::error_1(&JsValue::from_str(&format!("tint: input handler {} failed: {}", handler, e)));
+                return;
+            }
+        },
+        Err(_) => return,
+    };
+    if let Err(e) = mount_tree(tree, shared) {
+        web_sys::console::error_1(&e);
+    }
+}
+
+/// `TextArea { input||on_edit submit||run }`: `input` gets the new text after
+/// every edit, `submit` fires on Ctrl/Cmd+Enter, and Tab inserts two spaces
+/// instead of leaving the field.
+fn bind_text_area(el: &Element, on_input: Option<String>, on_submit: Option<String>, shared: &Rc<Shared>) {
+    let Some(area) = el.dyn_ref::<web_sys::HtmlTextAreaElement>().cloned() else { return };
+    if let Some(handler) = on_input.clone() {
+        let shared = shared.clone();
+        let area = area.clone();
+        let cb = Closure::wrap(Box::new(move |_e: web_sys::Event| {
+            dispatch_text(&shared, &handler, area.value());
+        }) as Box<dyn FnMut(_)>);
+        let _ = el.add_event_listener_with_callback("input", cb.as_ref().unchecked_ref());
+        cb.forget();
+    }
+    let shared = shared.clone();
+    let key_area = area.clone();
+    let cb = Closure::wrap(Box::new(move |event: web_sys::KeyboardEvent| {
+        let key = event.key();
+        if key == "Tab" && !event.shift_key() && !event.ctrl_key() && !event.meta_key() && !event.alt_key() {
+            event.prevent_default();
+            let start = key_area.selection_start().ok().flatten().unwrap_or(0);
+            let end = key_area.selection_end().ok().flatten().unwrap_or(start);
+            let _ = key_area.set_range_text_with_start_and_end_and_mode("  ", start, end, "end");
+            if let Some(handler) = &on_input {
+                dispatch_text(&shared, handler, key_area.value());
+            }
+        } else if key == "Enter" && (event.ctrl_key() || event.meta_key()) {
+            if let Some(handler) = &on_submit {
+                event.prevent_default();
+                let tree = match shared.session.try_borrow_mut() {
+                    Ok(mut session) => session.dispatch(handler),
+                    Err(_) => return,
+                };
+                match tree {
+                    Ok(tree) => {
+                        if let Err(e) = mount_tree(tree, &shared) {
+                            web_sys::console::error_1(&e);
+                        }
+                    }
+                    Err(e) => web_sys::console::error_1(&JsValue::from_str(&format!("tint: submit failed: {}", e))),
+                }
+            }
+        }
+    }) as Box<dyn FnMut(_)>);
+    let _ = el.add_event_listener_with_callback("keydown", cb.as_ref().unchecked_ref());
+    cb.forget();
+}
+
+/// Runs `handler(x, y)` against the session and re-mounts the result.
+fn dispatch_pointer(shared: &Rc<Shared>, handler: &str, x: f64, y: f64) {
+    let args = [tint_evaluator::Value::Number(x), tint_evaluator::Value::Number(y)];
+    let tree = match shared.session.try_borrow_mut() {
+        Ok(mut session) => match session.dispatch_with_args(handler, &args) {
+            Ok(tree) => tree,
+            Err(e) => {
+                web_sys::console::error_1(&JsValue::from_str(&format!(
+                    "tint: pointer handler {} failed: {}",
+                    handler, e
+                )));
+                return;
+            }
+        },
+        Err(_) => return,
+    };
+    if let Err(e) = mount_tree(tree, shared) {
+        web_sys::console::error_1(&e);
+    }
+}
+
+/// `pointer_start||handler`: a primary-button press on `el` starts a drag.
+/// Until the pointer is released, window-level `pointer_move||` and
+/// `pointer_up||` handlers (declared anywhere in the tree) receive its
+/// position, so a drag survives leaving the element.
+fn bind_pointer_start(el: &Element, handler: String, shared: &Rc<Shared>) {
+    bind_pointer_window(shared);
+    let shared = shared.clone();
+    let cb = Closure::wrap(Box::new(move |event: web_sys::PointerEvent| {
+        if event.button() != 0 {
+            return;
+        }
+        event.prevent_default();
+        shared.dragging.set(true);
+        dispatch_pointer(&shared, &handler, event.client_x() as f64, event.client_y() as f64);
+    }) as Box<dyn FnMut(_)>);
+    let _ = el.add_event_listener_with_callback("pointerdown", cb.as_ref().unchecked_ref());
+    cb.forget();
+}
+
+fn bind_pointer_window(shared: &Rc<Shared>) {
+    if shared.pointer_bound.replace(true) {
+        return;
+    }
+    let Some(window) = web_sys::window() else { return };
+    for event_name in ["pointermove", "pointerup", "pointercancel"] {
+        let shared = shared.clone();
+        let is_move = event_name == "pointermove";
+        let cb = Closure::wrap(Box::new(move |event: web_sys::PointerEvent| {
+            if !shared.dragging.get() {
+                return;
+            }
+            let handler = if is_move {
+                shared.pointer_move_handler.borrow().clone()
+            } else {
+                shared.dragging.set(false);
+                shared.pointer_up_handler.borrow().clone()
+            };
+            if let Some(handler) = handler {
+                dispatch_pointer(&shared, &handler, event.client_x() as f64, event.client_y() as f64);
+            }
+        }) as Box<dyn FnMut(_)>);
+        let _ = window.add_event_listener_with_callback(event_name, cb.as_ref().unchecked_ref());
+        cb.forget();
+    }
+}
+
 fn bind_key_dispatch(event_name: &'static str, handler: String, shared: &Rc<Shared>) {
+    if shared.nested {
+        return;
+    }
     let (handler_slot, already_bound) = match event_name {
         "keydown" => {
             shared.key_down_handler.replace(Some(handler));

@@ -37,10 +37,43 @@ fn current_viewport_width() -> f64 {
         .unwrap_or(1440.0)
 }
 
-/// Maps the live viewport width to a breakpoint name via
-/// `breakpoint_for_width`.
-fn current_breakpoint() -> String {
-    breakpoint_for_width(current_viewport_width()).to_string()
+/// Every breakpoint that applies right now, space-separated: the named screen
+/// size plus each `max-N` / `min-N` threshold the tree uses that currently
+/// holds. Doubles as the rebuild key -- when this string changes the tree is
+/// rebuilt so the new set of breakpoint styles is layered on.
+fn active_breakpoints(tree: &[Rc<UiRenderNode>]) -> String {
+    fn thresholds(nodes: &[Rc<UiRenderNode>], out: &mut Vec<String>) {
+        for node in nodes {
+            for (name, _) in &node.breakpoints {
+                if breakpoint_threshold(name).is_some() && !out.contains(name) {
+                    out.push(name.clone());
+                }
+            }
+            thresholds(&node.children, out);
+        }
+    }
+
+    let width = current_viewport_width();
+    let mut used = Vec::new();
+    thresholds(tree, &mut used);
+    let mut active = vec![breakpoint_for_width(width).to_string()];
+    active.extend(used.into_iter().filter(|name| match breakpoint_threshold(name) {
+        Some((true, at)) => width >= f64::from(at),
+        Some((false, at)) => width <= f64::from(at),
+        None => false,
+    }));
+    active.join(" ")
+}
+
+/// The node's breakpoint styles that apply under `active`, in source order.
+fn matching_breakpoints<'a>(
+    node: &'a UiRenderNode,
+    active: &'a str,
+) -> impl Iterator<Item = &'a Vec<(String, String)>> {
+    node.breakpoints
+        .iter()
+        .filter(move |(name, _)| active.split(' ').any(|a| a == name))
+        .map(|(_, style)| style)
 }
 
 /// Pushes the current viewport width into the session's
@@ -52,8 +85,166 @@ fn current_breakpoint() -> String {
 /// breakpoint applied to the very same tree always agree on one width.
 fn sync_viewport_width(shared: &Rc<Shared>) {
     let width = current_viewport_width();
+    let route = current_route_path();
     if let Ok(mut session) = shared.session.try_borrow_mut() {
         session.set_viewport_width(width);
+        // The URL is the single source of truth for `route_path`, read on
+        // every render, so back/forward and manual URL edits just work.
+        session.set_route_path(&route);
+        // `app { route.Ui::"/path" }`: the URL decides which `ui fn` renders.
+        let target = session
+            .route_for_path(&route)
+            .map(|declared| (declared.ui_fn.clone(), declared.title.clone()));
+        if let Some((ui_fn, title)) = target {
+            if session.switch_ui_fn(&ui_fn).is_err() {
+                web_sys::console::error_1(&JsValue::from_str(&format!("tint: route ui fn '{}' not found", ui_fn)));
+            }
+            if let (Some(title), Ok(document)) = (title, document()) {
+                document.set_title(&title);
+            }
+        }
+    }
+}
+
+fn is_file_protocol(location: &web_sys::Location) -> bool {
+    location.protocol().ok().as_deref() == Some("file:")
+}
+
+/// The app's current path: `location.pathname`, or the part after `#` when
+/// opened from disk (`file://` pages can't use the history API).
+fn current_route_path() -> String {
+    let Some(window) = web_sys::window() else {
+        return "/".to_string();
+    };
+    let location = window.location();
+    let path = if is_file_protocol(&location) {
+        location.hash().unwrap_or_default().trim_start_matches('#').to_string()
+    } else {
+        location.pathname().unwrap_or_default()
+    };
+    if path.starts_with('/') {
+        path
+    } else {
+        "/".to_string()
+    }
+}
+
+fn rerender_now(shared: &Rc<Shared>) {
+    sync_viewport_width(shared);
+    let tree = match shared.session.try_borrow_mut() {
+        Ok(mut session) => match session.render() {
+            Ok(tree) => tree,
+            Err(e) => {
+                web_sys::console::error_1(&JsValue::from_str(&format!("tint: re-render failed: {}", e)));
+                return;
+            }
+        },
+        Err(_) => return,
+    };
+    if let Err(e) = mount_tree(tree, shared) {
+        web_sys::console::error_1(&e);
+    }
+}
+
+/// Applies the program's `app { title, lang }` to the host page.
+fn apply_app_meta(shared: &Rc<Shared>) {
+    let Ok(document) = document() else { return };
+    let meta = shared.session.borrow().app_meta().clone();
+    if let Some(title) = &meta.title {
+        document.set_title(title);
+    }
+    if let (Some(lang), Some(root)) = (&meta.lang, document.document_element()) {
+        let _ = root.set_attribute("lang", lang);
+    }
+    let css = shared.session.borrow().app_css();
+    if !css.is_empty() {
+        // One `<style>` for `@font-face`/`@keyframes`; rewritten if it exists.
+        let existing = document.get_element_by_id("tint-app-css");
+        let element = match existing {
+            Some(element) => Some(element),
+            None => document.create_element("style").ok().inspect(|element| {
+                element.set_id("tint-app-css");
+                if let Ok(Some(head)) = document.query_selector("head") {
+                    let _ = head.append_child(element);
+                }
+            }),
+        };
+        if let Some(element) = element {
+            element.set_text_content(Some(&css));
+        }
+    }
+    if let Some(body) = document.body() {
+        let style = body.style();
+        for (property, value) in shared.session.borrow().page_style() {
+            let _ = style.set_property(&property, &value);
+        }
+    }
+}
+
+/// With `app { router::on }`: internal links (`route||"/x"`) navigate through
+/// the history API (or `#/x` on `file://`) and re-render instead of loading a
+/// page; back/forward re-render too. Leaks its listeners like the rest of
+/// this module -- one set per session.
+fn bind_navigation(shared: &Rc<Shared>) {
+    if !shared.session.borrow().app_meta().router {
+        return;
+    }
+    let Some(window) = web_sys::window() else { return };
+    let Some(doc) = window.document() else { return };
+
+    let on_click = {
+        let shared = shared.clone();
+        Closure::wrap(Box::new(move |event: web_sys::Event| {
+            let Some(mouse) = event.dyn_ref::<web_sys::MouseEvent>() else { return };
+            if event.default_prevented()
+                || mouse.button() != 0
+                || mouse.meta_key()
+                || mouse.ctrl_key()
+                || mouse.shift_key()
+                || mouse.alt_key()
+            {
+                return;
+            }
+            let Some(target) = event.target().and_then(|t| t.dyn_into::<Element>().ok()) else {
+                return;
+            };
+            let Ok(Some(link)) = target.closest("a[data-tag][href]") else { return };
+            let Ok(page) = document() else { return };
+            let Some(container) = page.get_element_by_id(&shared.container_id) else { return };
+            if !container.contains(Some(&link)) {
+                return;
+            }
+            let Some(href) = link.get_attribute("href") else { return };
+            if !href.starts_with('/') || href.starts_with("//") {
+                return;
+            }
+            if link.get_attribute("target").is_some_and(|t| t != "_self") {
+                return;
+            }
+            event.prevent_default();
+            navigate_to(&href);
+            rerender_now(&shared);
+        }) as Box<dyn FnMut(_)>)
+    };
+    let _ = doc.add_event_listener_with_callback("click", on_click.as_ref().unchecked_ref());
+    on_click.forget();
+
+    for name in ["popstate", "hashchange"] {
+        let shared = shared.clone();
+        let cb = Closure::wrap(Box::new(move |_e: web_sys::Event| rerender_now(&shared)) as Box<dyn FnMut(_)>);
+        let _ = window.add_event_listener_with_callback(name, cb.as_ref().unchecked_ref());
+        cb.forget();
+    }
+}
+
+fn navigate_to(href: &str) {
+    let Some(window) = web_sys::window() else { return };
+    let location = window.location();
+    if is_file_protocol(&location) {
+        let _ = location.set_hash(href);
+    } else if let Ok(history) = window.history() {
+        let _ = history.push_state_with_url(&JsValue::NULL, "", Some(href));
+        window.scroll_to_with_x_and_y(0.0, 0.0);
     }
 }
 
@@ -118,11 +309,38 @@ fn bind_resize_listener(shared: &Rc<Shared>) {
     resize_cb.forget();
 }
 
+/// Tint's built-in reset, injected once per document so apps need no CSS file
+/// for it. Wrapped in `:where(...)` (specificity 0) so any app stylesheet still
+/// wins, and scoped to Tint's own nodes (`[data-tag]`) so embedding Tint in a
+/// larger page never restyles the host page.
+const BASE_CSS: &str = concat!(
+    ":where([data-tag]){box-sizing:border-box}",
+    ":where(a[data-tag]){color:inherit;text-decoration:none}",
+    ":where(textarea[data-tag]){appearance:none;border:0;margin:0;padding:0;background:transparent;color:inherit;font:inherit;resize:none;outline:none;overflow:hidden}",
+    ":where(button[data-tag]){-webkit-tap-highlight-color:transparent;appearance:none;border:0;margin:0;font:inherit;color:inherit;text-align:inherit}",
+);
+
+fn ensure_base_styles(document: &Document) -> Result<(), JsValue> {
+    if document.get_element_by_id("tint-base-style").is_some() {
+        return Ok(());
+    }
+    let Some(head) = document.query_selector("head")? else {
+        return Ok(());
+    };
+    let style = document.create_element("style")?;
+    style.set_id("tint-base-style");
+    style.set_text_content(Some(BASE_CSS));
+    // First child: any stylesheet the app adds later comes after and wins.
+    head.insert_before(&style, head.first_child().as_ref())?;
+    Ok(())
+}
+
 /// Clears `shared.container_id`'s children and rebuilds them from
 /// `tree`. Whole-subtree teardown/rebuild, not a diff -- see this
 /// module's doc comment.
 fn mount_tree(tree: Vec<Rc<UiRenderNode>>, shared: &Rc<Shared>) -> Result<(), JsValue> {
     let document = document()?;
+    ensure_base_styles(&document)?;
     let container = document
         .get_element_by_id(&shared.container_id)
         .ok_or_else(|| JsValue::from_str("container element not found"))?;
@@ -131,7 +349,7 @@ fn mount_tree(tree: Vec<Rc<UiRenderNode>>, shared: &Rc<Shared>) -> Result<(), Js
     // tree is consistent even if the resolution race between reading
     // innerWidth and finishing the rebuild -- not realistic, but cheap
     // to make free.
-    let breakpoint = current_breakpoint();
+    let breakpoint = active_breakpoints(&tree);
 
     // Build the whole new subtree off-DOM first, into a fragment nothing
     // renders, instead of clearing the live container and then building
@@ -163,6 +381,12 @@ fn mount_tree(tree: Vec<Rc<UiRenderNode>>, shared: &Rc<Shared>) -> Result<(), Js
     // that appears/changes/disappears on a later render is picked up
     // without the host needing to do anything -- this is what replaces
     // pong.js's/pacman.js's hand-rolled `window.setInterval(..., tick)`.
+    sync_previews(shared);
+    save_browser_storage(shared);
+    *shared.key_down_handler.borrow_mut() = find_node_handler(&tree, &|n| n.on_key_down.clone());
+    *shared.key_up_handler.borrow_mut() = find_node_handler(&tree, &|n| n.on_key_up.clone());
+    *shared.pointer_move_handler.borrow_mut() = find_node_handler(&tree, &|n| n.on_pointer_move.clone());
+    *shared.pointer_up_handler.borrow_mut() = find_node_handler(&tree, &|n| n.on_pointer_up.clone());
     *shared.frame_handler.borrow_mut() = find_frame_handler(&tree);
     // Bound to a local first (not `if shared.frame_handler.borrow().is_some() { .. }`)
     // so the `Ref` guard drops here, before `start_frame_loop` runs --
@@ -283,6 +507,18 @@ fn run_tick(shared: &Rc<Shared>, handler: &str) {
 /// node (see docs/guide/events.md's `GameRoot` example), so "first found"
 /// is enough -- this isn't trying to support multiple independent frame
 /// loops in one tree.
+fn find_node_handler(
+    nodes: &[Rc<UiRenderNode>],
+    pick: &dyn Fn(&UiRenderNode) -> Option<String>,
+) -> Option<String> {
+    for node in nodes {
+        if let Some(handler) = pick(node).or_else(|| find_node_handler(&node.children, pick)) {
+            return Some(handler);
+        }
+    }
+    None
+}
+
 fn find_frame_handler(nodes: &[Rc<UiRenderNode>]) -> Option<String> {
     for node in nodes {
         if node.on_frame.is_some() {
@@ -414,10 +650,132 @@ struct Retained {
 }
 
 /// The HTML tag `build_node` picks for a render node.
+/// `Preview { entry||"App" "<source>" }`: the source and entry go on the
+/// element; `sync_previews` (after each mount) runs them in a nested session.
+fn set_preview_attributes(el: &Element, node: &UiRenderNode) -> Result<(), JsValue> {
+    el.set_attribute("data-tint-preview-source", node.text.as_deref().unwrap_or(""))?;
+    el.set_attribute("data-tint-preview-entry", node.preview_entry.as_deref().unwrap_or("App"))?;
+    Ok(())
+}
+
+/// `storage_set` values live in `localStorage` under this prefix, so a program
+/// keeps them across reloads without any host code.
+const STORAGE_PREFIX: &str = "tint:";
+
+fn browser_storage() -> Option<web_sys::Storage> {
+    web_sys::window()?.local_storage().ok().flatten()
+}
+
+fn load_browser_storage() -> std::collections::HashMap<String, String> {
+    let mut values = std::collections::HashMap::new();
+    let Some(storage) = browser_storage() else { return values };
+    for index in 0..storage.length().unwrap_or(0) {
+        let Ok(Some(key)) = storage.key(index) else { continue };
+        let Some(name) = key.strip_prefix(STORAGE_PREFIX) else { continue };
+        if let Ok(Some(value)) = storage.get_item(&key) {
+            values.insert(name.to_string(), value);
+        }
+    }
+    values
+}
+
+/// Writes changed `storage_set` values back to `localStorage` after a render.
+fn save_browser_storage(shared: &Rc<Shared>) {
+    if shared.nested {
+        return;
+    }
+    let Some(storage) = browser_storage() else { return };
+    let snapshot = shared.session.borrow().storage_snapshot();
+    for (name, value) in snapshot {
+        let key = format!("{STORAGE_PREFIX}{name}");
+        if storage.get_item(&key).ok().flatten().as_deref() != Some(value.as_str()) {
+            let _ = storage.set_item(&key, &value);
+        }
+    }
+}
+
+fn show_preview_error(el: &Element, message: &str) {
+    el.set_text_content(Some(message));
+    let _ = el.set_attribute(
+        "style",
+        "padding:16px;color:#ff8a80;white-space:pre-wrap;font:12px ui-monospace,Menlo,Consolas,monospace",
+    );
+}
+
+/// Starts, reloads or stops the nested sessions of every `Preview` in the
+/// container so each shows exactly its current source.
+fn sync_previews(shared: &Rc<Shared>) {
+    let Ok(document) = document() else { return };
+    let Some(container) = document.get_element_by_id(&shared.container_id) else { return };
+    let Ok(found) = container.query_selector_all("[data-tag=\"Preview\"]") else { return };
+    let mut alive = std::collections::HashSet::new();
+    for index in 0..found.length() {
+        let Some(el) = found.item(index).and_then(|n| n.dyn_into::<Element>().ok()) else { continue };
+        let source = el.get_attribute("data-tint-preview-source").unwrap_or_default();
+        let entry = el.get_attribute("data-tint-preview-entry").unwrap_or_else(|| "App".to_string());
+        let mut id = el.id();
+        if id.is_empty() {
+            let n = shared.preview_seq.get() + 1;
+            shared.preview_seq.set(n);
+            id = format!("tint-preview-{}-{}", shared.container_id, n);
+            el.set_id(&id);
+        }
+        alive.insert(id.clone());
+        let mut slots = shared.previews.borrow_mut();
+        let unchanged = slots.get(&id).is_some_and(|s| s.source == source && s.entry == entry);
+        if unchanged {
+            continue;
+        }
+        let healthy = slots.get_mut(&id).and_then(|s| s.session.as_mut());
+        let session = match healthy {
+            Some(session) => match session.reload(&source, &entry) {
+                None => Some(None),
+                Some(error) => {
+                    show_preview_error(&el, &error);
+                    Some(Some(error))
+                }
+            },
+            None => None,
+        };
+        let (kept, failed) = match session {
+            Some(None) => (true, false),
+            Some(Some(_)) => (false, true),
+            None => (false, false),
+        };
+        if kept {
+            if let Some(slot) = slots.get_mut(&id) {
+                slot.source = source;
+                slot.entry = entry;
+            }
+            continue;
+        }
+        if failed {
+            slots.insert(id, PreviewSlot { source, entry, session: None });
+            continue;
+        }
+        // No healthy session yet: start one on a clean element.
+        el.set_text_content(None);
+        let _ = el.remove_attribute("style");
+        let mut fresh = DomSession::new_nested(&source, &entry, &id);
+        match fresh.rerender() {
+            None => {
+                slots.insert(id, PreviewSlot { source, entry, session: Some(fresh) });
+            }
+            Some(error) => {
+                show_preview_error(&el, &error);
+                slots.insert(id, PreviewSlot { source, entry, session: None });
+            }
+        }
+    }
+    shared.previews.borrow_mut().retain(|id, _| alive.contains(id));
+}
+
 fn dom_tag_name(node: &UiRenderNode) -> &'static str {
     let is_link = node.route.is_some();
     if is_link {
         "a"
+    } else if node.tag == "TextArea" {
+        "textarea"
     } else if node.tag == "Inline" || node.tag == "Text" {
         "span"
     } else if node.asset.is_some() && node.tag == "Image" {
@@ -580,13 +938,23 @@ fn patch_node(
     }
 
     let old_had_leaf = old.svg.is_some() || old.text.is_some();
-    if let Some(svg) = &new.svg {
+    if new.tag == "Preview" {
+        // The element's children belong to the nested session.
+        set_preview_attributes(&el, new)?;
+        m.children.clear();
+    } else if let Some(svg) = &new.svg {
         if old.svg.as_ref() != Some(svg) {
             el.set_inner_html(svg);
         }
         m.children.clear();
     } else if let Some(text) = &new.text {
-        if old.text.as_ref() != Some(text) || old.svg.is_some() || !m.children.is_empty() {
+        if let Some(area) = el.dyn_ref::<web_sys::HtmlTextAreaElement>() {
+            // Typing already put this text in the field; rewriting it would
+            // move the caret. Only write when the program changed it.
+            if area.value() != *text {
+                area.set_value(text);
+            }
+        } else if old.text.as_ref() != Some(text) || old.svg.is_some() || !m.children.is_empty() {
             el.set_text_content(Some(text));
         }
         m.children.clear();
@@ -622,7 +990,7 @@ fn patch_node(
             props.extend(BUTTON_RESET.iter().map(|(k, v)| (k.to_string(), v.to_string())));
         }
         props.extend(new.style.iter().cloned());
-        if let Some((_, styles)) = new.breakpoints.iter().find(|(name, _)| name == breakpoint) {
+        for styles in matching_breakpoints(new, breakpoint) {
             props.extend(styles.iter().cloned());
         }
         if !hoverable {

@@ -149,3 +149,89 @@ ui fn App() {
             .contains(&(side.to_string(), value.to_string())));
     }
 }
+
+#[test]
+fn css_keyword_and_length_properties_resolve_without_a_stylesheet() {
+    let code = r#"
+ui fn App() {
+    Panel {
+        layout::{
+            min-height::"100dvh",
+            max-width::480,
+            inset::0,
+            flex::1,
+            aspect-ratio::"16 / 9",
+            align-self::stretch,
+            flex-wrap::wrap,
+            box-sizing::content-box,
+            cursor::pointer,
+            pointer-events::none,
+            user-select::none,
+            outline::none,
+            touch-action::none,
+            text-align::center
+        }
+    }
+}
+"#;
+
+    let ui_fn = parse_ui_fn(code, "App");
+    let mut builder = UiBuilder::new();
+    let mut vm = TintVM::new();
+    builder.build_root(&ui_fn.body, &mut vm);
+    let tree = builder.finish();
+    let panel = tree.nodes.iter().find(|n| n.tag == "Panel").expect("Panel node");
+
+    for (key, value) in [
+        ("min-height", "100dvh"),
+        ("max-width", "480px"),
+        ("inset", "0px"),
+        ("flex", "1"),
+        ("aspect-ratio", "16 / 9"),
+        ("align-self", "stretch"),
+        ("flex-wrap", "wrap"),
+        ("box-sizing", "content-box"),
+        ("cursor", "pointer"),
+        ("pointer-events", "none"),
+        ("user-select", "none"),
+        ("outline", "none"),
+        ("touch-action", "none"),
+        ("text-align", "center"),
+    ] {
+        assert!(
+            panel.style.contains(&(key.to_string(), value.to_string())),
+            "missing {key}: {value}, got {:?}",
+            panel.style
+        );
+    }
+}
+
+#[test]
+fn width_threshold_breakpoints_resolve_in_source_order_with_negative_values() {
+    let code = r#"
+ui fn App() {
+    Panel {
+        layout::{ gap::20 }
+        max-560::{ gap::12, margin.b::-72 }
+        min-800::{ gap::30 }
+        mobile::{ gap::8 }
+    }
+}
+"#;
+
+    let ui_fn = parse_ui_fn(code, "App");
+    let mut builder = UiBuilder::new();
+    let mut vm = TintVM::new();
+    builder.build_root(&ui_fn.body, &mut vm);
+    let tree = builder.finish();
+    let panel = tree.nodes.iter().find(|n| n.tag == "Panel").expect("Panel node");
+
+    let names: Vec<&str> = panel.breakpoints.iter().map(|(n, _)| n.as_str()).collect();
+    assert_eq!(names, ["max-560", "min-800", "mobile"]);
+    assert!(panel.breakpoints[0]
+        .1
+        .contains(&("margin-bottom".to_string(), "-72px".to_string())));
+    assert!(panel.breakpoints[1]
+        .1
+        .contains(&("gap".to_string(), "30px".to_string())));
+}

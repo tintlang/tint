@@ -1,3 +1,0 @@
-// Tint entry point for the landing page. The HTML shell only mounts this
-// source; the page structure and visual behavior live in Tint modules.
-import "./landing/landing.tn";

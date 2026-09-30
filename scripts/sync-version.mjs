@@ -17,11 +17,14 @@ const packageFiles = [
   "sandbox/pkg-web/package.json",
   "tint-model/crates/tint-wasm/sandbox/pkg-web/package.json",
   "tint-model/sandbox/pkg-web/package.json",
+  "tint-model/packages/tint-vite/package.json",
+  "tint-model/packages/tint-svelte/package.json",
+  "tint-model/packages/tint-react/package.json",
+  "tint-model/packages/tint-runtime/package.json",
 ];
 
 const lockFiles = [
   "vscode-tint/package-lock.json",
-  "tint-model/sandbox/package-lock.json",
 ];
 
 const cargoWorkspacePath = join(root, "tint-model/Cargo.toml");

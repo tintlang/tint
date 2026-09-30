@@ -29,7 +29,11 @@ impl IrUiSink {
     pub fn new() -> Self {
         let mut tree = UiTree::empty();
         let root = tree.create_node("Root".into());
-        IrUiSink { tree, stack: vec![root], tokens: HashMap::new() }
+        IrUiSink {
+            tree,
+            stack: vec![root],
+            tokens: HashMap::new(),
+        }
     }
 
     pub fn root(&self) -> UiNodeId {
@@ -67,7 +71,12 @@ impl UiHost for IrUiSink {
         let id = self.tree.create_styled_node_with_eval(
             template.tag.clone(),
             &template.modifiers,
-            &mut |e| by_expr.get(&(e as *const _ as usize)).cloned().unwrap_or(EvalValue::Unit),
+            &mut |e| {
+                by_expr
+                    .get(&(e as *const _ as usize))
+                    .cloned()
+                    .unwrap_or(EvalValue::Unit)
+            },
             &self.tokens,
         );
         let attributes = &template.attributes;
@@ -75,6 +84,9 @@ impl UiHost for IrUiSink {
         apply_svg(&mut self.tree, id, attributes);
         apply_route(&mut self.tree, id, attributes);
         apply_tick(&mut self.tree, id, attributes);
+        apply_pointer(&mut self.tree, id, attributes);
+        apply_input(&mut self.tree, id, attributes);
+        apply_preview(&mut self.tree, id, attributes);
         apply_target(&mut self.tree, id, attributes);
         apply_reference(&mut self.tree, id, attributes);
         apply_js_handler(&mut self.tree, id, attributes);
@@ -100,7 +112,8 @@ impl UiHost for IrUiSink {
     fn tokens(&mut self, modifiers: &[UiModifier]) {
         for modifier in modifiers {
             if modifier.path.len() == 1 {
-                self.tokens.insert(modifier.path[0].clone(), modifier.value.clone());
+                self.tokens
+                    .insert(modifier.path[0].clone(), modifier.value.clone());
             }
         }
     }

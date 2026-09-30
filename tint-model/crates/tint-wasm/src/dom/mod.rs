@@ -15,6 +15,7 @@ use wasm_bindgen::JsCast;
 use web_sys::{Document, Element};
 
 use tint_runtime::ui::render::UiRenderNode;
+use tint_runtime::ui::style::breakpoint_threshold;
 use tint_runtime::ui_session::UiSession as InnerSession;
 
 /// Shared state a click/hover closure needs: the live session (`state`
@@ -43,6 +44,18 @@ struct Shared {
     key_down_handler: RefCell<Option<String>>,
     key_up_handler: RefCell<Option<String>>,
     key_down_bound: Cell<bool>,
+    /// `pointer_move||`/`pointer_up||` handlers of the current tree, and
+    /// whether a `pointer_start||` press is in progress.
+    pointer_move_handler: RefCell<Option<String>>,
+    pointer_up_handler: RefCell<Option<String>>,
+    pointer_bound: Cell<bool>,
+    dragging: Cell<bool>,
+    /// A `Preview`'s own session: it must not touch the host page (title,
+    /// body style, history) or take over the keyboard.
+    nested: bool,
+    /// Live `Preview` sessions by element id (see `sync_previews`).
+    previews: RefCell<std::collections::HashMap<String, PreviewSlot>>,
+    preview_seq: Cell<u32>,
     key_up_bound: Cell<bool>,
     /// The rAF timestamp (ms, from `performance.now()`) the loop last ran
     /// at, used to compute the real elapsed `dt` (seconds) handed to the
@@ -54,6 +67,14 @@ struct Shared {
     timers: RefCell<Vec<TickTimer>>,
     /// The tree currently on screen and its DOM elements (see `Retained`).
     retained: RefCell<Option<Retained>>,
+}
+
+/// One `Preview` node: the source it shows and, while that source runs, its
+/// session. `session` is `None` after an error (the element shows the message).
+struct PreviewSlot {
+    source: String,
+    entry: String,
+    session: Option<DomSession>,
 }
 
 /// One `setInterval` started for a `tick||handler` / `every||ms` pair.

@@ -35,6 +35,12 @@ pub struct UiRenderNode {
     pub on_key_up: Option<String>,
     pub on_frame: Option<String>,
     pub on_tick: Option<String>,
+    pub on_pointer_start: Option<String>,
+    pub on_pointer_move: Option<String>,
+    pub on_pointer_up: Option<String>,
+    pub on_input: Option<String>,
+    pub preview_entry: Option<String>,
+    pub on_submit: Option<String>,
     pub every_ms: Option<f64>,
     pub asset: Option<String>,
     pub key: Option<String>,
@@ -65,6 +71,12 @@ impl PartialEq for UiRenderNode {
             && self.on_key_up == other.on_key_up
             && self.on_frame == other.on_frame
             && self.on_tick == other.on_tick
+            && self.on_pointer_start == other.on_pointer_start
+            && self.on_pointer_move == other.on_pointer_move
+            && self.on_pointer_up == other.on_pointer_up
+            && self.on_input == other.on_input
+            && self.preview_entry == other.preview_entry
+            && self.on_submit == other.on_submit
             && self.every_ms == other.every_ms
             && self.asset == other.asset
             && self.key == other.key
@@ -93,10 +105,23 @@ pub fn to_render_tree(tree: &UiTree, id: UiNodeId) -> UiRenderNode {
     if let Some(prebuilt) = &node.prebuilt {
         return (**prebuilt).clone();
     }
+    // `TextArea` and `Preview` carry their text as an attribute of the element
+    // (value / source), so their string children fold into `text`.
+    let folds_text = matches!(node.tag.as_str(), "TextArea" | "Preview");
+    let text = if folds_text && node.text.is_none() {
+        Some(
+            node.children
+                .iter()
+                .filter_map(|&cid| tree.nodes[cid].text.as_deref())
+                .collect::<String>(),
+        )
+    } else {
+        node.text.clone()
+    };
     UiRenderNode {
         tag: node.tag.clone(),
         tint_source: node.tint_source.clone(),
-        text: node.text.clone(),
+        text,
         style: node.style.clone(),
         hover_style: node.hover_style.clone(),
         breakpoints: node.breakpoints.clone(),
@@ -107,6 +132,12 @@ pub fn to_render_tree(tree: &UiTree, id: UiNodeId) -> UiRenderNode {
         on_key_up: node.on_key_up.clone(),
         on_frame: node.on_frame.clone(),
         on_tick: node.on_tick.clone(),
+        on_pointer_start: node.on_pointer_start.clone(),
+        on_pointer_move: node.on_pointer_move.clone(),
+        on_pointer_up: node.on_pointer_up.clone(),
+        on_input: node.on_input.clone(),
+        preview_entry: node.preview_entry.clone(),
+        on_submit: node.on_submit.clone(),
         every_ms: node.every_ms,
         asset: node.asset.clone(),
         key: node.key.clone(),
@@ -116,11 +147,14 @@ pub fn to_render_tree(tree: &UiTree, id: UiNodeId) -> UiRenderNode {
         target: node.target.clone(),
         reference: node.reference.clone(),
         on_js: node.on_js.clone(),
-        children: node
-            .children
-            .iter()
-            .map(|&cid| to_render_rc(tree, cid))
-            .collect(),
+        children: if folds_text {
+            Vec::new()
+        } else {
+            node.children
+                .iter()
+                .map(|&cid| to_render_rc(tree, cid))
+                .collect()
+        },
     }
 }
 

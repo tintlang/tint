@@ -207,8 +207,14 @@ impl SemanticChecker {
                     let args = match attr.name.as_str() {
                         "frame" => Some(vec![Type::Number]),
                         "key_down" | "key_up" => Some(vec![Type::String]),
-                        "click" | "pointer_down" | "pointer_up" | "hover_in" | "hover_out"
-                        | "tick" => Some(Vec::new()),
+                        "input" => Some(vec![Type::String]),
+                        "submit" => Some(Vec::new()),
+                        "pointer_start" | "pointer_move" | "pointer_up" => {
+                            Some(vec![Type::Number, Type::Number])
+                        }
+                        "click" | "pointer_down" | "hover_in" | "hover_out" | "tick" => {
+                            Some(Vec::new())
+                        }
                         _ => None,
                     };
                     if let (Some(args), Some((params, _))) = (args, self.fn_types.get(name).cloned()) {
@@ -222,6 +228,10 @@ impl SemanticChecker {
                         attr.name.as_str(),
                         "click"
                             | "pointer_down"
+                            | "input"
+                            | "submit"
+                            | "pointer_start"
+                            | "pointer_move"
                             | "pointer_up"
                             | "hover_in"
                             | "hover_out"

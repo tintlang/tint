@@ -3,8 +3,14 @@ Demo {
 
     SourceRender {
         use::SourceRenderBase
-        CodePanel { use::CodePanelBase }
-        PreviewPanel { use::PreviewPanelBase }
+        CodePanel {
+            use::CodePanelBase
+            import "../editor/editor.tn";
+        }
+        PreviewPanel {
+            use::PreviewPanelBase
+            Preview { entry||"App" "{code}" }
+        }
     }
 
     Caption2 {
@@ -12,5 +18,5 @@ Demo {
         "No screenshot — the panel on the right is a live DomSession render of the source on the left."
     }
 
-    PongButton { route||"/pong.html" "Open Pong" }
+    PongButton { route||"/pong" "Open Pong" }
 }

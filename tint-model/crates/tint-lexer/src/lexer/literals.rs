@@ -2,6 +2,11 @@ use super::{is_ident_continue, Lexer};
 use crate::{Token, TokenKind};
 use tint_ast::{Position, Span};
 
+/// Marker for `\\{` inside a string literal; see `parse_string_or_interpolated`.
+pub const LITERAL_LBRACE: char = '\u{E000}';
+/// Marker for `\\}` inside a string literal.
+pub const LITERAL_RBRACE: char = '\u{E001}';
+
 impl Lexer<'_> {
     pub(super) fn lex_string(&mut self, start: Position) -> Token {
         self.bump();
@@ -36,6 +41,11 @@ impl Lexer<'_> {
                             't' => '\t',
                             'r' => '\r',
                             '0' => '\0',
+                            // Escaped braces stay literal: the parser turns
+                            // these markers back into `{` / `}` after it has
+                            // decided what is an interpolation.
+                            '{' => LITERAL_LBRACE,
+                            '}' => LITERAL_RBRACE,
                             other => other,
                         });
                     }

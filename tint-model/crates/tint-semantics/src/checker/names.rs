@@ -131,6 +131,10 @@ impl SemanticChecker {
         // themselves (Pong is one such consumer).
         self.scopes
             .define_with_mutability("theme", Type::String, true);
+        // The current URL path, kept up to date by the host (see
+        // `UiSession::set_route_path`); `if{route_path == "/about"}`.
+        self.scopes
+            .define_with_mutability("route_path", Type::String, true);
 
         for builtin in [
             "print",
@@ -149,6 +153,14 @@ impl SemanticChecker {
             "max",
             "abs",
             "sign",
+            "tint_highlight",
+            "line_count",
+            "max_line_len",
+            "line_numbers",
+            "storage_get_or",
+            "storage_get",
+            "storage_set",
+            "storage_remove",
         ] {
             self.known_fns.insert(builtin.to_string());
         }

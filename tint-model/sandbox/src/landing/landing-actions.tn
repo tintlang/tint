@@ -1,4 +1,4 @@
-fn set_dark() { theme = "dark" }
-fn set_light() { theme = "light" }
+fn set_dark() { theme = "dark"  storage_set("theme", "dark") }
+fn set_light() { theme = "light"  storage_set("theme", "light") }
 fn open_sandbox() {}
 fn open_github() {}

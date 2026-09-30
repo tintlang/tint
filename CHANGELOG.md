@@ -4,6 +4,25 @@ All notable changes to Tint are documented here.
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-09-30
+
+- The Tint site and sandbox are now one `.tn` program (`sandbox/src/site.tn`) with no hand-written HTML, JS or CSS: `index.html`, `site.js`, the CodeMirror islands, `lib/*.js`, Vite config and the CSS files are gone. `tint dev` / `tint build` generate the page shell; `npm run wasm` rebuilds the runtime embedded in the CLI.
+- Routing: `app { route.Ui::"/path" }` (or `route.Ui::{ path::, title:: }`) maps URLs to `ui fn`s in one program, with `router::on`, per-route titles and navigation without reload. Theme state survives page switches.
+- `app { }` now also takes `page::{ ... }` (body style), `keyframes.name::{ from::, pN::, to:: }` and `font.Family::{ src::, weight:: }`; the CLI emits the matching CSS (`@keyframes`, `@font-face`). A page that declares `page::` owns the whole page box (no default body padding).
+- New `TextArea` node with `input||handler` (receives the new text) and `submit||handler` (Ctrl/Cmd+Enter). Tab inserts two spaces; the DOM value is only written when it differs, so the caret stays put.
+- New `Preview` node: `Preview { entry||"App" "{source}" }` mounts a nested Tint session from source text, re-renders on edit and shows compile errors in place. Nested sessions ignore `key_down||`.
+- New pointer events: `pointer_start||`, `pointer_move||`, `pointer_up||` (x, y), also tracked outside the element while dragging.
+- New text natives backed by the real lexer: `tint_highlight(src)` (segments with classes for keyword, atom, string, number, type, fn, punct, op, opkw, comment), `line_count`, `max_line_len`, `line_numbers`. The sandbox editor is a transparent `TextArea` over a highlighted layer, written in Tint.
+- Persistence: `storage_get_or(key, default)` next to `storage_get/set/remove`; in the browser these use `localStorage` (prefix `tint:`) and are loaded before `state` initialises. Theme and sandbox code survive reloads.
+- `include_str("relative/path")` embeds a file as a string literal at build time. `\{` and `\}` write literal braces in strings.
+- More keyword style properties: `caret-color`, `letter-spacing`, `word-break`, `font-style`, `color-scheme`, `transform-origin`, `line-height`, `tab-size`.
+- Docs: `docs/ui/text-and-preview.md`, updated `routing.md`, `modifiers.md` and the README (you no longer write HTML/CSS/JS by hand).
+
+### Changed
+
+- Pac-Man is hidden from the site routes until it is finished.
+- CI builds the site with `tint check` / `tint build` instead of npm.
+
 ## [0.1.2] - 2026-09-30
 
 - UI rendering is much cheaper per frame. The browser renderer keeps the previous render tree and diffs in Rust, touching the DOM only where something changed. The builder reuses a pure subtree (no calls, blocks, lambdas or `if`/`match` expressions) when none of the outer variables it read has changed, and shares it as an `Rc` so the renderer can skip it by pointer. `UiRenderNode.children` is now `Vec<Rc<UiRenderNode>>`; `UiSession::render`/`dispatch` return `Vec<Rc<UiRenderNode>>` (`UiSession::set_reuse(false)` turns reuse off). Pong frame time went from 11.5 ms to 1.4 ms in headless Chromium.

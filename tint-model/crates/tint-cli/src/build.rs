@@ -10,11 +10,11 @@ const TINT_WASM_BG: &[u8] = include_bytes!("../embedded/tint_wasm_bg.wasm");
 pub(crate) fn command(args: &[String]) {
     let path = require_arg(args.get(2), "tint build <file.tn> [ui_fn] -o <output.html>");
     let (entry, output) = parse_options(args);
-    build_file(path, &entry, output.as_deref());
+    build_file(path, entry.as_deref(), output.as_deref());
 }
 
-fn parse_options(args: &[String]) -> (String, Option<String>) {
-    let mut entry = "App".to_string();
+fn parse_options(args: &[String]) -> (Option<String>, Option<String>) {
+    let mut entry = None;
     let mut output = None;
     let mut index = 3;
 
@@ -23,7 +23,7 @@ fn parse_options(args: &[String]) -> (String, Option<String>) {
             output = args.get(index + 1).cloned();
             index += 2;
         } else {
-            entry = args[index].clone();
+            entry = Some(args[index].clone());
             index += 1;
         }
     }
@@ -31,7 +31,26 @@ fn parse_options(args: &[String]) -> (String, Option<String>) {
     (entry, output)
 }
 
-fn build_file(path: &str, entry: &str, output: Option<&str>) {
+/// The `ui fn` to mount when the user didn't name one: `App` if the entry
+/// file declares it, otherwise the first `ui fn` in the file.
+pub(crate) fn infer_entry(entry_source: &str) -> String {
+    let names: Vec<&str> = entry_source
+        .lines()
+        .filter_map(|line| line.trim_start().strip_prefix("ui fn "))
+        .filter_map(|rest| {
+            rest.split(|c: char| !c.is_alphanumeric() && c != '_')
+                .next()
+        })
+        .filter(|name| !name.is_empty())
+        .collect();
+    if names.contains(&"App") {
+        "App".to_string()
+    } else {
+        names.first().map_or("App", |name| name).to_string()
+    }
+}
+
+fn build_file(path: &str, entry: Option<&str>, output: Option<&str>) {
     // Loading (not just parsing) validates `mod`/`use` the same way `run`/
     // `check` do, and gives us every reachable file's raw source to embed
     // -- see `standalone_html`'s doc comment on why plain concatenation of
@@ -42,6 +61,8 @@ fn build_file(path: &str, entry: &str, output: Option<&str>) {
         crate::support::report_semantic_error(&loaded.entry_source, error);
     }
     let combined_source = loaded.all_sources.join("\n\n");
+    let entry = entry.map_or_else(|| infer_entry(&loaded.entry_source), str::to_owned);
+    let entry = entry.as_str();
 
     let output = output.map(str::to_owned).unwrap_or_else(|| {
         let stem = Path::new(path)
@@ -51,7 +72,10 @@ fn build_file(path: &str, entry: &str, output: Option<&str>) {
         format!("{}.html", stem)
     });
 
-    if let Err(error) = fs::write(&output, standalone_html(&combined_source, entry)) {
+    if let Err(error) = fs::write(
+        &output,
+        standalone_html(&combined_source, entry, &loaded.program.app_meta()),
+    ) {
         eprintln!("error writing '{}': {}", output, error);
         std::process::exit(1);
     }
@@ -69,7 +93,23 @@ fn build_file(path: &str, entry: &str, output: Option<&str>) {
 /// from every module are already present verbatim in the blob, directly
 /// callable by their bare name, exactly as the CLI-side loader's own
 /// flattening already relies on the VM being one flat namespace.
-fn standalone_html(source: &str, entry: &str) -> String {
+pub(crate) fn standalone_html(source: &str, entry: &str, meta: &tint_ast::AppMeta) -> String {
+    let title = meta.title.as_deref().unwrap_or("Tint UI");
+    let title = title.replace('&', "&amp;").replace('<', "&lt;");
+    let lang = meta.lang.as_deref().unwrap_or("en");
+    let lang = lang.replace('"', "");
+    let page_css: String = tint_runtime::ui::style::resolve_page_style(&meta.page)
+        .iter()
+        .map(|(property, value)| format!(" {}: {};", property, value))
+        .collect();
+    // An app that declares `page::{ }` owns the whole page box; without it the
+    // shell keeps the old comfortable default.
+    let page_base = if page_css.is_empty() {
+        " margin: 0; padding: 16px;"
+    } else {
+        " margin: 0;"
+    };
+    let at_rules = tint_runtime::ui::style::app_at_rules(meta);
     let source = source
         .replace('\\', "\\\\")
         .replace('`', "\\`")
@@ -78,14 +118,16 @@ fn standalone_html(source: &str, entry: &str) -> String {
 
     format!(
         r#"<!DOCTYPE html>
-<html lang="en">
+<html lang="{lang}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tint UI</title>
+    <title>{title}</title>
     <style>
         * {{ box-sizing: border-box; }}
-        body {{ margin: 0; padding: 16px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }}
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }}
+        body {{{page_base}{page_css} }}
+        {at_rules}
         .error {{ background: #fee; border: 1px solid #fcc; border-radius: 4px; padding: 16px; color: #c00; font-family: monospace; white-space: pre-wrap; }}
         .loading {{ padding: 40px 20px; color: #666; }}
     </style>

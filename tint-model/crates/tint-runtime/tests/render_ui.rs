@@ -588,3 +588,170 @@ fn clock() {}
     assert_eq!(kids[2].on_tick, None);
     assert_eq!(kids[2].every_ms, None, "every|| alone does nothing");
 }
+
+#[test]
+fn theme_tokens_resolve_inside_hover_and_follow_the_active_theme() {
+    let code = r#"
+fn set_light() { theme = "light" }
+
+ui fn Widget() {
+    state theme = "dark"
+    theme::dark { tokens { hover-bg::#2b2b2b } }
+    theme::light { tokens { hover-bg::#e2e2e2 } }
+    Button {
+        click||set_light
+        motion::{ hover::{ background::@hover-bg } }
+        "Check"
+    }
+}
+"#;
+
+    let mut session = UiSession::new(code, "Widget").expect("session creation failed");
+    let dark = session.render().expect("render failed");
+    assert!(dark[0]
+        .hover_style
+        .contains(&("background-color".to_string(), "#2b2b2b".to_string())));
+
+    session.dispatch("set_light").expect("dispatch failed");
+    let light = session.render().expect("render failed");
+    assert!(light[0]
+        .hover_style
+        .contains(&("background-color".to_string(), "#e2e2e2".to_string())));
+}
+
+fn texts(nodes: &[std::rc::Rc<tint_runtime::ui::render::UiRenderNode>], out: &mut Vec<String>) {
+    for node in nodes {
+        if let Some(text) = &node.text {
+            out.push(text.clone());
+        }
+        texts(&node.children, out);
+    }
+}
+
+#[test]
+fn route_path_picks_the_page_and_app_declares_metadata() {
+    let code = r#"
+app { title::"Tint Pong" lang::"pl" }
+
+ui fn Site() {
+    Page {
+        Text { if{route_path == "/"} "home" }
+        Text { if{route_path == "/pong"} "pong" }
+    }
+}
+"#;
+
+    let mut session = UiSession::new(code, "Site").expect("session creation failed");
+    assert_eq!(session.app_meta().title.as_deref(), Some("Tint Pong"));
+    assert_eq!(session.app_meta().lang.as_deref(), Some("pl"));
+
+    let mut seen = Vec::new();
+    texts(&session.render().expect("render failed"), &mut seen);
+    assert_eq!(seen, ["home"]);
+
+    session.set_route_path("/pong");
+    let mut seen = Vec::new();
+    texts(&session.render().expect("render failed"), &mut seen);
+    assert_eq!(seen, ["pong"]);
+}
+
+#[test]
+fn app_page_block_resolves_to_body_style() {
+    let code = r#"
+app { page::{ margin::0, background::#123456, color-scheme::dark, min-height::"100dvh" } }
+ui fn App() { Page { "x" } }
+"#;
+    let session = UiSession::new(code, "App").expect("session creation failed");
+    let style = session.page_style();
+    for (key, value) in [
+        ("margin", "0px"),
+        ("background-color", "#123456"),
+        ("color-scheme", "dark"),
+        ("min-height", "100dvh"),
+    ] {
+        assert!(
+            style.contains(&(key.to_string(), value.to_string())),
+            "missing {key}: {value}, got {style:?}"
+        );
+    }
+}
+
+#[test]
+fn app_font_face_and_keyframes_become_css() {
+    let source = r#"
+app {
+    keyframes.spin::{ from::{ opacity::0 }, p50::{ opacity::0.5 }, to::{ opacity::1 } }
+    font.Inter::{ src::"/fonts/inter.woff2", weight::400 }
+}
+ui fn App() { Panel { "x" } }
+"#;
+    let session = UiSession::new(source, "App").expect("session");
+    let css = session.app_css();
+    assert!(css.contains("@font-face{font-family:\"Inter\";src:url(\"/fonts/inter.woff2\") format(\"woff2\");font-display:swap;font-weight:400;}"), "{css}");
+    assert!(
+        css.contains("@keyframes spin{from{opacity:0;}50%{opacity:0.5;}to{opacity:1;}}"),
+        "{css}"
+    );
+}
+
+#[test]
+fn route_declarations_pick_ui_fn_and_keep_theme() {
+    let source = r#"
+app {
+    route.Home::"/"
+    route.About::{ path::"/about", title::"About us" }
+}
+ui fn Home() { state count = 1  Panel { "home {count}" } }
+ui fn About() { state count = 2  Panel { "about {count}" } }
+"#;
+    let mut session = UiSession::new(source, "Home").expect("session");
+    assert_eq!(
+        session.route_for_path("/about").map(|r| r.ui_fn.as_str()),
+        Some("About")
+    );
+    assert_eq!(
+        session
+            .route_for_path("/about")
+            .and_then(|r| r.title.as_deref()),
+        Some("About us")
+    );
+    assert!(session.route_for_path("/nope").is_none());
+    session.switch_ui_fn("About").unwrap();
+    let tree = session.render().unwrap();
+    assert_eq!(tree[0].children[0].text.as_deref(), Some("about 2"));
+    assert!(session.switch_ui_fn("Missing").is_err());
+}
+
+#[test]
+fn text_natives_are_callable_from_ui_code() {
+    let source = r#"
+ui fn Screen() {
+    state code = "let x = 1"
+    Panel {
+        for{seg in tint_highlight(code)}
+        Seg { "{seg[1]}:{seg[0]}" }
+    }
+    Meta { "{line_count(code)}|{max_line_len(code)}|{line_numbers(code)}" }
+}
+"#;
+    let mut session = UiSession::new(source, "Screen").expect("session");
+    let tree = session.render().unwrap();
+    let texts: Vec<_> = tree[0]
+        .children
+        .iter()
+        .filter_map(|n| n.children.first().and_then(|t| t.text.clone()))
+        .collect();
+    assert_eq!(
+        texts,
+        [
+            "keyword:let",
+            "plain: ",
+            "plain:x",
+            "plain: ",
+            "op:=",
+            "plain: ",
+            "number:1"
+        ]
+    );
+    assert_eq!(tree[1].children[0].text.as_deref(), Some("1|9|1"));
+}

@@ -1,4 +1,5 @@
 mod build;
+mod dev;
 mod module_loader;
 mod repl;
 mod run;
@@ -13,10 +14,11 @@ fn main() {
         Some("run") => run::command(args.get(2), args.get(3).map(String::as_str)),
         Some("check") => support::check_command(&args[2..]),
         Some("build") => build::command(&args),
+        Some("dev") => dev::command(&args),
         Some("repl") | None => repl::command(),
         Some(other) => {
             eprintln!(
-                "unknown command '{}'. usage: tint <run|check [--strict]|build|repl> [args]",
+                "unknown command '{}'. usage: tint <run|check [--strict]|build|dev|repl> [args]",
                 other
             );
             std::process::exit(1);

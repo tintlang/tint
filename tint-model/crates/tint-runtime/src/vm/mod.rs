@@ -77,5 +77,6 @@ mod core;
 mod host;
 #[cfg(feature = "ir")]
 mod ir_routing;
+mod text_natives;
 mod tracking;
 mod ui;

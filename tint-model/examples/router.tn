@@ -1,0 +1,18 @@
+// Two pages, no HTML file and no JavaScript.
+//   tint dev examples/router.tn
+app { title::"Router demo" lang::"en" router::on }
+
+ui fn App() {
+    Page {
+        layout::{ direction::column, padding::24, gap::16 }
+        Nav {
+            layout::{ direction::row, gap::16 }
+            HomeLink { route||"/" "Home" }
+            AboutLink { route||"/about" "About" }
+        }
+        Text { text::{24, bold} if{route_path == "/"} "Home" }
+        Text { text::{24, bold} if{route_path == "/about"} "About" }
+        Text { if{route_path == "/"} "Click About: the URL changes, the page does not reload." }
+        Text { if{route_path == "/about"} "Use the back button to return." }
+    }
+}

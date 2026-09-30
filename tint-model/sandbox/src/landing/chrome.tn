@@ -2,8 +2,9 @@
 import "./tokens.tn";
 
 style NavBase {
-    layout::{ direction::row, align::center, justify::space-between, position::sticky, top::0, z::10, width::"100%", padding.x::18, padding.y::10 }
+    layout::{ direction::row, align::center, justify::space-between, position::sticky, top::0, z::10, width::"100%", align-self::stretch, padding.x::18, padding.y::10 }
     paint::{ background::@nav-bg, backdrop-blur::14, border.b::{1, @nav-border} }
+    max-520::{ padding.x::10 }
 }
 
 style LogoBase {
@@ -18,6 +19,7 @@ style LogoBase {
 
 style NavRight {
     layout::{ direction::row, align::center, gap::18 }
+    max-520::{ gap::6 }
 }
 
 style ThemeSwitchBase {

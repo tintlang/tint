@@ -1,11 +1,7 @@
-/pkg-
-**/pkg-
-/pkg-node
-**/pkg-node
-node_modules
 dist
-.zip
+*.zip
+/pkg-
+/pkg-node
 
 /pacman
 **/pacman
-pacman.html

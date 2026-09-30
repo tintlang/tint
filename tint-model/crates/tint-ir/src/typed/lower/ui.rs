@@ -146,7 +146,7 @@ impl<'a> Lowerer<'a> {
     /// Declares the globals a ui fn's handlers and body share: its `state`
     /// variables and the two the host provides.
     pub(super) fn declare_ui_globals(&mut self, f: &UiFnDecl) -> LResult<()> {
-        for name in f.state.iter().map(|s| s.name.as_str()).chain(["theme", "viewport_width"]) {
+        for name in f.state.iter().map(|s| s.name.as_str()).chain(["theme", "viewport_width", "route_path"]) {
             if !self.globals.contains_key(name) {
                 self.declare_global(name)?;
             }
@@ -172,6 +172,12 @@ impl<'a> Lowerer<'a> {
             let num = self.module.globals[width.0 as usize].ty;
             let v = self.const_reg(num, Const::Float(1440.0));
             self.emit(Instr::GlobalSet { global: width, src: v });
+            if !states.iter().any(|s| s.name == "route_path") {
+                let route = self.globals["route_path"];
+                let ty = self.module.globals[route.0 as usize].ty;
+                let v = self.const_reg(ty, Const::Str("/".into()));
+                self.emit(Instr::GlobalSet { global: route, src: v });
+            }
             if !states.iter().any(|s| s.name == "theme") {
                 let theme = self.globals["theme"];
                 let ty = self.module.globals[theme.0 as usize].ty;

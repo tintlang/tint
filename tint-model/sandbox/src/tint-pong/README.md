@@ -1,6 +1,6 @@
 # Tint Pong
 
-Open at `/pong` in the sandbox.
+Open at `/pong` in the sandbox (routed by `sandbox/src/site.tn`).
 
 The game loop, paddle AI, collision checks, keyboard controls, score, ball, and
 paddles live in `pong.tn`. The board remains a declarative Tint grid, while the

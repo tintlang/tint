@@ -113,6 +113,9 @@ fn expand_source_file(
                 .unwrap_or_else(|| Path::new("."))
                 .join(specifier);
             expanded.push_str(&expand_source_file(&child, overlays, active)?);
+        } else if line.contains("include_str(\"") {
+            let dir = normalized.parent().unwrap_or_else(|| Path::new("."));
+            expanded.push_str(&expand_include_str(line, dir)?);
         } else {
             expanded.push_str(line);
         }
@@ -123,6 +126,46 @@ fn expand_source_file(
     }
     active.pop();
     Ok(expanded)
+}
+
+/// Replaces every `include_str("relative/path")` on `line` with the file's
+/// text as a Tint string literal, so a program can embed sample source.
+fn expand_include_str(line: &str, dir: &Path) -> Result<String, String> {
+    const MARKER: &str = "include_str(\"";
+    let mut out = String::new();
+    let mut rest = line;
+    while let Some(at) = rest.find(MARKER) {
+        out.push_str(&rest[..at]);
+        let after = &rest[at + MARKER.len()..];
+        let Some(end) = after.find("\")") else {
+            return Err("include_str: missing closing `\")`".to_string());
+        };
+        let target = normalize_path(&dir.join(&after[..end]));
+        let text = fs::read_to_string(&target).map_err(|error| {
+            format!(
+                "include_str: error reading '{}': {}",
+                target.display(),
+                error
+            )
+        })?;
+        out.push('"');
+        for c in text.chars() {
+            match c {
+                '\\' => out.push_str("\\\\"),
+                '"' => out.push_str("\\\""),
+                '\n' => out.push_str("\\n"),
+                '\t' => out.push_str("\\t"),
+                '\r' => out.push_str("\\r"),
+                '{' => out.push_str("\\{"),
+                '}' => out.push_str("\\}"),
+                other => out.push(other),
+            }
+        }
+        out.push('"');
+        rest = &after[end + 2..];
+    }
+    out.push_str(rest);
+    Ok(out)
 }
 
 fn source_import_specifier(line: &str) -> Option<&str> {
@@ -282,5 +325,25 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn include_str_embeds_a_file_with_braces_and_quotes_as_one_literal() {
+        let dir = std::env::temp_dir().join(format!("tint-include-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("sample.tn"), "ui fn A() { \"x {y}\" }\n").unwrap();
+        std::fs::write(
+            dir.join("main.tn"),
+            "fn sample() = include_str(\"sample.tn\")\n",
+        )
+        .unwrap();
+        let expanded = expand_source_imports(dir.join("main.tn"), &HashMap::new()).unwrap();
+        assert_eq!(
+            expanded,
+            "fn sample() = \"ui fn A() \\{ \\\"x \\{y\\}\\\" \\}\\n\"\n"
+        );
+        let mut db = SourceDatabase::new();
+        let id = db.set_source("main.tn", expanded);
+        assert_eq!(db.parse(id).unwrap().items.len(), 1);
     }
 }

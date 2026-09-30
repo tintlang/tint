@@ -22,7 +22,7 @@ Hero {
         ActionButton {
             variant::solid
             click||open_sandbox
-            route||"/app.html?route=/sandbox"
+            route||"/sandbox"
             "Sandbox"
         }
 

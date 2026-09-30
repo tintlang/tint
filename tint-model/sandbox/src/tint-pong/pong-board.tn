@@ -1,24 +1,29 @@
 theme::dark {
     Game {
         width::"100%"
+        max-width::"100%"
+        padding.x::12
+        padding.b::24
+        max-560::{ gap::12 }
+        max-520::{ padding.x::8 }
         direction::column
         align::center
         gap::14
-        Text { text::{32, bold, #d0d0d0} "PONG" }
+        Text { text::{32, bold, #d0d0d0} max-520::{ size::26 } max-420::{ size::24 } "PONG" }
         ScoreRow { direction::row gap::34 align::center
             Text { text::{28, bold, #d0d0d0} "{game.player_score}" }
             Text { text::{13, #9a9a9a} "YOU  /  CPU" }
             Text { text::{28, bold, #9a9a9a} "{game.cpu_score}" }
         }
-        Field { position::relative direction::column background::#11162a padding::8 radius::16 border::{1, #252d49}
+        Field { width::480 box-sizing::content-box max-560::{ scale::0.72, transform-origin::"top center", margin.b::-72 } max-420::{ scale::0.62, margin.b::-97 } max-360::{ scale::0.54, margin.b::-118 } position::relative direction::column background::#11162a padding::8 radius::16 border::{1, #252d49}
             Board { min-width::480 min-height::240 }
             WallTop { position::absolute left::8 top::8 width::480 height::20 z::10 background::#36415f }
             WallBottom { position::absolute left::8 top::228 width::480 height::20 z::10 background::#36415f }
             WallSide { position::absolute left::8 top::8 width::20 height::240 z::10 background::#36415f }
             WallSide { position::absolute left::468 top::8 width::20 height::240 z::10 background::#36415f }
-            PlayerOverlay { position::absolute left::28 top::{8 + game.player.position.y * 20} width::20 height::60 z::5 background::#61dafb radius::4 transition::"top .08s linear" }
-            CpuOverlay { position::absolute left::448 top::{8 + game.cpu.position.y * 20} width::20 height::60 z::5 background::#ff7d9c radius::4 transition::"top .08s linear" }
-            BallOverlay { position::absolute left::{8 + game.ball.position.x * 20} top::{8 + game.ball.position.y * 20} width::20 height::20 z::6 background::#f3f6ff radius::10 }
+            PlayerOverlay { pointer-events::none position::absolute left::28 top::{8 + game.player.position.y * 20} width::20 height::60 z::5 background::#61dafb radius::4 transition::"top .08s linear" }
+            CpuOverlay { pointer-events::none position::absolute left::448 top::{8 + game.cpu.position.y * 20} width::20 height::60 z::5 background::#ff7d9c radius::4 transition::"top .08s linear" }
+            BallOverlay { pointer-events::none position::absolute left::{8 + game.ball.position.x * 20} top::{8 + game.ball.position.y * 20} width::20 height::20 z::6 background::#f3f6ff radius::10 }
             CenterDivider { position::absolute top::14 bottom::14 left::"calc(50% - 2px)" width::4 min-width::4 z::2 direction::column justify::space-between
                 Dash { min-width::4 min-height::18 background::#252d49 }
                 Dash { min-width::4 min-height::18 background::#252d49 }
@@ -28,10 +33,10 @@ theme::dark {
                 Dash { min-width::4 min-height::18 background::#252d49 }
             }
         }
-        Controls { direction::row gap::8 align::center
-            Button { key::"up" pointer_down||move_up padding::{left::18, right::18, top::10, bottom::10} background::#171e36 color::#f3f6ff radius::8 border::{1, #2b3555} motion::{ transition::"background-color .12s ease, box-shadow .12s ease", hover::{ background::#2c3b67, shadow::"0 0 0 3px rgba(97,218,251,.18)" } } "▲" }
-            Button { key::"down" pointer_down||move_down padding::{left::18, right::18, top::10, bottom::10} background::#171e36 color::#f3f6ff radius::8 border::{1, #2b3555} motion::{ transition::"background-color .12s ease, box-shadow .12s ease", hover::{ background::#2c3b67, shadow::"0 0 0 3px rgba(97,218,251,.18)" } } "▼" }
-            Button { key::"restart" pointer_down||restart padding::{left::18, right::18, top::10, bottom::10} background::#171e36 color::#f3f6ff radius::8 border::{1, #2b3555} motion::{ transition::"background-color .12s ease, box-shadow .12s ease", hover::{ background::#2c3b67, shadow::"0 0 0 3px rgba(97,218,251,.18)" } } "Restart" }
+        Controls { width::480 justify::center max-560::{ width::"100%", max-width::360 } max-520::{ gap::6 } max-360::{ max-width::320 } direction::row gap::8 align::center
+            Button { key::"up" min-width::58 min-height::42 max-520::{ min-width::56, min-height::46, padding.x::14 } max-360::{ min-width::52, padding.x::10 } cursor::pointer display::inline-flex align::center justify::center pointer_down||move_up padding::{left::18, right::18, top::10, bottom::10} background::#171e36 color::#f3f6ff radius::8 border::{1, #2b3555} motion::{ transition::"background-color .12s ease, box-shadow .12s ease", hover::{ background::#2c3b67, shadow::"0 0 0 3px rgba(97,218,251,.18)" } } "▲" }
+            Button { key::"down" min-width::58 min-height::42 max-520::{ min-width::56, min-height::46, padding.x::14 } max-360::{ min-width::52, padding.x::10 } cursor::pointer display::inline-flex align::center justify::center pointer_down||move_down padding::{left::18, right::18, top::10, bottom::10} background::#171e36 color::#f3f6ff radius::8 border::{1, #2b3555} motion::{ transition::"background-color .12s ease, box-shadow .12s ease", hover::{ background::#2c3b67, shadow::"0 0 0 3px rgba(97,218,251,.18)" } } "▼" }
+            Button { key::"restart" min-width::58 min-height::42 max-520::{ min-width::56, min-height::46, padding.x::14 } max-360::{ min-width::52, padding.x::10 } cursor::pointer display::inline-flex align::center justify::center pointer_down||restart padding::{left::18, right::18, top::10, bottom::10} background::#171e36 color::#f3f6ff radius::8 border::{1, #2b3555} motion::{ transition::"background-color .12s ease, box-shadow .12s ease", hover::{ background::#2c3b67, shadow::"0 0 0 3px rgba(97,218,251,.18)" } } "Restart" }
         }
         Hint { text::{12, #9a9a9a} "W/S or ↑/↓ · move to serve" }
     }
@@ -40,24 +45,29 @@ theme::dark {
 theme::light {
     Game {
         width::"100%"
+        max-width::"100%"
+        padding.x::12
+        padding.b::24
+        max-560::{ gap::12 }
+        max-520::{ padding.x::8 }
         direction::column
         align::center
         gap::14
-        Text { text::{32, bold, #353535} "PONG" }
+        Text { text::{32, bold, #353535} max-520::{ size::26 } max-420::{ size::24 } "PONG" }
         ScoreRow { direction::row gap::34 align::center
             Text { text::{28, bold, #353535} "{game.player_score}" }
             Text { text::{13, #6a6a6a} "YOU  /  CPU" }
             Text { text::{28, bold, #6a6a6a} "{game.cpu_score}" }
         }
-        Field { position::relative direction::column background::#eef2fb padding::8 radius::16 border::{1, #b7c3df}
+        Field { width::480 box-sizing::content-box max-560::{ scale::0.72, transform-origin::"top center", margin.b::-72 } max-420::{ scale::0.62, margin.b::-97 } max-360::{ scale::0.54, margin.b::-118 } position::relative direction::column background::#eef2fb padding::8 radius::16 border::{1, #b7c3df}
             Board { min-width::480 min-height::240 }
             WallTop { position::absolute left::8 top::8 width::480 height::20 z::10 background::#b7c3df }
             WallBottom { position::absolute left::8 top::228 width::480 height::20 z::10 background::#b7c3df }
             WallSide { position::absolute left::8 top::8 width::20 height::240 z::10 background::#b7c3df }
             WallSide { position::absolute left::468 top::8 width::20 height::240 z::10 background::#b7c3df }
-            PlayerOverlay { position::absolute left::28 top::{8 + game.player.position.y * 20} width::20 height::60 z::5 background::#20bfe8 radius::4 transition::"top .08s linear" }
-            CpuOverlay { position::absolute left::448 top::{8 + game.cpu.position.y * 20} width::20 height::60 z::5 background::#f05d88 radius::4 transition::"top .08s linear" }
-            BallOverlay { position::absolute left::{8 + game.ball.position.x * 20} top::{8 + game.ball.position.y * 20} width::20 height::20 z::6 background::#353535 radius::10 }
+            PlayerOverlay { pointer-events::none position::absolute left::28 top::{8 + game.player.position.y * 20} width::20 height::60 z::5 background::#20bfe8 radius::4 transition::"top .08s linear" }
+            CpuOverlay { pointer-events::none position::absolute left::448 top::{8 + game.cpu.position.y * 20} width::20 height::60 z::5 background::#f05d88 radius::4 transition::"top .08s linear" }
+            BallOverlay { pointer-events::none position::absolute left::{8 + game.ball.position.x * 20} top::{8 + game.ball.position.y * 20} width::20 height::20 z::6 background::#353535 radius::10 }
             CenterDivider { position::absolute top::14 bottom::14 left::"calc(50% - 2px)" width::4 min-width::4 z::2 direction::column justify::space-between
                 Dash { min-width::4 min-height::18 background::#d4dcef }
                 Dash { min-width::4 min-height::18 background::#d4dcef }
@@ -67,10 +77,10 @@ theme::light {
                 Dash { min-width::4 min-height::18 background::#d4dcef }
             }
         }
-        Controls { direction::row gap::8 align::center
-            Button { key::"up" pointer_down||move_up padding::{left::18, right::18, top::10, bottom::10} background::#f5f5f5 color::#353535 radius::8 border::{1, #e0e0e0} motion::{ transition::"background-color .12s ease, box-shadow .12s ease", hover::{ background::#e2e2e2, shadow::"0 0 0 3px rgba(106,106,106,.14)" } } "▲" }
-            Button { key::"down" pointer_down||move_down padding::{left::18, right::18, top::10, bottom::10} background::#f5f5f5 color::#353535 radius::8 border::{1, #e0e0e0} motion::{ transition::"background-color .12s ease, box-shadow .12s ease", hover::{ background::#e2e2e2, shadow::"0 0 0 3px rgba(106,106,106,.14)" } } "▼" }
-            Button { key::"restart" pointer_down||restart padding::{left::18, right::18, top::10, bottom::10} background::#f5f5f5 color::#353535 radius::8 border::{1, #e0e0e0} motion::{ transition::"background-color .12s ease, box-shadow .12s ease", hover::{ background::#e2e2e2, shadow::"0 0 0 3px rgba(106,106,106,.14)" } } "Restart" }
+        Controls { width::480 justify::center max-560::{ width::"100%", max-width::360 } max-520::{ gap::6 } max-360::{ max-width::320 } direction::row gap::8 align::center
+            Button { key::"up" min-width::58 min-height::42 max-520::{ min-width::56, min-height::46, padding.x::14 } max-360::{ min-width::52, padding.x::10 } cursor::pointer display::inline-flex align::center justify::center pointer_down||move_up padding::{left::18, right::18, top::10, bottom::10} background::#f5f5f5 color::#353535 radius::8 border::{1, #e0e0e0} motion::{ transition::"background-color .12s ease, box-shadow .12s ease", hover::{ background::#e2e2e2, shadow::"0 0 0 3px rgba(106,106,106,.14)" } } "▲" }
+            Button { key::"down" min-width::58 min-height::42 max-520::{ min-width::56, min-height::46, padding.x::14 } max-360::{ min-width::52, padding.x::10 } cursor::pointer display::inline-flex align::center justify::center pointer_down||move_down padding::{left::18, right::18, top::10, bottom::10} background::#f5f5f5 color::#353535 radius::8 border::{1, #e0e0e0} motion::{ transition::"background-color .12s ease, box-shadow .12s ease", hover::{ background::#e2e2e2, shadow::"0 0 0 3px rgba(106,106,106,.14)" } } "▼" }
+            Button { key::"restart" min-width::58 min-height::42 max-520::{ min-width::56, min-height::46, padding.x::14 } max-360::{ min-width::52, padding.x::10 } cursor::pointer display::inline-flex align::center justify::center pointer_down||restart padding::{left::18, right::18, top::10, bottom::10} background::#f5f5f5 color::#353535 radius::8 border::{1, #e0e0e0} motion::{ transition::"background-color .12s ease, box-shadow .12s ease", hover::{ background::#e2e2e2, shadow::"0 0 0 3px rgba(106,106,106,.14)" } } "Restart" }
         }
         Hint { text::{12, #6a6a6a} "W/S or ↑/↓ · move to serve" }
     }

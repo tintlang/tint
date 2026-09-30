@@ -61,8 +61,21 @@ fn apply_property(path: &[String], value: &UiModifierValue, out: &mut StyleList)
             value,
         ),
         "gap" => push_px(out, "gap", value),
-        "min-width" => push_px(out, "min-width", value),
-        "min-height" => push_px(out, "min-height", value),
+        "min-width" => push_length_or_raw(out, "min-width", value),
+        "min-height" => push_length_or_raw(out, "min-height", value),
+        "max-width" => push_length_or_raw(out, "max-width", value),
+        "max-height" => push_length_or_raw(out, "max-height", value),
+        "inset" => push_length_or_raw(out, "inset", value),
+        "flex" | "flex-shrink" | "aspect-ratio" | "line-height" | "tab-size" => {
+            push_number_or_raw(out, &path.join("-"), value)
+        }
+        // Keyword-valued CSS properties with no typed Tint form: a bare
+        // ident (`cursor::pointer`) or a string (`outline::"2px solid red"`).
+        "cursor" | "pointer-events" | "touch-action" | "user-select" | "outline"
+        | "box-sizing" | "align-self" | "flex-wrap" | "text-align" | "appearance"
+        | "transform-origin" | "color-scheme" | "caret-color" | "letter-spacing" | "word-break" | "font-style" => {
+            push_raw_string(out, &path.join("-"), value)
+        }
         "overflow" => push_raw_string(out, "overflow", value),
         "overflow-x" => push_raw_string(out, "overflow-x", value),
         "overflow-y" => push_raw_string(out, "overflow-y", value),

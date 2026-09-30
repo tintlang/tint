@@ -1,36 +1,32 @@
 # Tint Sandbox
 
-> **Status: working prototype.** The workbench is deliberately small: it is an
-> editor and live preview, not a full IDE. It does not provide file trees,
-> multi-tab editing, or a persistent project workspace.
+> **Status: working prototype.** An editor and live preview, not a full IDE:
+> no file tree, tabs or project workspace.
 
-The sandbox workbench is itself rendered by Tint through `DomSession`. It has
-one Tint topbar, a CodeMirror editor, and a live Tint UI preview. The old
-`Check`/`Run` output bar is currently hidden because preview compilation is
-automatic.
+The whole site is one Tint program. There are no HTML, JS or CSS files: the
+`tint` CLI generates the page shell, and everything else is `.tn`.
 
-The Rust/WASM runtime owns the UI tree and its themes. JavaScript is only the
-host adapter for CodeMirror and the preview session:
-
-- `src/sandbox.tn` — the workbench layout and dark/light variants;
-- `src/landing/topbar.tn` — the shared Tint topbar;
-- `src/sandbox.js` — WASM bootstrap, CodeMirror, and preview mounting;
-- `src/lib/tintLanguage.js` — CodeMirror Tint tokenizer;
-- `pkg-web/` — generated `tint-wasm` bindings.
+- `src/site.tn` — entry: `app { route.* }` maps URLs to the landing page, Pong, Pac-Man and the sandbox;
+- `src/sandbox.tn` — the workbench (editor, resizer, live preview), dark and light;
+- `src/editor/` — the syntax-highlighting editor: a transparent `TextArea` over a layer highlighted by `tint_highlight`;
+- `src/landing/` — topbar, hero and the landing demo (same editor + `Preview`);
+- `src/tint-pong/` — the Pong game (`src/pacman/` is hidden until it is finished).
 
 ## Run it
 
 ```bash
-npm install
-npm run dev
+npm run dev      # tint dev src/site.tn  → http://localhost:5173
+npm run build    # tint build src/site.tn -o dist/index.html
 ```
 
-Open `http://localhost:5173/app.html`. The landing page is available at
-`http://localhost:5173/`.
+Routes: `/` (landing), `/sandbox`, `/pong`; the router switches
+between them without reloading. Serve `dist/index.html` for every path (see
+`vercel.json`).
 
-The preview recompiles the current editor contents automatically. It keeps a
-persistent `UiSession`, so `state` and `click||handler` interactions survive
-between renders. Invalid source is shown in the preview pane.
+The preview recompiles the editor contents on every edit and keeps its state;
+invalid source is shown in the preview pane. The theme and the sandbox code
+are kept in `localStorage`.
 
-Contributor setup, runtime rebuilds, generated artifacts, and release checks
-are documented in the repository [`CONTRIBUTING.md`](../../CONTRIBUTING.md).
+After changing Rust code under `crates/tint-wasm` or `crates/tint-runtime`,
+run `npm run wasm` to rebuild the browser runtime that the CLI embeds.
+See [`CONTRIBUTING.md`](../../CONTRIBUTING.md) for the rest of the setup.
