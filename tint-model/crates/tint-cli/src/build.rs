@@ -5,7 +5,7 @@ use crate::module_loader;
 use crate::support::{require_arg, semantic_check};
 
 const TINT_WASM_JS: &str = include_str!("../embedded/tint_wasm.js");
-const TINT_WASM_BG: &[u8] = include_bytes!("../embedded/tint_wasm_bg.wasm");
+const TINT_WASM_BG: &[u8] = include_bytes!("../embedded/tint_wasm_bg.wasm.gz");
 
 pub(crate) fn command(args: &[String]) {
     let path = require_arg(args.get(2), "tint build <file.tn> [ui_fn] -o <output.html>");
@@ -120,8 +120,12 @@ pub(crate) fn standalone_html(source: &str, entry: &str, meta: &tint_ast::AppMet
     let source = source
         .replace('\\', "\\\\")
         .replace('`', "\\`")
-        .replace("${", "\\${");
+        .replace("${", "\\${")
+        // A `</script>` inside the source (say, an embedded HTML sample) must
+        // not end the page's own script element.
+        .replace("</", "<\\/");
     let wasm = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, TINT_WASM_BG);
+
 
     format!(
         r#"<!DOCTYPE html>
@@ -147,6 +151,7 @@ pub(crate) fn standalone_html(source: &str, entry: &str, meta: &tint_ast::AppMet
         const ENTRY = "{entry}";
         const WASM_BASE64 = "{wasm}";
         function base64ToBytes(b64) {{
+            if (Uint8Array.fromBase64) return Uint8Array.fromBase64(b64);
             const bin = atob(b64);
             const bytes = new Uint8Array(bin.length);
             for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
@@ -154,7 +159,11 @@ pub(crate) fn standalone_html(source: &str, entry: &str, meta: &tint_ast::AppMet
         }}
         const app = document.getElementById('app');
         try {{
-            initSync({{ module: base64ToBytes(WASM_BASE64) }});
+            // The runtime is embedded gzipped; inflate it before instantiating.
+            const wasmBytes = new Uint8Array(await new Response(
+                new Blob([base64ToBytes(WASM_BASE64)]).stream().pipeThrough(new DecompressionStream('gzip'))
+            ).arrayBuffer());
+            initSync({{ module: wasmBytes }});
             app.className = '';
             app.textContent = '';
             const session = new DomSession(SOURCE, ENTRY, 'app');
@@ -172,4 +181,20 @@ pub(crate) fn standalone_html(source: &str, entry: &str, meta: &tint_ast::AppMet
 </html>
 "#
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::standalone_html;
+
+    #[test]
+    fn embedded_source_cannot_close_the_script_element() {
+        let html = standalone_html(
+            "fn s() = \"<script src='x'></script>\"\nui fn App() {}",
+            "App",
+            &tint_ast::AppMeta::default(),
+        );
+        assert!(!html.contains("'x'></script>"));
+        assert!(html.contains("<\\/script>"));
+    }
 }

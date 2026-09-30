@@ -19,20 +19,34 @@
 // so the sandbox UI can always render *something* -- a value, an error
 // with a span to highlight, or both.
 
+#[cfg(feature = "sandbox-api")]
 use serde::Serialize;
+#[cfg(feature = "sandbox-api")]
 use wasm_bindgen::prelude::*;
 
 mod dom;
 pub use dom::DomSession;
 
+// The sandbox's own entry points (check/run/REPL/render a tree as data). A
+// standalone page only needs `DomSession`, so it is built without them.
+#[cfg(feature = "sandbox-api")]
 use tint_ast::{Item, Program, Span};
+#[cfg(feature = "sandbox-api")]
 use tint_lexer::{collect_tokens, Lexer};
+#[cfg(feature = "sandbox-api")]
 use tint_parser::error::ParserError;
+#[cfg(feature = "sandbox-api")]
 use tint_parser::Parser;
+#[cfg(feature = "sandbox-api")]
 use tint_runtime::vm::TintVM;
 
+#[cfg(feature = "sandbox-api")]
 include!("api/core.rs");
+#[cfg(feature = "sandbox-api")]
 include!("api/ui.rs");
+#[cfg(feature = "sandbox-api")]
 include!("api/repl.rs");
+#[cfg(feature = "sandbox-api")]
 include!("api/session.rs");
+#[cfg(feature = "bytecode")]
 include!("api/bytecode.rs");

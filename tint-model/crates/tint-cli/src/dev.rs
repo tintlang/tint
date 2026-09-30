@@ -94,6 +94,9 @@ fn respond(stream: &mut TcpStream, status: &str, content_type: &str, body: &str)
 /// Changes whenever any reachable source (or an error) changes.
 fn version(path: &str) -> String {
     let mut hasher = DefaultHasher::new();
+    // A restarted server (rebuilt binary) must also reload open pages.
+    static STARTED: std::sync::OnceLock<std::time::SystemTime> = std::sync::OnceLock::new();
+    STARTED.get_or_init(std::time::SystemTime::now).hash(&mut hasher);
     match module_loader::try_load(path) {
         Ok(loaded) => loaded.all_sources.hash(&mut hasher),
         Err(error) => error.hash(&mut hasher),

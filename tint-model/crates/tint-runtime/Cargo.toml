@@ -7,7 +7,13 @@ license.workspace = true
 [features]
 # Optional SSA/IR second execution tier. Off by default: the tree-walking
 # evaluator is the single execution engine.
-default = []
+default = ["bytecode", "semantic-check"]
+# Serialized-program (bytecode) container; pulls in serde_json. The standalone
+# browser page does not need it, so its runtime is built without it.
+bytecode = ["dep:serde_json"]
+# Runs the semantic checker when a session is created. A page built with
+# `tint build` was already checked then, so its runtime leaves it out.
+semantic-check = ["dep:tint-semantics"]
 ir = ["dep:tint-ir"]
 # Builds UI trees from the typed IR (`tint_ir::typed`) instead of the AST.
 typed-ir = ["dep:tint-ir"]
@@ -18,15 +24,15 @@ tint-parser = { path = "../tint-parser" }
 tint-ir = { path = "../tint-ir", optional = true }
 tint-lexer = { path = "../tint-lexer" }
 tint-evaluator = { path = "../tint-evaluator" }
-tint-semantics = { path = "../tint-semantics" }
+tint-semantics = { path = "../tint-semantics", optional = true }
 
 thiserror = "1.0"
 async-trait = "0.1"
 futures = "0.3"
 serde = { version = "1.0", features = ["derive", "rc"] }
-serde_json = "1.0"
+serde_json = { version = "1.0", optional = true }
 taffy = "0.14.0"
 
 [dev-dependencies]
 tint-ir = { path = "../tint-ir" }
-tint-runtime = { path = ".", features = ["typed-ir"] }
+tint-runtime = { path = ".", features = ["typed-ir", "semantic-check"] }

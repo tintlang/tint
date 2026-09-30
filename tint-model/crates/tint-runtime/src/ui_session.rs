@@ -11,7 +11,9 @@ use tint_evaluator::errors::EvalResult;
 use tint_evaluator::{EvalHost, Value as EvalValue};
 use tint_lexer::{collect_tokens, Lexer};
 use tint_parser::Parser;
+#[cfg(feature = "semantic-check")]
 use tint_semantics::prelude::CheckerContext;
+#[cfg(feature = "semantic-check")]
 use tint_semantics::SemanticChecker;
 
 use crate::ui::render::UiRenderNode;
@@ -68,6 +70,7 @@ impl UiSession {
     /// Builds a session from a serialized Tint program. This uses the same
     /// VM and state initialization path as source mode; only lexing/parsing
     /// is skipped.
+    #[cfg(feature = "bytecode")]
     pub fn from_bytecode(bytes: &[u8], ui_fn_name: &str) -> Result<Self, String> {
         let program = crate::bytecode::decode(bytes)?;
         Self::from_program(program, ui_fn_name)
@@ -85,9 +88,12 @@ impl UiSession {
         ui_fn_name: &str,
         storage: HashMap<String, String>,
     ) -> Result<Self, String> {
-        let semantic_errors = SemanticChecker::new(CheckerContext::default()).check(&program);
-        if !semantic_errors.is_empty() {
-            return Err(format!("semantic errors: {:?}", semantic_errors));
+        #[cfg(feature = "semantic-check")]
+        {
+            let semantic_errors = SemanticChecker::new(CheckerContext::default()).check(&program);
+            if !semantic_errors.is_empty() {
+                return Err(format!("semantic errors: {:?}", semantic_errors));
+            }
         }
 
         let has_ui_fn = program

@@ -23,3 +23,13 @@ license = "MIT"
 
 [profile.release]
 opt-level = "s"
+
+# Browser runtime only (see sandbox/build-wasm.sh). "s" instead of "z": about 10-15%
+# faster rendering for roughly +20% wasm size (measured in bench/ui).
+[profile.wasm]
+inherits = "release"
+opt-level = "s"
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"

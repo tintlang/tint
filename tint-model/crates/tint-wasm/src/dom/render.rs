@@ -7,11 +7,16 @@ fn build_node(
     // Mirrors UiPreviewNode.svelte's own tag choice: a real <button> for
     // Button/MenuItem or anything with a click handler (so it gets free
     // keyboard/focus/AT behavior), a plain <div> otherwise.
+    if let Some(mounted) = build_bulk(document, node, shared, breakpoint)? {
+        return Ok(mounted);
+    }
     let tag_name = dom_tag_name(node);
     let is_button = tag_name == "button";
     let el = document.create_element(tag_name)?;
     el.set_attribute("data-tag", &node.tag)?;
-    el.set_attribute("data-tint-source", &node.tint_source)?;
+    if !node.tint_source.is_empty() {
+        el.set_attribute("data-tint-source", &node.tint_source)?;
+    }
     if let Some(key) = &node.key {
         el.set_attribute("data-tint-key", key)?;
     }
@@ -72,7 +77,11 @@ fn build_node(
         base_props.extend(bp_style.iter().cloned());
     }
 
-    apply_style_props(&el, &base_props)?;
+    // A fresh element has no style yet: write it without reading it back first.
+    let css = style_to_css_text(&base_props);
+    if !css.is_empty() {
+        el.set_attribute("style", &css)?;
+    }
 
     if !node.hover_style.is_empty() {
         let base_css = style_to_css_text(&base_props);
@@ -119,31 +128,7 @@ fn build_node(
         leave_cb.forget();
     }
 
-    if let Some(handler) = node.on_click.clone() {
-        // Use the browser's normal click activation here. The render tree
-        // currently normalizes `click||` and `pointer_down||` into one
-        // handler field, and a click listener is the reliable common
-        // denominator across browser hosts.
-        bind_dispatch(&el, "click", handler, shared, node.sound.clone());
-    }
-    if let Some(handler) = node.on_hover_enter.clone() {
-        bind_dispatch(&el, "mouseenter", handler, shared, None);
-    }
-    if let Some(handler) = node.on_hover_leave.clone() {
-        bind_dispatch(&el, "mouseleave", handler, shared, None);
-    }
-    if let Some(handler) = node.on_pointer_start.clone() {
-        bind_pointer_start(&el, handler, shared);
-    }
-    if node.tag == "TextArea" {
-        bind_text_area(&el, node.on_input.clone(), node.on_submit.clone(), shared);
-    }
-    if let Some(handler) = node.on_key_down.clone() {
-        bind_key_dispatch("keydown", handler, shared);
-    }
-    if let Some(handler) = node.on_key_up.clone() {
-        bind_key_dispatch("keyup", handler, shared);
-    }
+    bind_handlers(&el, node, shared);
 
     let mut children = Vec::new();
     if node.text.is_none() && node.svg.is_none() {
@@ -160,6 +145,282 @@ fn build_node(
         children,
         has_hover,
     })
+}
+
+fn bind_handlers(el: &Element, node: &UiRenderNode, shared: &Rc<Shared>) {
+    if let Some(handler) = node.on_click.clone() {
+        // Use the browser's normal click activation here. The render tree
+        // currently normalizes `click||` and `pointer_down||` into one
+        // handler field, and a click listener is the reliable common
+        // denominator across browser hosts.
+        bind_dispatch(el, "click", handler, shared, node.sound.clone());
+    }
+    if let Some(handler) = node.on_hover_enter.clone() {
+        bind_dispatch(el, "mouseenter", handler, shared, None);
+    }
+    if let Some(handler) = node.on_hover_leave.clone() {
+        bind_dispatch(el, "mouseleave", handler, shared, None);
+    }
+    if let Some(handler) = node.on_pointer_start.clone() {
+        bind_pointer_start(el, handler, shared);
+    }
+    if node.tag == "TextArea" {
+        bind_text_area(el, node.on_input.clone(), node.on_submit.clone(), shared);
+    }
+    if let Some(handler) = node.on_key_down.clone() {
+        bind_key_dispatch("keydown", handler, shared);
+    }
+    if let Some(handler) = node.on_key_up.clone() {
+        bind_key_dispatch("keyup", handler, shared);
+    }
+
+}
+
+// ---- bulk building ------------------------------------------------------
+//
+// Creating a node element by element costs a handful of JS calls each. A plain
+// subtree (divs, buttons and spans with text, styles and click handlers only)
+// is instead written out as one HTML string, parsed by the browser in a single
+// call, and its elements are then picked up by walking the result in step with
+// the render tree.
+
+thread_local! {
+    static TEMPLATE: RefCell<Option<web_sys::HtmlTemplateElement>> = const { RefCell::new(None) };
+    static HOLDER: RefCell<Option<Element>> = const { RefCell::new(None) };
+}
+
+/// Nodes in the subtree when it can be built from HTML, else `None`.
+fn bulk_size(node: &UiRenderNode, in_button: bool) -> Option<usize> {
+    if node.hover_style.len() > 0
+        || node.route.is_some()
+        || node.asset.is_some()
+        || node.reference.is_some()
+        || node.on_js.is_some()
+        || node.svg.is_some()
+        || node.tag == "Preview"
+        || node.tag == "TextArea"
+        || node.on_pointer_start.is_some()
+    {
+        return None;
+    }
+    let tag = dom_tag_name(node);
+    if !matches!(tag, "div" | "button" | "span") || (tag == "button" && in_button) {
+        return None;
+    }
+    if node.text.is_some() && !node.children.is_empty() {
+        return None;
+    }
+    let mut size = 1;
+    for child in &node.children {
+        size += bulk_size(child, in_button || tag == "button")?;
+    }
+    Some(size)
+}
+
+fn push_escaped(out: &mut String, text: &str, quote: bool) {
+    if !text.bytes().any(|b| matches!(b, b'&' | b'<' | b'>' | b'"')) {
+        out.push_str(text);
+        return;
+    }
+    for c in text.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' if quote => out.push_str("&quot;"),
+            c => out.push(c),
+        }
+    }
+}
+
+thread_local! {
+    /// CSS text per shared style list. The list itself is kept in the entry so
+    /// its address cannot be reused by a different list while cached.
+    static CSS_MEMO: RefCell<std::collections::HashMap<(usize, bool), (Rc<Vec<(String, String)>>, Rc<str>)>> =
+        RefCell::new(std::collections::HashMap::new());
+}
+
+fn node_css(node: &UiRenderNode, is_button: bool, breakpoint: &str) -> Rc<str> {
+    let compute = || -> Rc<str> {
+        let mut props: Vec<(String, String)> = Vec::new();
+        if is_button {
+            props.extend(BUTTON_RESET.iter().map(|(k, v)| (k.to_string(), v.to_string())));
+        }
+        props.extend(node.style.iter().cloned());
+        for bp_style in matching_breakpoints(node, breakpoint) {
+            props.extend(bp_style.iter().cloned());
+        }
+        Rc::from(style_to_css_text(&props))
+    };
+    if !node.breakpoints.is_empty() || node.style.is_empty() {
+        return compute();
+    }
+    let key = (Rc::as_ptr(&node.style) as usize, is_button);
+    CSS_MEMO.with(|memo| {
+        let mut memo = memo.borrow_mut();
+        if let Some((_, css)) = memo.get(&key) {
+            return Rc::clone(css);
+        }
+        if memo.len() > 4096 {
+            memo.clear();
+        }
+        let css = compute();
+        memo.insert(key, (Rc::clone(&node.style), Rc::clone(&css)));
+        css
+    })
+}
+
+fn write_html(node: &UiRenderNode, breakpoint: &str, out: &mut String) {
+    let tag = dom_tag_name(node);
+    out.push('<');
+    out.push_str(tag);
+    out.push_str(" data-tag=\"");
+    push_escaped(out, &node.tag, true);
+    out.push('"');
+    if !node.tint_source.is_empty() {
+        out.push_str(" data-tint-source=\"");
+        push_escaped(out, &node.tint_source, true);
+        out.push('"');
+    }
+    if let Some(key) = &node.key {
+        out.push_str(" data-tint-key=\"");
+        push_escaped(out, key, true);
+        out.push('"');
+    }
+    let css = node_css(node, tag == "button", breakpoint);
+    if !css.is_empty() {
+        out.push_str(" style=\"");
+        push_escaped(out, &css, true);
+        out.push('"');
+    }
+    out.push('>');
+    if let Some(text) = &node.text {
+        push_escaped(out, text, false);
+    }
+    for child in &node.children {
+        write_html(child, breakpoint, out);
+    }
+    out.push_str("</");
+    out.push_str(tag);
+    out.push('>');
+}
+
+/// Pairs a parsed element with its render node: binds handlers and collects
+/// the mounted children in document order.
+fn adopt(el: Element, node: &UiRenderNode, shared: &Rc<Shared>) -> Result<MNode, JsValue> {
+    bind_handlers(&el, node, shared);
+    let mut children = Vec::with_capacity(node.children.len());
+    if node.text.is_none() {
+        let mut next = el.first_element_child();
+        for child in &node.children {
+            let child_el = next.ok_or_else(|| JsValue::from_str("bulk build: missing element"))?;
+            next = child_el.next_element_sibling();
+            children.push(adopt(child_el, child, shared)?);
+        }
+    }
+    Ok(MNode { el, children, has_hover: false })
+}
+
+/// Builds every bulk-able node among `nodes` with a single HTML parse; the
+/// result has one entry per input (`None` where the node needs `build_node`).
+/// The built elements sit in the returned fragment until placed.
+fn build_bulk_many(
+    document: &Document,
+    nodes: &[&Rc<UiRenderNode>],
+    shared: &Rc<Shared>,
+    breakpoint: &str,
+) -> Result<(Vec<Option<MNode>>, Option<web_sys::DocumentFragment>), JsValue> {
+    let eligible: Vec<bool> = nodes
+        .iter()
+        .map(|n| !n.children.is_empty() && bulk_size(n, false).is_some())
+        .collect();
+    if eligible.iter().filter(|e| **e).count() < 2 {
+        return Ok((nodes.iter().map(|_| None).collect(), None));
+    }
+    let mut html = String::new();
+    for (node, ok) in nodes.iter().zip(&eligible) {
+        if *ok {
+            write_html(node, breakpoint, &mut html);
+        }
+    }
+    let template = TEMPLATE.with(|t| -> Result<web_sys::HtmlTemplateElement, JsValue> {
+        let mut t = t.borrow_mut();
+        if t.is_none() {
+            *t = Some(document.create_element("template")?.dyn_into::<web_sys::HtmlTemplateElement>()?);
+        }
+        Ok(t.as_ref().expect("just set").clone())
+    })?;
+    template.set_inner_html(&html);
+    let fragment = template.content();
+    let mut next = fragment.first_element_child();
+    let mut out = Vec::with_capacity(nodes.len());
+    for (node, ok) in nodes.iter().zip(&eligible) {
+        if !*ok {
+            out.push(None);
+            continue;
+        }
+        let root = next.ok_or_else(|| JsValue::from_str("bulk build: missing element"))?;
+        next = root.next_element_sibling();
+        out.push(Some(adopt(root, node, shared)?));
+    }
+    let all = eligible.iter().all(|e| *e);
+    Ok((out, all.then_some(fragment)))
+}
+
+/// When every new node is plain and none reuses an old element, the parent's
+/// whole content is replaced by one parse straight into it: no per-element
+/// removal, no per-element insertion.
+fn build_bulk_into(
+    parent: &Element,
+    nodes: &[Rc<UiRenderNode>],
+    shared: &Rc<Shared>,
+    breakpoint: &str,
+) -> Result<Option<Vec<MNode>>, JsValue> {
+    if nodes.len() < 2 || nodes.iter().any(|n| bulk_size(n, false).is_none()) {
+        return Ok(None);
+    }
+    let mut html = String::new();
+    for node in nodes {
+        write_html(node, breakpoint, &mut html);
+    }
+    parent.set_inner_html(&html);
+    let mut next = parent.first_element_child();
+    let mut out = Vec::with_capacity(nodes.len());
+    for node in nodes {
+        let el = next.ok_or_else(|| JsValue::from_str("bulk build: missing element"))?;
+        next = el.next_element_sibling();
+        out.push(adopt(el, node, shared)?);
+    }
+    Ok(Some(out))
+}
+
+fn holder(document: &Document) -> Result<Element, JsValue> {
+    HOLDER.with(|h| -> Result<Element, JsValue> {
+        let mut h = h.borrow_mut();
+        if h.is_none() {
+            *h = Some(document.create_element("div")?);
+        }
+        Ok(h.as_ref().expect("just set").clone())
+    })
+}
+
+fn build_bulk(
+    document: &Document,
+    node: &UiRenderNode,
+    shared: &Rc<Shared>,
+    breakpoint: &str,
+) -> Result<Option<MNode>, JsValue> {
+    if node.children.is_empty() || bulk_size(node, false).is_none() {
+        return Ok(None);
+    }
+    let mut html = String::new();
+    write_html(node, breakpoint, &mut html);
+    let holder = holder(document)?;
+    holder.set_inner_html(&html);
+    let root = holder
+        .first_element_child()
+        .ok_or_else(|| JsValue::from_str("bulk build: no element"))?;
+    Ok(Some(adopt(root, node, shared)?))
 }
 
 /// Wires `event_name` on `el` to run `handler` against the session and
@@ -180,6 +441,8 @@ fn bind_dispatch(
         if let Some(sound) = &sound {
             play_sound(sound);
         }
+        let timing = profiling();
+        let t0 = if timing { now() } else { 0.0 };
         let tree = match shared.session.try_borrow_mut() {
             Ok(mut session) => match session.dispatch(&handler) {
                 Ok(tree) => tree,
@@ -193,8 +456,17 @@ fn bind_dispatch(
             },
             Err(_) => return,
         };
+        let t1 = if timing { now() } else { 0.0 };
         if let Err(e) = mount_tree(tree, &shared) {
             web_sys::console::error_1(&e);
+        }
+        if timing {
+            let t2 = now();
+            web_sys::console::log_1(&JsValue::from_str(&format!(
+                "TINT-TIMING {handler} eval {:.1} mount {:.1}",
+                t1 - t0,
+                t2 - t1
+            )));
         }
     }) as Box<dyn FnMut(_)>);
     // Ignore add_event_listener's own Result: a failure here means the
@@ -202,6 +474,19 @@ fn bind_dispatch(
     // earlier in build_node would already have surfaced.
     let _ = el.add_event_listener_with_callback(event_name, cb.as_ref().unchecked_ref());
     cb.forget();
+}
+
+/// `<html data-tint-timing>` logs, per click, how long the program took to run
+/// (`eval`) and how long patching the DOM took (`mount`).
+fn profiling() -> bool {
+    web_sys::window()
+        .and_then(|w| w.document())
+        .and_then(|d| d.document_element())
+        .is_some_and(|e| e.has_attribute("data-tint-timing"))
+}
+
+fn now() -> f64 {
+    web_sys::window().and_then(|w| w.performance()).map_or(0.0, |p| p.now())
 }
 
 fn play_sound(src: &str) {

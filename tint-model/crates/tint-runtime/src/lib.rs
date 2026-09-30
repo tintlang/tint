@@ -4,6 +4,7 @@ pub mod vm;
 
 pub mod ui;
 
+#[cfg(feature = "bytecode")]
 pub mod bytecode;
 pub mod errors;
 pub mod repl;

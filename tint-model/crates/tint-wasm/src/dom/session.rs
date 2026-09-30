@@ -2,8 +2,14 @@
 impl DomSession {
     #[wasm_bindgen(constructor)]
     pub fn new(source: &str, ui_fn_name: &str, container_id: &str) -> DomSession {
+        dom_tree_shape();
         Self::from_inner(
-            InnerSession::new_with_storage(source, ui_fn_name, load_browser_storage()),
+            InnerSession::new_with_storage(
+                source,
+                ui_fn_name,
+                // Saved values only matter to a program that reads them.
+                if source.contains("storage_") { load_browser_storage() } else { Default::default() },
+            ),
             container_id,
             false,
         )
@@ -12,7 +18,9 @@ impl DomSession {
     /// Creates a session from a versioned Tint bytecode blob. The browser
     /// host can choose source mode for development and this mode for release
     /// artifacts without changing the DOM/session API.
+    #[cfg(feature = "bytecode")]
     pub fn from_bytecode(bytes: &[u8], ui_fn_name: &str, container_id: &str) -> DomSession {
+        dom_tree_shape();
         Self::from_inner(InnerSession::from_bytecode(bytes, ui_fn_name), container_id, false)
     }
 
@@ -180,6 +188,7 @@ impl DomSession {
     }
 
     /// Replaces the current program with a serialized Tint bytecode blob.
+    #[cfg(feature = "bytecode")]
     pub fn reload_bytecode(&mut self, bytes: &[u8], ui_fn_name: &str) -> Option<String> {
         let shared = match &self.shared {
             Some(s) => s.clone(),
@@ -256,6 +265,7 @@ impl DomSession {
     }
 
     pub(crate) fn new_nested(source: &str, ui_fn_name: &str, container_id: &str) -> DomSession {
+        dom_tree_shape();
         Self::from_inner(InnerSession::new(source, ui_fn_name), container_id, true)
     }
 }

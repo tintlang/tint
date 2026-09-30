@@ -7,23 +7,34 @@ license.workspace = true
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+[features]
+default = ["bytecode", "sandbox-api"]
+# check/run/REPL/tree-as-data entry points for the sandbox. The standalone page
+# is built without them.
+sandbox-api = []
+# `compile_bytecode` / `from_bytecode`. The standalone page embeds a runtime built
+# with --no-default-features (see sandbox/build-wasm.sh): ~25% smaller.
+bytecode = ["sandbox-api", "tint-runtime/bytecode", "tint-runtime/semantic-check", "dep:tint-semantics"]
+
 [dependencies]
 tint-lexer = { path = "../tint-lexer" }
 tint-ast = { path = "../tint-ast" }
 tint-parser = { path = "../tint-parser" }
-tint-runtime = { path = "../tint-runtime" }
+tint-runtime = { path = "../tint-runtime", default-features = false }
 tint-evaluator = { path = "../tint-evaluator" }
-tint-semantics = { path = "../tint-semantics" }
+tint-semantics = { path = "../tint-semantics", optional = true }
 wasm-bindgen = "0.2"
 serde = { version = "1.0", features = ["derive"] }
 serde-wasm-bindgen = "0.6"
 web-sys = { version = "0.3", features = [
+    "Performance",
     "Window",
     "Document",
     "Element",
     "HtmlElement",
     "CssStyleDeclaration",
     "DocumentFragment",
+    "HtmlTemplateElement",
     "Node",
     "Location",
     "History",

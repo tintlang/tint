@@ -41,10 +41,15 @@ fn current_viewport_width() -> f64 {
 /// size plus each `max-N` / `min-N` threshold the tree uses that currently
 /// holds. Doubles as the rebuild key -- when this string changes the tree is
 /// rebuilt so the new set of breakpoint styles is layered on.
+/// The DOM host wants text-only nodes folded into one element.
+fn dom_tree_shape() {
+    tint_runtime::ui::render::FOLD_TEXT.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
 fn active_breakpoints(tree: &[Rc<UiRenderNode>]) -> String {
     fn thresholds(nodes: &[Rc<UiRenderNode>], out: &mut Vec<String>) {
         for node in nodes {
-            for (name, _) in &node.breakpoints {
+            for (name, _) in node.breakpoints.iter() {
                 if breakpoint_threshold(name).is_some() && !out.contains(name) {
                     out.push(name.clone());
                 }
@@ -349,6 +354,8 @@ fn mount_tree(tree: Vec<Rc<UiRenderNode>>, shared: &Rc<Shared>) -> Result<(), Js
     // tree is consistent even if the resolution race between reading
     // innerWidth and finishing the rebuild -- not realistic, but cheap
     // to make free.
+    let prof = profiling();
+    let q0 = if prof { now() } else { 0.0 };
     let breakpoint = active_breakpoints(&tree);
 
     // Build the whole new subtree off-DOM first, into a fragment nothing
@@ -381,13 +388,18 @@ fn mount_tree(tree: Vec<Rc<UiRenderNode>>, shared: &Rc<Shared>) -> Result<(), Js
     // that appears/changes/disappears on a later render is picked up
     // without the host needing to do anything -- this is what replaces
     // pong.js's/pacman.js's hand-rolled `window.setInterval(..., tick)`.
+    let q2 = if prof { now() } else { 0.0 };
     sync_previews(shared);
     save_browser_storage(shared);
-    *shared.key_down_handler.borrow_mut() = find_node_handler(&tree, &|n| n.on_key_down.clone());
-    *shared.key_up_handler.borrow_mut() = find_node_handler(&tree, &|n| n.on_key_up.clone());
-    *shared.pointer_move_handler.borrow_mut() = find_node_handler(&tree, &|n| n.on_pointer_move.clone());
-    *shared.pointer_up_handler.borrow_mut() = find_node_handler(&tree, &|n| n.on_pointer_up.clone());
-    *shared.frame_handler.borrow_mut() = find_frame_handler(&tree);
+    let q3 = if prof { now() } else { 0.0 };
+    // One walk over the tree (it used to be six) for every "first node that
+    // declares ..." lookup and the timers.
+    let scan = scan_tree(&tree);
+    *shared.key_down_handler.borrow_mut() = scan.key_down;
+    *shared.key_up_handler.borrow_mut() = scan.key_up;
+    *shared.pointer_move_handler.borrow_mut() = scan.pointer_move;
+    *shared.pointer_up_handler.borrow_mut() = scan.pointer_up;
+    *shared.frame_handler.borrow_mut() = scan.frame;
     // Bound to a local first (not `if shared.frame_handler.borrow().is_some() { .. }`)
     // so the `Ref` guard drops here, before `start_frame_loop` runs --
     // otherwise it stays alive for the whole `if` block under Rust's
@@ -402,8 +414,12 @@ fn mount_tree(tree: Vec<Rc<UiRenderNode>>, shared: &Rc<Shared>) -> Result<(), Js
     // `tick||`/`every||` intervals follow the tree the same way: a timer
     // starts when a node asking for it is rendered and stops when that node
     // is gone (an `if{running}` that turned false, say).
-    sync_tick_timers(shared, &tree);
+    sync_tick_timers(shared, scan.ticks);
 
+    let q4 = if prof { now() } else { 0.0 };
+    if prof {
+        web_sys::console::log_1(&JsValue::from_str(&format!("TINT-TIMING-PHASES patch {:.1} previews+storage {:.1} scan+timers {:.1}", q2 - q0, q3 - q2, q4 - q3)));
+    }
     *shared.retained.borrow_mut() = Some(Retained {
         nodes: tree,
         mounts,
@@ -413,30 +429,61 @@ fn mount_tree(tree: Vec<Rc<UiRenderNode>>, shared: &Rc<Shared>) -> Result<(), Js
     Ok(())
 }
 
-/// Collects the distinct `(handler, interval_ms)` pairs the tree asks for.
-fn find_ticks(nodes: &[Rc<UiRenderNode>], out: &mut Vec<(String, i32)>) {
-    for node in nodes {
-        if let Some(handler) = &node.on_tick {
-            let ms = node.every_ms.unwrap_or(1000.0).clamp(10.0, 86_400_000.0) as i32;
-            let key = (handler.clone(), ms);
-            if !out.contains(&key) {
-                out.push(key);
-            }
-        }
-        find_ticks(&node.children, out);
-    }
+/// What a mounted tree asks the host for, found in a single depth-first walk:
+/// the first handler of each kind (document order) and the distinct
+/// `(handler, interval_ms)` timers.
+#[derive(Default)]
+struct TreeScan {
+    key_down: Option<String>,
+    key_up: Option<String>,
+    pointer_move: Option<String>,
+    pointer_up: Option<String>,
+    frame: Option<String>,
+    ticks: Vec<(String, i32)>,
 }
 
+fn scan_tree(nodes: &[Rc<UiRenderNode>]) -> TreeScan {
+    fn walk(nodes: &[Rc<UiRenderNode>], out: &mut TreeScan) {
+        for node in nodes {
+            if out.key_down.is_none() {
+                out.key_down = node.on_key_down.clone();
+            }
+            if out.key_up.is_none() {
+                out.key_up = node.on_key_up.clone();
+            }
+            if out.pointer_move.is_none() {
+                out.pointer_move = node.on_pointer_move.clone();
+            }
+            if out.pointer_up.is_none() {
+                out.pointer_up = node.on_pointer_up.clone();
+            }
+            if out.frame.is_none() {
+                out.frame = node.on_frame.clone();
+            }
+            if let Some(handler) = &node.on_tick {
+                let ms = node.every_ms.unwrap_or(1000.0).clamp(10.0, 86_400_000.0) as i32;
+                let key = (handler.clone(), ms);
+                if !out.ticks.contains(&key) {
+                    out.ticks.push(key);
+                }
+            }
+            walk(&node.children, out);
+        }
+    }
+    let mut out = TreeScan::default();
+    walk(nodes, &mut out);
+    out
+}
+
+/// Collects the distinct `(handler, interval_ms)` pairs the tree asks for.
 /// Starts intervals the tree newly asks for and stops the ones it no longer
 /// does. A stopped timer's closure is leaked on purpose (same convention as
 /// the rest of this module): the stop can happen from inside that very
 /// timer's own callback, and dropping a running closure would trap.
-fn sync_tick_timers(shared: &Rc<Shared>, tree: &[Rc<UiRenderNode>]) {
+fn sync_tick_timers(shared: &Rc<Shared>, wanted: Vec<(String, i32)>) {
     let Some(window) = web_sys::window() else {
         return;
     };
-    let mut wanted = Vec::new();
-    find_ticks(tree, &mut wanted);
 
     let mut timers = shared.timers.borrow_mut();
     let mut kept = Vec::new();
@@ -500,35 +547,6 @@ fn run_tick(shared: &Rc<Shared>, handler: &str) {
             handler, e
         ))),
     }
-}
-
-/// Depth-first search for the first node in `nodes` (or its descendants)
-/// that declares `frame||`. A `ui fn` is expected to put it on one root-ish
-/// node (see docs/guide/events.md's `GameRoot` example), so "first found"
-/// is enough -- this isn't trying to support multiple independent frame
-/// loops in one tree.
-fn find_node_handler(
-    nodes: &[Rc<UiRenderNode>],
-    pick: &dyn Fn(&UiRenderNode) -> Option<String>,
-) -> Option<String> {
-    for node in nodes {
-        if let Some(handler) = pick(node).or_else(|| find_node_handler(&node.children, pick)) {
-            return Some(handler);
-        }
-    }
-    None
-}
-
-fn find_frame_handler(nodes: &[Rc<UiRenderNode>]) -> Option<String> {
-    for node in nodes {
-        if node.on_frame.is_some() {
-            return node.on_frame.clone();
-        }
-        if let Some(handler) = find_frame_handler(&node.children) {
-            return Some(handler);
-        }
-    }
-    None
 }
 
 /// Starts this session's `requestAnimationFrame` loop the first time any
@@ -684,8 +702,13 @@ fn save_browser_storage(shared: &Rc<Shared>) {
     if shared.nested {
         return;
     }
-    let Some(storage) = browser_storage() else { return };
+    // Touching `localStorage` is slow the first time, so a program that never
+    // stored anything never does.
     let snapshot = shared.session.borrow().storage_snapshot();
+    if snapshot.is_empty() {
+        return;
+    }
+    let Some(storage) = browser_storage() else { return };
     for (name, value) in snapshot {
         let key = format!("{STORAGE_PREFIX}{name}");
         if storage.get_item(&key).ok().flatten().as_deref() != Some(value.as_str()) {
@@ -811,27 +834,64 @@ fn patch_list(
     // (mounted node, index it had in the old list if it was reused)
     let mut plan: Vec<(MNode, Option<usize>)> = Vec::with_capacity(nodes.len());
 
+    // Old indices per key, built once: looking each key up by scanning the old
+    // list made a keyed list of n rows cost O(n^2) string comparisons.
+    let mut by_key: std::collections::HashMap<&str, std::collections::VecDeque<usize>> =
+        std::collections::HashMap::new();
+    if nodes.iter().any(|n| n.key.is_some()) {
+        for (i, o) in old_nodes.iter().enumerate() {
+            if let Some(k) = o.key.as_deref() {
+                by_key.entry(k).or_default().push_back(i);
+            }
+        }
+    }
+
+    // Decide which old element (if any) each new node reuses.
+    let mut candidates: Vec<Option<usize>> = Vec::with_capacity(nodes.len());
     for (index, node) in nodes.iter().enumerate() {
         let candidate = if let Some(key) = &node.key {
-            old_nodes
-                .iter()
-                .enumerate()
-                .position(|(i, o)| o.key.as_deref() == Some(key.as_str()) && old[i].is_some())
+            by_key.get_mut(key.as_str()).and_then(|v| v.pop_front())
         } else if index < old.len() && old[index].is_some() {
             Some(index)
         } else {
             None
         };
-        let candidate = candidate.filter(|&i| {
+        candidates.push(candidate.filter(|&i| {
             old_nodes[i].tag == node.tag && dom_tag_name(&old_nodes[i]) == dom_tag_name(node)
-        });
+        }));
+    }
+
+    // Nothing reused and everything plain: replace the parent's content outright.
+    if candidates.iter().all(|c| c.is_none()) && !nodes.is_empty() {
+        if let Some(mounts) = build_bulk_into(parent, nodes, shared, breakpoint)? {
+            return Ok(mounts);
+        }
+    }
+
+    // New plain subtrees are built together from one HTML string.
+    let fresh: Vec<&Rc<UiRenderNode>> = nodes
+        .iter()
+        .zip(&candidates)
+        .filter(|(_, c)| c.is_none())
+        .map(|(n, _)| n)
+        .collect();
+    let (bulk, fragment) = build_bulk_many(document, &fresh, shared, breakpoint)?;
+    let mut bulk = bulk.into_iter();
+
+    for (node, candidate) in nodes.iter().zip(candidates) {
         match candidate {
             Some(i) => {
                 let mounted = old[i].take().expect("candidate is unused");
                 let mounted = patch_node(document, &old_nodes[i], node, mounted, shared, breakpoint)?;
                 plan.push((mounted, Some(i)));
             }
-            None => plan.push((build_node(document, node, shared, breakpoint)?, None)),
+            None => {
+                let built = match bulk.next().expect("one entry per fresh node") {
+                    Some(m) => m,
+                    None => build_node(document, node, shared, breakpoint)?,
+                };
+                plan.push((built, None));
+            }
         }
     }
 
@@ -840,36 +900,60 @@ fn patch_list(
         parent.remove_child(&leftover.el)?;
     }
 
-    // Place elements. Reused elements already sit in their old relative
-    // order; if that order still holds we only insert the new ones (and never
-    // detach a reused element, which would swallow a pending `click`).
-    // Otherwise (keyed reorder) fall back to re-appending everything in order.
-    let mut last_reused: Option<usize> = None;
-    let mut ordered = true;
-    for (_, reused) in &plan {
-        if let Some(i) = reused {
-            if last_reused.is_some_and(|l| *i < l) {
-                ordered = false;
-                break;
-            }
-            last_reused = Some(*i);
+    // Place elements. Reused elements that already sit in increasing old order
+    // (the longest such run) stay where they are; only new elements and the
+    // ones outside that run are (re)inserted, walking backwards so each lands
+    // before its successor. A plain insert or removal moves nothing, a swap
+    // moves two.
+    let stay = longest_increasing_run(&plan);
+    // The common "rows appended at the end" case: everything new came out of
+    // one parse and sits after every reused element, so it moves in one call.
+    let first_new = plan.iter().position(|(_, reused)| reused.is_none());
+    let mut placed_from = plan.len();
+    if let (Some(fragment), Some(k)) = (&fragment, first_new) {
+        if plan[k..].iter().all(|(_, reused)| reused.is_none()) && stay[..k].iter().all(|s| *s) {
+            parent.append_child(fragment)?;
+            placed_from = k;
         }
     }
-    if ordered {
-        let mut next: Option<web_sys::Node> = None;
-        for (mounted, reused) in plan.iter().rev() {
-            if reused.is_none() {
-                parent.insert_before(&mounted.el, next.as_ref())?;
-            }
+    let mut next: Option<web_sys::Node> = None;
+    for (pos, (mounted, _)) in plan.iter().enumerate().rev() {
+        if pos >= placed_from {
             next = Some(mounted.el.clone().into());
+            continue;
         }
-    } else {
-        for (mounted, _) in &plan {
-            parent.append_child(&mounted.el)?;
+        if !stay[pos] {
+            parent.insert_before(&mounted.el, next.as_ref())?;
         }
+        next = Some(mounted.el.clone().into());
     }
 
     Ok(plan.into_iter().map(|(m, _)| m).collect())
+}
+
+/// For each plan position, whether it belongs to the longest run of reused
+/// elements whose old indices increase (those need no DOM move).
+fn longest_increasing_run(plan: &[(MNode, Option<usize>)]) -> Vec<bool> {
+    let mut stay = vec![false; plan.len()];
+    // tails[k] = plan position ending the best run of length k+1
+    let mut tails: Vec<usize> = Vec::new();
+    let mut prev: Vec<Option<usize>> = vec![None; plan.len()];
+    for (pos, (_, old)) in plan.iter().enumerate() {
+        let Some(old) = *old else { continue };
+        let at = tails.partition_point(|&t| plan[t].1.unwrap() < old);
+        prev[pos] = if at > 0 { Some(tails[at - 1]) } else { None };
+        if at == tails.len() {
+            tails.push(pos);
+        } else {
+            tails[at] = pos;
+        }
+    }
+    let mut cur = tails.last().copied();
+    while let Some(pos) = cur {
+        stay[pos] = true;
+        cur = prev[pos];
+    }
+    stay
 }
 
 fn same_children(a: &[Rc<UiRenderNode>], b: &[Rc<UiRenderNode>]) -> bool {
@@ -891,7 +975,7 @@ fn patch_node(
     }
     let el = m.el.clone();
 
-    if old.tint_source != new.tint_source {
+    if old.tint_source != new.tint_source && !new.tint_source.is_empty() {
         el.set_attribute("data-tint-source", &new.tint_source)?;
     }
     if old.key != new.key {
