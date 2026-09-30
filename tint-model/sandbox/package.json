@@ -5,7 +5,7 @@
   "description": "The Tint site and sandbox: one .tn program, served and built by the tint CLI.",
   "scripts": {
     "wasm": "sh build-wasm.sh",
-    "dev": "cargo run -q --manifest-path ../Cargo.toml -p tint-cli -- dev src/site.tn",
+    "dev": "sh dev.sh",
     "build": "cargo run -q --manifest-path ../Cargo.toml -p tint-cli -- build src/site.tn -o dist/index.html"
   }
 }

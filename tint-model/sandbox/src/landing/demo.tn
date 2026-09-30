@@ -13,10 +13,11 @@ Demo {
         }
     }
 
-    Caption2 {
-        use::CaptionBase
-        "No screenshot — the panel on the right is a live DomSession render of the source on the left."
-    }
+    import "./compare.tn";
 
-    PongButton { route||"/pong" "Open Pong" }
+    PongBlock {
+        layout::{ direction::column, align::center, gap::28, margin.t::72, padding.b::24 }
+        Text { text::{44, bold, @text-main} "Mini app on Tint" }
+        PongButton { route||"/pong" "Pong game" }
+    }
 }

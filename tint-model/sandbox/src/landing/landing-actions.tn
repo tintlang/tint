@@ -2,3 +2,17 @@ fn set_dark() { theme = "dark"  storage_set("theme", "dark") }
 fn set_light() { theme = "light"  storage_set("theme", "light") }
 fn open_sandbox() {}
 fn open_github() {}
+fn pick_web_index() { compare_file = "index.html"  web_shown = web_index }
+fn pick_web_main() { compare_file = "main.jsx"  web_shown = web_main }
+fn pick_web_app() { compare_file = "App.jsx"  web_shown = web_app }
+fn pick_web_css() { compare_file = "App.css"  web_shown = web_css }
+
+// Fill of a file chip: highlighted when it is the selected one.
+fn chip_bg(current, name, theme) {
+    if current == name {
+        if theme == "light" { return "#e2e2e2" }
+        return "#2b2b2b"
+    }
+    if theme == "light" { return "#f5f5f5" }
+    return "#161616"
+}

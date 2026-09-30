@@ -1,0 +1,35 @@
+// Read-only twin of editor.tn: the same highlighted view of `tint_src`.
+// Spliced into a container inside a `ui fn` with `state tint_src` and `theme`.
+Editor {
+    layout::{ grow::1, min-width::0, min-height::0, overflow::auto }
+    Document {
+        layout::{ direction::row, width::"max-content", min-width::"100%", min-height::"100%" }
+        font-family::"ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+        size::13
+        line-height::"22px"
+        Gutter {
+            position::sticky
+            left::0
+            z::1
+            layout::{ padding.x::12 }
+            text-align::right
+            white-space::pre
+            color::{ hl_color("gutter", theme) }
+            background::@panel-bg
+            "{line_numbers(tint_src)}"
+        }
+        Body {
+            position::relative
+            layout::{ grow::1 }
+            min-width::{ "" + (max_line_len(tint_src) + 4) + "ch" }
+            height::{ line_count(tint_src) * 22 }
+            Layer {
+                position::absolute
+                inset::0
+                white-space::pre
+                for{seg in tint_highlight(tint_src)}
+                Text { color::{ hl_color(seg[1], theme) } font-style::{ hl_style(seg[1]) } "{seg[0]}" }
+            }
+        }
+    }
+}

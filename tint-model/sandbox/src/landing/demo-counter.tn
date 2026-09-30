@@ -1,0 +1,21 @@
+fn count_up() { count = count + 1 }
+
+ui fn App() {
+    state count = 0
+
+    style CountButton {
+        layout::{ padding.x::19, padding.y::10 }
+        paint::{ radius::8, background::#1a1a1a, border::{1, transparent} }
+        motion::{ transition::"border-color .25s", hover::{ border::{1, #646cff} } }
+        text::{16, white}
+        cursor::pointer
+    }
+
+    Page {
+        layout::{ direction::column, align::center, justify::center, gap::24, padding::48, min-height::"100%" }
+        paint::{ background::#242424 }
+        Text { text::{51, bold, white} "Counter" }
+        Button { use::CountButton click||count_up "count is {count}" }
+        Text { text::{14, #888888} "Click the button to count." }
+    }
+}

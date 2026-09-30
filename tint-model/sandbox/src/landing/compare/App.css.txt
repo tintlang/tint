@@ -1,0 +1,43 @@
+body {
+  margin: 0;
+  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  background: #242424;
+  color: rgba(255, 255, 255, 0.87);
+}
+
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  padding: 48px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 3.2em;
+  line-height: 1.1;
+}
+
+button {
+  padding: 0.6em 1.2em;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: #1a1a1a;
+  color: inherit;
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.25s;
+}
+
+button:hover {
+  border-color: #646cff;
+}
+
+p {
+  margin: 0;
+  color: #888;
+}

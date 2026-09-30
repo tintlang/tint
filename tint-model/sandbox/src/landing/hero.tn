@@ -13,7 +13,7 @@ Hero {
             }
         }
     }
-    Sub { use::CenteredOnSmall text::{18, @text-muted} "A small declarative UI DSL for Rust/WASM. No React or Svelte. Compiled to WebAssembly and rendered directly to the DOM." }
+    Sub { use::CenteredOnSmall text::{18, @text-muted} "A declarative UI language that compiles to WebAssembly. Write your interface once in Tint, no HTML, CSS or JavaScript." }
 
     CtaRow {
         layout::{ direction::row, gap::12 }
