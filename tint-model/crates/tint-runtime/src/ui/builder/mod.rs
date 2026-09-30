@@ -26,8 +26,15 @@ pub struct UiBuilder {
     pub components: HashMap<String, UiComponent>,
     /// Subtree reuse across renders; `None` builds everything fresh.
     pub cache: Option<UiBuildCache>,
-    visits: HashMap<usize, usize>,
+    visits: crate::scope::HashMap<usize, usize>,
+    shifts: crate::scope::HashMap<usize, isize>,
+    next_entries: crate::scope::HashMap<usize, Vec<Option<cache::CacheEntry>>>,
     component_depth: usize,
+    /// Set when the caller already evaluated this node's `if{}` (true).
+    skip_if: bool,
+    /// For each node being built under the cache: (key, reads) of the cached
+    /// nodes finished directly beneath it.
+    child_reads: Vec<Vec<(usize, std::rc::Rc<Vec<tint_evaluator::ReadEntry>>)>>,
     tokens_hash: u64,
 }
 

@@ -1,7 +1,33 @@
 // runtime/scope.rs
 
 use crate::value::RuntimeValue;
-use std::collections::HashMap;
+use std::collections::HashMap as StdHashMap;
+use std::hash::{BuildHasherDefault, Hasher};
+
+/// FxHash-style hasher: scope keys are short identifiers, and SipHash (plus a
+/// random seed per frame) was a visible share of every UI render.
+#[derive(Default)]
+pub struct FxHasher(u64);
+
+impl Hasher for FxHasher {
+    fn write(&mut self, bytes: &[u8]) {
+        for chunk in bytes.chunks(8) {
+            let mut v = 0u64;
+            for (i, b) in chunk.iter().enumerate() {
+                v |= (*b as u64) << (i * 8);
+            }
+            self.0 = (self.0.rotate_left(5) ^ v).wrapping_mul(0x517c_c1b7_2722_0a95);
+        }
+    }
+    fn write_u8(&mut self, i: u8) {
+        self.0 = (self.0.rotate_left(5) ^ i as u64).wrapping_mul(0x517c_c1b7_2722_0a95);
+    }
+    fn finish(&self) -> u64 {
+        self.0
+    }
+}
+
+pub type HashMap<K, V> = StdHashMap<K, V, BuildHasherDefault<FxHasher>>;
 
 #[derive(Debug, Default)]
 pub struct RuntimeScopeStack {
@@ -11,7 +37,7 @@ pub struct RuntimeScopeStack {
 impl RuntimeScopeStack {
     pub fn new() -> Self {
         Self {
-            frames: vec![HashMap::new()],
+            frames: vec![HashMap::default()],
         }
     }
 
@@ -27,7 +53,7 @@ impl RuntimeScopeStack {
     }
 
     pub fn push(&mut self) {
-        self.frames.push(HashMap::new());
+        self.frames.push(HashMap::default());
     }
 
     pub fn pop(&mut self) {
@@ -74,7 +100,7 @@ impl RuntimeScopeStack {
     }
 
     pub fn values(&self) -> Vec<(String, RuntimeValue)> {
-        let mut values = HashMap::new();
+        let mut values: StdHashMap<String, RuntimeValue> = StdHashMap::new();
         for frame in &self.frames {
             for (name, value) in frame {
                 values.insert(name.clone(), value.clone());

@@ -15,6 +15,26 @@ impl EvalHost for TintVM {
         self.tracked_lookup(name)
     }
 
+    fn fast_compare(&mut self, a: &str, op: &str, b: &str) -> Option<bool> {
+        use crate::value::RuntimeValue as R;
+        if op != "==" && op != "!=" {
+            return None;
+        }
+        let (fa, va) = self.scopes.lookup_ref(a)?;
+        let (fb, vb) = self.scopes.lookup_ref(b)?;
+        let eq = match (va, vb) {
+            (R::String(x), R::String(y)) => x == y,
+            (R::Number(x), R::Number(y)) => x == y,
+            (R::Bool(x), R::Bool(y)) => x == y,
+            _ => return None,
+        };
+        if !self.read_logs.is_empty() {
+            Self::record_read(&mut self.read_logs, a, fa, va);
+            Self::record_read(&mut self.read_logs, b, fb, vb);
+        }
+        Some(eq == (op == "=="))
+    }
+
     fn tracking_supported(&self) -> bool {
         true
     }
@@ -23,15 +43,15 @@ impl EvalHost for TintVM {
         self.begin_tracking();
     }
 
-    fn track_end(&mut self) -> Vec<(String, Option<EvalValue>)> {
+    fn track_end(&mut self) -> Vec<tint_evaluator::ReadEntry> {
         self.end_tracking()
     }
 
-    fn track_merge(&mut self, reads: &[(String, Option<EvalValue>)]) {
+    fn track_merge(&mut self, reads: &[tint_evaluator::ReadEntry]) {
         self.merge_tracking(reads);
     }
 
-    fn reads_unchanged(&mut self, reads: &[(String, Option<EvalValue>)]) -> bool {
+    fn reads_unchanged(&mut self, reads: &[tint_evaluator::ReadEntry]) -> bool {
         self.reads_still_hold(reads)
     }
 

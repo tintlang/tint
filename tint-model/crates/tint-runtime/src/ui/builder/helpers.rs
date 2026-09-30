@@ -15,12 +15,23 @@ pub(crate) fn check_if<H: EvalHost>(modifiers: &[UiModifier], host: &mut H) -> b
     for m in modifiers {
         if m.path.len() == 1 && m.path[0] == "if" {
             if let UiModifierValue::Expr(cond) = &m.value {
+                if let Expr::Binary { left, op, right, .. } = cond {
+                    if let (Expr::Ident(a, _), Expr::Ident(b, _)) = (left.as_ref(), right.as_ref()) {
+                        if let Some(result) = host.fast_compare(a, op, b) {
+                            return result;
+                        }
+                    }
+                }
                 let v = host.eval_expr(cond);
                 return !matches!(v, EvalValue::Bool(false) | EvalValue::Unit);
             }
         }
     }
     true
+}
+
+pub(crate) fn has_if(modifiers: &[UiModifier]) -> bool {
+    modifiers.iter().any(|m| m.path.len() == 1 && m.path[0] == "if" && matches!(m.value, UiModifierValue::Expr(_)))
 }
 
 /// Finds this node's `for{var in iterable}` modifier, if any. The parser
@@ -210,6 +221,36 @@ pub(crate) fn apply_key(tree: &mut UiTree, id: UiNodeId, modifiers: &[UiModifier
         }
     });
     tree.set_key(id, key);
+}
+
+/// `key::{expr}`: a key computed from the loop item (`for{r in rows}` ... `key::{r.id}`),
+/// so a list reorder or removal is matched by identity rather than by position.
+pub(crate) fn apply_dynamic_key<H: tint_evaluator::EvalHost>(
+    tree: &mut UiTree,
+    id: UiNodeId,
+    modifiers: &[UiModifier],
+    host: &mut H,
+) {
+    for modifier in modifiers {
+        if modifier.path.len() == 1 && modifier.path[0] == "key" {
+            let key = match &modifier.value {
+                UiModifierValue::Expr(expr) => Some(host.eval_expr(expr)),
+                // `key::{r}` parses as a one-element tuple holding the name.
+                UiModifierValue::Tuple(items) if items.len() == 1 => match &items[0] {
+                    UiModifierValue::Ident(name) => host.lookup_var(name),
+                    _ => None,
+                },
+                _ => None,
+            };
+            if let Some(value) = key {
+                let key = match value {
+                    tint_evaluator::Value::String(s) => s,
+                    other => other.to_string(),
+                };
+                tree.set_key(id, Some(key));
+            }
+        }
+    }
 }
 
 fn find_literal(attributes: &[UiAttribute], name: &str) -> Option<String> {

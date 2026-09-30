@@ -95,7 +95,8 @@ impl UiBuilder {
         children: &[UiNodeOrExpr],
         host: &mut H,
     ) -> Option<UiNodeId> {
-        if !check_if(modifiers, host) {
+        let if_done = std::mem::take(&mut self.skip_if);
+        if !if_done && !check_if(modifiers, host) {
             return None;
         }
 
@@ -110,13 +111,55 @@ impl UiBuilder {
             return built;
         }
 
-        let expanded = self.expand_styles(modifiers);
-        let id = self.tree.create_styled_node_with_host_and_tokens(
-            name.to_string(),
-            &expanded,
-            host,
-            &self.tokens,
-        );
+        let memo_key = (modifiers.as_ptr() as usize, self.tokens_hash, if_done);
+        let memo_ok = self.component_depth == 0
+            && !modifiers.is_empty()
+            && self.cache.is_some()
+            && !crate::ui::tree::SOURCE_MAP.load(std::sync::atomic::Ordering::Relaxed);
+        let known = if memo_ok {
+            self.cache.as_ref().and_then(|c| c.style_memo.get(&memo_key).cloned())
+        } else {
+            None
+        };
+        let (expanded, id) = match known {
+            Some(Some(memo)) => {
+                let id = self.tree.create_node_with_bundle(name.to_string(), &memo.bundle);
+                (Rc::clone(&memo.expanded), id)
+            }
+            other => {
+                let mut expanded = self.expand_styles(modifiers);
+                if if_done {
+                    // Already evaluated by the caller; evaluating it again as a style
+                    // would make the body depend on whatever the condition reads.
+                    expanded.retain(|m| !(m.path.len() == 1 && m.path[0] == "if"));
+                }
+                let id = self.tree.create_styled_node_with_host_and_tokens(
+                    name.to_string(),
+                    &expanded,
+                    host,
+                    &self.tokens,
+                );
+                if memo_ok && other.is_none() {
+                    let memo = if super::cache::modifiers_static(&expanded, false) {
+                        let node = &self.tree.nodes[id];
+                        Some(Rc::new(super::cache::StyleMemo {
+                            expanded: Rc::new(expanded.clone()),
+                            bundle: Rc::new(crate::ui::tree::StyleBundle {
+                                style: Rc::new(node.style.clone()),
+                                hover_style: Rc::new(node.hover_style.clone()),
+                                breakpoints: Rc::new(node.breakpoints.clone()),
+                            }),
+                        }))
+                    } else {
+                        None
+                    };
+                    if let Some(cache) = self.cache.as_mut() {
+                        cache.style_memo.insert(memo_key, memo);
+                    }
+                }
+                (Rc::new(expanded), id)
+            }
+        };
         apply_events(&mut self.tree, id, attributes);
         apply_svg(&mut self.tree, id, attributes);
         apply_route(&mut self.tree, id, attributes);
@@ -129,6 +172,7 @@ impl UiBuilder {
         apply_js_handler(&mut self.tree, id, attributes);
         apply_asset(&mut self.tree, id, attributes);
         apply_key(&mut self.tree, id, &expanded);
+        apply_dynamic_key(&mut self.tree, id, &expanded, host);
 
         match find_for(modifiers) {
             // `for{var in iterable}` on this node: build `children` once
@@ -347,6 +391,7 @@ impl UiBuilder {
         apply_js_handler(&mut self.tree, id, attributes);
         apply_asset(&mut self.tree, id, attributes);
         apply_key(&mut self.tree, id, &expanded);
+        apply_dynamic_key(&mut self.tree, id, &expanded, host);
 
         let mut named_slots: HashMap<String, Vec<UiNodeOrExpr>> = HashMap::new();
         let mut default_children = Vec::new();
@@ -461,49 +506,95 @@ impl UiBuilder {
         };
 
         // Hit: same tokens and every outer variable it read still holds the
-        // value it had.
-        let hit = self
-            .cache
-            .as_ref()
-            .and_then(|cache| cache.entries.get(&key))
-            .and_then(|entries| entries.get(visit))
-            .filter(|entry| entry.tokens == tokens && host.reads_unchanged(&entry.reads))
-            .map(|entry| (entry.reads.clone(), entry.render.clone()));
-        if let Some((reads, render)) = hit {
-            host.track_merge(&reads);
+        // value it had. The previous render's entry is looked up near the same
+        // visit position, shifted by whatever offset the last hit on this node
+        // needed, so inserting or removing a list item doesn't invalidate every
+        // row after it.
+        // A node with an `if{}` has its condition evaluated up front; only the
+        // outcome is part of the cache match, so the variables it reads don't
+        // invalidate the body.
+        let cond = match node {
+            UiNode::BlockElement { modifiers, .. } if has_if(modifiers) => {
+                Some(check_if(modifiers, host))
+            }
+            _ => None,
+        };
+        let shift = self.shifts.get(&key).copied().unwrap_or(0);
+        let found = self.cache.as_mut().and_then(|cache| cache.entries.get_mut(&key)).and_then(|entries| {
+            let len = entries.len() as isize;
+            let base = visit as isize;
+            let mut order = [0isize; 10];
+            order[0] = base + shift;
+            order[1] = base;
+            for d in 1..=4isize {
+                order[(2 * d) as usize] = base + shift + d;
+                order[(2 * d + 1) as usize] = base + shift - d;
+            }
+            order.into_iter().find_map(|i| {
+                if i < 0 || i >= len {
+                    return None;
+                }
+                let slot = &mut entries[i as usize];
+                let ok = matches!(slot, Some(e) if e.tokens == tokens && e.cond == cond && host.reads_unchanged(&e.reads));
+                // Moved out, not cloned: the old entry is not needed again.
+                ok.then(|| (i - base, slot.take().expect("matched above")))
+            })
+        });
+        if let Some((new_shift, entry)) = found {
+            self.shifts.insert(key, new_shift);
+            host.track_merge(&entry.reads);
+            let render = entry.render.clone();
+            self.next_entries.entry(key).or_default().push(Some(entry));
             return render.map(|render| {
-                let id = self.tree.create_node(render.tag.clone());
+                let id = self.tree.create_node(String::new());
                 self.tree.nodes[id].prebuilt = Some(render);
                 id
             });
         }
 
         // Miss: build while recording what it reads, then remember it.
+        if cond == Some(false) {
+            self.next_entries.entry(key).or_default().push(Some(super::cache::CacheEntry {
+                reads: Rc::new(Vec::new()),
+                cond,
+                tokens,
+                render: None,
+            }));
+            return None;
+        }
+        self.skip_if = cond == Some(true);
+        self.child_reads.push(Vec::new());
         host.track_begin();
         let built = self.build(node, host);
         let reads = host.track_end();
+        self.skip_if = false;
+        let kids = self.child_reads.pop().unwrap_or_default();
+        // A cached child that read exactly what this node read can never hit
+        // when this node misses, so remembering it is wasted work from now on.
+        for (child_key, child_reads) in kids {
+            let same = child_reads.len() == reads.len()
+                && child_reads.iter().all(|(n, _)| reads.iter().any(|(m, _)| m == n));
+            if same {
+                if let Some(cache) = self.cache.as_mut() {
+                    cache.mark_not_worth_caching(child_key);
+                }
+            }
+        }
+        let reads = Rc::new(reads);
+        if let Some(parent) = self.child_reads.last_mut() {
+            parent.push((key, Rc::clone(&reads)));
+        }
         let render = built.map(|id| {
             let render = super::super::render::to_render_rc(&self.tree, id);
             self.tree.nodes[id].prebuilt = Some(Rc::clone(&render));
             render
         });
-        let entry = super::cache::CacheEntry {
+        self.next_entries.entry(key).or_default().push(Some(super::cache::CacheEntry {
             reads,
+            cond,
             tokens,
             render,
-        };
-        let entries = self
-            .cache
-            .as_mut()
-            .expect("checked above")
-            .entries
-            .entry(key)
-            .or_default();
-        if visit < entries.len() {
-            entries[visit] = entry;
-        } else {
-            entries.push(entry);
-        }
+        }));
         built
     }
 
@@ -511,7 +602,13 @@ impl UiBuilder {
     /// did not touch.
     pub fn take_cache(&mut self) -> Option<UiBuildCache> {
         let mut cache = self.cache.take()?;
-        cache.sweep(&self.visits);
+        // Keys not visited this render sit under a subtree that was reused as
+        // a whole: keep their entries for the next render.
+        let mut next = std::mem::take(&mut self.next_entries);
+        for (key, old) in std::mem::take(&mut cache.entries) {
+            next.entry(key).or_insert(old);
+        }
+        cache.entries = next;
         Some(cache)
     }
 

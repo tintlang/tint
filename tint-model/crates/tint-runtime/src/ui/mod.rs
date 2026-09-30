@@ -3,6 +3,8 @@
 pub mod builder;
 #[cfg(feature = "typed-ir")]
 pub mod ir_sink;
+#[cfg(feature = "typed-ir")]
+pub mod ir_render;
 pub mod layout;
 pub mod render;
 pub mod style;

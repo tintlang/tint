@@ -9,7 +9,11 @@ impl UiBuilder {
             styles: std::collections::HashMap::new(),
             components: std::collections::HashMap::new(),
             cache: None,
-            visits: std::collections::HashMap::new(),
+            visits: Default::default(),
+            skip_if: false,
+            child_reads: Vec::new(),
+            shifts: Default::default(),
+            next_entries: Default::default(),
             component_depth: 0,
             tokens_hash: 0,
         }

@@ -25,9 +25,9 @@ pub struct UiRenderNode {
     pub tag: String,
     pub tint_source: String,
     pub text: Option<String>,
-    pub style: Vec<(String, String)>,
-    pub hover_style: Vec<(String, String)>,
-    pub breakpoints: Vec<(String, Vec<(String, String)>)>,
+    pub style: Rc<Vec<(String, String)>>,
+    pub hover_style: Rc<Vec<(String, String)>>,
+    pub breakpoints: Rc<Vec<(String, Vec<(String, String)>)>>,
     pub on_click: Option<String>,
     pub on_hover_enter: Option<String>,
     pub on_hover_leave: Option<String>,
@@ -99,6 +99,38 @@ impl PartialEq for UiRenderNode {
 /// `UiRenderNode`. `id` is expected to come from `tree` itself (the
 /// synthetic root `UiRuntime::mount` produces, or one of its
 /// descendants) -- every caller in this codebase satisfies that.
+/// Hosts that render to a DOM turn this on: a node whose only child is a plain
+/// string then carries that string as its own `text` (one element, not two).
+/// Off by default so the tree keeps the shape the language describes.
+pub fn fold_text_enabled() -> bool {
+    FOLD_TEXT.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+pub static FOLD_TEXT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+thread_local! {
+    static EMPTY_STYLE: Rc<Vec<(String, String)>> = Rc::new(Vec::new());
+    static EMPTY_BPS: Rc<Vec<(String, Vec<(String, String)>)>> = Rc::new(Vec::new());
+}
+
+fn empty_bps() -> Rc<Vec<(String, Vec<(String, String)>)>> {
+    EMPTY_BPS.with(Rc::clone)
+}
+
+/// The shared style list if the node came from the style memo, else a fresh
+/// copy (or the shared empty list).
+fn share(
+    bundle: &Option<Rc<super::tree::StyleBundle>>,
+    pick: impl Fn(&super::tree::StyleBundle) -> &Rc<Vec<(String, String)>>,
+    own: &Vec<(String, String)>,
+) -> Rc<Vec<(String, String)>> {
+    match bundle {
+        Some(b) => Rc::clone(pick(b)),
+        None if own.is_empty() => EMPTY_STYLE.with(Rc::clone),
+        None => Rc::new(own.clone()),
+    }
+}
+
 pub fn to_render_tree(tree: &UiTree, id: UiNodeId) -> UiRenderNode {
     let node = &tree.nodes[id];
     // A reused subtree stands in for its whole (already converted) shape.
@@ -108,7 +140,31 @@ pub fn to_render_tree(tree: &UiTree, id: UiNodeId) -> UiRenderNode {
     // `TextArea` and `Preview` carry their text as an attribute of the element
     // (value / source), so their string children fold into `text`.
     let folds_text = matches!(node.tag.as_str(), "TextArea" | "Preview");
-    let text = if folds_text && node.text.is_none() {
+    // A lone plain string child (`Text { "{x}" }`) becomes the node's own text:
+    // one element instead of two.
+    let lone_text = if FOLD_TEXT.load(std::sync::atomic::Ordering::Relaxed)
+        && node.text.is_none()
+        && node.children.len() == 1
+        && !folds_text
+    {
+        let child = &tree.nodes[node.children[0]];
+        let bare = child.text.is_some()
+            && child.children.is_empty()
+            && child.prebuilt.is_none()
+            && child.tag == "Text"
+            && child.style.is_empty()
+            && child.shared_style.is_none()
+            && child.hover_style.is_empty()
+            && child.breakpoints.is_empty()
+            && child.on_click.is_none()
+            && child.key.is_none();
+        bare.then(|| child.text.clone()).flatten()
+    } else {
+        None
+    };
+    let text = if lone_text.is_some() {
+        lone_text.clone()
+    } else if folds_text && node.text.is_none() {
         Some(
             node.children
                 .iter()
@@ -122,9 +178,13 @@ pub fn to_render_tree(tree: &UiTree, id: UiNodeId) -> UiRenderNode {
         tag: node.tag.clone(),
         tint_source: node.tint_source.clone(),
         text,
-        style: node.style.clone(),
-        hover_style: node.hover_style.clone(),
-        breakpoints: node.breakpoints.clone(),
+        style: share(&node.shared_style, |b| &b.style, &node.style),
+        hover_style: share(&node.shared_style, |b| &b.hover_style, &node.hover_style),
+        breakpoints: match &node.shared_style {
+            Some(b) => Rc::clone(&b.breakpoints),
+            None if node.breakpoints.is_empty() => empty_bps(),
+            None => Rc::new(node.breakpoints.clone()),
+        },
         on_click: node.on_click.clone(),
         on_hover_enter: node.on_hover_enter.clone(),
         on_hover_leave: node.on_hover_leave.clone(),
@@ -147,7 +207,7 @@ pub fn to_render_tree(tree: &UiTree, id: UiNodeId) -> UiRenderNode {
         target: node.target.clone(),
         reference: node.reference.clone(),
         on_js: node.on_js.clone(),
-        children: if folds_text {
+        children: if folds_text || lone_text.is_some() {
             Vec::new()
         } else {
             node.children

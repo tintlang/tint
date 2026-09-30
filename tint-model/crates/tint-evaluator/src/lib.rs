@@ -10,6 +10,6 @@ pub use evaluator::{
 pub use runtime::{env, host_vm, value};
 pub use utils::{call, errors, pattern_match};
 
-pub use evaluator::host::EvalHost;
+pub use evaluator::host::{EvalHost, ReadEntry};
 pub use runtime::{env::Env, value::Value};
 pub use utils::pattern_match::match_pattern;

@@ -14,8 +14,17 @@ pub enum Flow {
     Continue,
 }
 
+/// One recorded read: the variable's name and the value it held (`None` when
+/// it was unbound). Shared, so a recording nested in others costs no copies.
+pub type ReadEntry = (Rc<str>, Option<Rc<Value>>);
+
 pub trait EvalHost {
     fn lookup_var(&mut self, _name: &str) -> Option<Value> {
+        None
+    }
+    /// `a == b` / `a != b` between two variables, answered without building
+    /// values; `None` leaves it to the general evaluator.
+    fn fast_compare(&mut self, _a: &str, _op: &str, _b: &str) -> Option<bool> {
         None
     }
     fn resolve_function(&mut self, _name: &str) -> Option<Value> {
@@ -35,13 +44,13 @@ pub trait EvalHost {
     fn track_begin(&mut self) {}
     /// Stops the innermost recording and returns what it read; the reads are
     /// also folded into the enclosing recording, if any.
-    fn track_end(&mut self) -> Vec<(String, Option<Value>)> {
+    fn track_end(&mut self) -> Vec<ReadEntry> {
         Vec::new()
     }
     /// Folds reads of an already-validated cached subtree into the current recording.
-    fn track_merge(&mut self, _reads: &[(String, Option<Value>)]) {}
+    fn track_merge(&mut self, _reads: &[ReadEntry]) {}
     /// True if every recorded variable still holds the recorded value.
-    fn reads_unchanged(&mut self, _reads: &[(String, Option<Value>)]) -> bool {
+    fn reads_unchanged(&mut self, _reads: &[ReadEntry]) -> bool {
         false
     }
     fn load_var(&mut self, name: &str, span: Span) -> Value;

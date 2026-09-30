@@ -11,20 +11,46 @@ pub(crate) struct ReadLog {
     /// Scope depth when recording started; only bindings living in frames
     /// below this index are inputs from outside.
     base: usize,
-    reads: Vec<(String, Option<EvalValue>)>,
+    reads: Vec<ReadEntry>,
 }
 
+use tint_evaluator::ReadEntry;
+use std::rc::Rc;
+
 impl TintVM {
-    pub(super) fn note_read(&mut self, name: &str, found: Option<(usize, EvalValue)>) {
-        let frame = found.as_ref().map(|(frame, _)| *frame);
-        let value = found.map(|(_, value)| value);
-        for log in &mut self.read_logs {
-            if frame.is_some_and(|frame| frame >= log.base) {
+    /// Logs a read of `name` (found in `frame`, holding `value`) in every
+    /// active recording that has not seen it yet. The value is converted (and
+    /// shared between the recordings) only if some recording needs it.
+    pub(super) fn record_read(
+        logs: &mut [ReadLog],
+        name: &str,
+        frame: usize,
+        value: &RuntimeValue,
+    ) {
+        let mut shared: Option<ReadEntry> = None;
+        for log in logs {
+            if frame >= log.base {
                 continue; // bound inside the recorded region: not an input
             }
-            if !log.reads.iter().any(|(existing, _)| existing == name) {
-                log.reads.push((name.to_string(), value.clone()));
+            if log.reads.iter().any(|(existing, _)| &**existing == name) {
+                continue;
             }
+            let entry = shared
+                .get_or_insert_with(|| (Rc::from(name), Some(Rc::new(Self::rt_to_eval(value)))))
+                .clone();
+            log.reads.push(entry);
+        }
+    }
+
+    /// Same for a name that resolved to nothing.
+    fn note_unbound(&mut self, name: &str) {
+        let mut shared: Option<ReadEntry> = None;
+        for log in &mut self.read_logs {
+            if log.reads.iter().any(|(existing, _)| &**existing == name) {
+                continue;
+            }
+            let entry = shared.get_or_insert_with(|| (Rc::from(name), None)).clone();
+            log.reads.push(entry);
         }
     }
 
@@ -33,13 +59,16 @@ impl TintVM {
         if self.read_logs.is_empty() {
             return self.scopes.lookup(name).map(|v| Self::rt_to_eval(&v));
         }
-        let found = self
-            .scopes
-            .lookup_ref(name)
-            .map(|(frame, v)| (frame, Self::rt_to_eval(v)));
-        let result = found.as_ref().map(|(_, v)| v.clone());
-        self.note_read(name, found);
-        result
+        match self.scopes.lookup_ref(name) {
+            Some((frame, value)) => {
+                Self::record_read(&mut self.read_logs, name, frame, value);
+                Some(Self::rt_to_eval(value))
+            }
+            None => {
+                self.note_unbound(name);
+                None
+            }
+        }
     }
 
     pub(super) fn begin_tracking(&mut self) {
@@ -49,16 +78,17 @@ impl TintVM {
         });
     }
 
-    pub(super) fn end_tracking(&mut self) -> Vec<(String, Option<EvalValue>)> {
+    pub(super) fn end_tracking(&mut self) -> Vec<ReadEntry> {
         self.read_logs
             .pop()
             .map(|log| log.reads)
             .unwrap_or_default()
     }
 
-    pub(super) fn merge_tracking(&mut self, reads: &[(String, Option<EvalValue>)]) {
-        for (name, value) in reads {
-            // Same rule as `note_read`: only frames below each log's base
+    pub(super) fn merge_tracking(&mut self, reads: &[ReadEntry]) {
+        for entry in reads {
+            let name = &entry.0;
+            // Same rule as a fresh read: only frames below each log's base
             // count as inputs. A merged read was an input of the child log
             // and therefore lives below the child's base; whether it is
             // also an input for the parent depends on where it resolves now.
@@ -68,13 +98,13 @@ impl TintVM {
                     continue;
                 }
                 if !log.reads.iter().any(|(existing, _)| existing == name) {
-                    log.reads.push((name.clone(), value.clone()));
+                    log.reads.push(entry.clone());
                 }
             }
         }
     }
 
-    pub(super) fn reads_still_hold(&self, reads: &[(String, Option<EvalValue>)]) -> bool {
+    pub(super) fn reads_still_hold(&self, reads: &[ReadEntry]) -> bool {
         reads.iter().all(
             |(name, expected)| match (self.scopes.lookup_ref(name), expected) {
                 (None, None) => true,

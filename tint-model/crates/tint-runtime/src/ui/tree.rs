@@ -9,8 +9,23 @@ use super::render::UiRenderNode;
 
 pub type UiNodeId = usize;
 
+/// Whether nodes carry their `Tag { modifiers }` source text (for inspecting the
+/// DOM). Off by default: building that string for every node on every render
+/// costs more than the rest of the node.
+pub static SOURCE_MAP: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Resolved styles shared between every node built from the same modifiers.
+#[derive(Debug)]
+pub struct StyleBundle {
+    pub style: Rc<StyleList>,
+    pub hover_style: Rc<StyleList>,
+    pub breakpoints: Rc<Vec<(String, StyleList)>>,
+}
+
 #[derive(Debug, Clone)]
 pub struct UiElement {
+    /// When set, stands in for `style`/`hover_style`/`breakpoints` (left empty).
+    pub shared_style: Option<Rc<StyleBundle>>,
     pub id: UiNodeId,
     pub tag: String,
     pub tint_source: String,
@@ -88,6 +103,7 @@ impl UiElement {
             id,
             tag,
             tint_source: String::new(),
+            shared_style: None,
             children: Vec::new(),
             style: Vec::new(),
             hover_style: Vec::new(),
@@ -147,11 +163,13 @@ impl UiTree {
         let (mut style, hover_style, breakpoints) = super::style::resolve_style(modifiers);
         super::style::apply_container_defaults(&tag, &mut style);
         let node = &mut self.nodes[id];
-        node.tint_source = format!(
-            "{} {{ {} }}",
-            node.tag,
-            super::style::format_modifier_source(modifiers)
-        );
+        if SOURCE_MAP.load(std::sync::atomic::Ordering::Relaxed) {
+            node.tint_source = format!(
+                "{} {{ {} }}",
+                node.tag,
+                super::style::format_modifier_source(modifiers)
+            );
+        }
         node.style = style;
         node.hover_style = hover_style;
         node.breakpoints = breakpoints;
@@ -169,11 +187,13 @@ impl UiTree {
             super::style::resolve_style_with_host(modifiers, host);
         super::style::apply_container_defaults(&tag, &mut style);
         let node = &mut self.nodes[id];
-        node.tint_source = format!(
-            "{} {{ {} }}",
-            node.tag,
-            super::style::format_modifier_source(modifiers)
-        );
+        if SOURCE_MAP.load(std::sync::atomic::Ordering::Relaxed) {
+            node.tint_source = format!(
+                "{} {{ {} }}",
+                node.tag,
+                super::style::format_modifier_source(modifiers)
+            );
+        }
         node.style = style;
         node.hover_style = hover_style;
         node.breakpoints = breakpoints;
@@ -190,6 +210,13 @@ impl UiTree {
         self.create_styled_node_with_eval(tag, modifiers, &mut |expr| host.eval_expr(expr), tokens)
     }
 
+    /// A node with an already-resolved, shared style (see `builder::cache::StyleMemo`).
+    pub fn create_node_with_bundle(&mut self, tag: String, bundle: &Rc<StyleBundle>) -> UiNodeId {
+        let id = self.create_node(tag);
+        self.nodes[id].shared_style = Some(Rc::clone(bundle));
+        id
+    }
+
     pub fn create_styled_node_with_eval(
         &mut self,
         tag: String,
@@ -202,11 +229,13 @@ impl UiTree {
             super::style::resolve_style_with_eval(modifiers, eval, tokens);
         super::style::apply_container_defaults(&tag, &mut style);
         let node = &mut self.nodes[id];
-        node.tint_source = format!(
-            "{} {{ {} }}",
-            node.tag,
-            super::style::format_modifier_source(modifiers)
-        );
+        if SOURCE_MAP.load(std::sync::atomic::Ordering::Relaxed) {
+            node.tint_source = format!(
+                "{} {{ {} }}",
+                node.tag,
+                super::style::format_modifier_source(modifiers)
+            );
+        }
         node.style = style;
         node.hover_style = hover_style;
         node.breakpoints = breakpoints;
