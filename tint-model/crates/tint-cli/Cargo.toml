@@ -16,5 +16,7 @@ tint-parser = { path = "../tint-parser" }
 tint-runtime = { path = "../tint-runtime" }
 tint-evaluator = { path = "../tint-evaluator" }
 tint-semantics = { path = "../tint-semantics" }
+tint-codegen = { path = "../tint-codegen" }
+tint-ir = { path = "../tint-ir" }
 base64 = "0.22"
 crossterm = "0.28"

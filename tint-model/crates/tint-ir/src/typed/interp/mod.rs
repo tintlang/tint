@@ -85,6 +85,8 @@ pub struct Interp<'m> {
     pub output: Vec<String>,
     /// Also write output lines to stdout.
     pub echo: bool,
+    /// The last `output` entry came from `print` and has no newline yet.
+    open_line: bool,
     depth: usize,
     pub max_depth: usize,
     /// Remaining instruction budget; `None` is unlimited.
@@ -100,11 +102,50 @@ impl<'m> Interp<'m> {
             globals: vec![Val::Undef; module.globals.len()],
             output: Vec::new(),
             echo: false,
+            open_line: false,
             depth: 0,
             max_depth: 1500,
             steps_left: None,
             ui_events: Vec::new(),
         }
+    }
+
+    /// Runs one runtime-library call on already-built values. A native backend
+    /// uses this for the calls it does not implement itself, so that they
+    /// mean exactly what they mean here. Returns the result and the argument
+    /// values afterwards (the first one changes for `RtFn::mutates_first`).
+    pub fn rt_values(
+        &mut self,
+        f: RtFn,
+        arg_tys: &[TyId],
+        dst_ty: TyId,
+        args: Vec<Val>,
+    ) -> Res<(Val, Vec<Val>)> {
+        let n = args.len();
+        let mut tys = arg_tys.to_vec();
+        tys.push(dst_ty);
+        let func = Func {
+            name: "<rt>".into(),
+            kind: FuncKind::Fn,
+            params: Vec::new(),
+            ncaptures: 0,
+            ret: dst_ty,
+            regs: tys,
+            blocks: Vec::new(),
+        };
+        let mut regs = args;
+        regs.push(Val::Undef);
+        let arg_regs: Vec<Reg> = (0..n).map(|i| Reg(i as u32)).collect();
+        let dst = Reg(n as u32);
+        self.call_rt(&func, &mut regs, dst, f, &arg_regs)?;
+        let result = regs[n].clone();
+        regs.truncate(n);
+        Ok((result, regs))
+    }
+
+    /// `a <op> b` for two values of type `ty`, as the `Cmp` instruction.
+    pub fn compare_values(&self, ty: TyId, op: CmpOp, a: &Val, b: &Val) -> Res<bool> {
+        compare(&self.module.types, ty, op, a, b)
     }
 
     /// Runs the global initializers.
@@ -201,7 +242,11 @@ impl<'m> Interp<'m> {
                     };
                     block = if taken { then_.0 } else { else_.0 } as usize;
                 }
-                Term::Switch { value, cases, default } => {
+                Term::Switch {
+                    value,
+                    cases,
+                    default,
+                } => {
                     let v = match &regs[value.0 as usize] {
                         Val::Int(i) => *i,
                         other => return Err(bad("switch on a non-integer", other)),
@@ -212,7 +257,9 @@ impl<'m> Interp<'m> {
                         .map(|(_, b)| b.0)
                         .unwrap_or(default.0) as usize;
                 }
-                Term::Return(r) => return Ok(std::mem::replace(&mut regs[r.0 as usize], Val::Undef)),
+                Term::Return(r) => {
+                    return Ok(std::mem::replace(&mut regs[r.0 as usize], Val::Undef))
+                }
                 Term::Trap(msg) => return Err(Trap::new(msg.clone())),
             }
         }
@@ -235,7 +282,9 @@ impl<'m> Interp<'m> {
     fn num_kind(&self, func: &Func, reg: Reg) -> Res<NumKind> {
         match self.ty_of(func, reg) {
             TyKind::Num(kind) => Ok(*kind),
-            other => Err(Trap::new(format!("expected a number register, found {other:?}"))),
+            other => Err(Trap::new(format!(
+                "expected a number register, found {other:?}"
+            ))),
         }
     }
 
@@ -255,7 +304,13 @@ impl<'m> Interp<'m> {
                 let v = regs[src.0 as usize].clone();
                 regs[dst.0 as usize] = v;
             }
-            Instr::Bin { dst, op, kind, a, b } => {
+            Instr::Bin {
+                dst,
+                op,
+                kind,
+                a,
+                b,
+            } => {
                 let r = arith(*op, *kind, &regs[a.0 as usize], &regs[b.0 as usize])?;
                 regs[dst.0 as usize] = r;
             }
@@ -298,12 +353,24 @@ impl<'m> Interp<'m> {
             }
             Instr::Struct { dst, adt, fields } => {
                 let fields = fields.iter().map(|r| regs[r.0 as usize].clone()).collect();
-                regs[dst.0 as usize] = Val::Adt(Rc::new(AdtVal { adt: *adt, tag: 0, fields }));
+                regs[dst.0 as usize] = Val::Adt(Rc::new(AdtVal {
+                    adt: *adt,
+                    tag: 0,
+                    fields,
+                }));
             }
-            Instr::Variant { dst, adt, variant, fields } => {
+            Instr::Variant {
+                dst,
+                adt,
+                variant,
+                fields,
+            } => {
                 let fields = fields.iter().map(|r| regs[r.0 as usize].clone()).collect();
-                regs[dst.0 as usize] =
-                    Val::Adt(Rc::new(AdtVal { adt: *adt, tag: *variant, fields }));
+                regs[dst.0 as usize] = Val::Adt(Rc::new(AdtVal {
+                    adt: *adt,
+                    tag: *variant,
+                    fields,
+                }));
             }
             Instr::List { dst, items } => {
                 let items = items.iter().map(|r| regs[r.0 as usize].clone()).collect();
@@ -337,7 +404,12 @@ impl<'m> Interp<'m> {
                 };
                 regs[dst.0 as usize] = Val::Int(tag);
             }
-            Instr::Payload { dst, src, variant, index } => {
+            Instr::Payload {
+                dst,
+                src,
+                variant,
+                index,
+            } => {
                 let v = match &regs[src.0 as usize] {
                     Val::Adt(a) if a.tag == *variant => a.fields[*index as usize].clone(),
                     other => return Err(bad("payload of the wrong variant", other)),
@@ -349,7 +421,11 @@ impl<'m> Interp<'m> {
                 let v = self.call_host(func, regs, *f, args);
                 regs[dst.0 as usize] = v;
             }
-            Instr::Call { dst, func: callee, args } => {
+            Instr::Call {
+                dst,
+                func: callee,
+                args,
+            } => {
                 let args = args.iter().map(|r| regs[r.0 as usize].clone()).collect();
                 let v = self.call(*callee, args)?;
                 regs[dst.0 as usize] = v;
@@ -364,10 +440,19 @@ impl<'m> Interp<'m> {
                 let v = self.call(closure.func, all)?;
                 regs[dst.0 as usize] = v;
             }
-            Instr::Closure { dst, func: callee, captures } => {
-                let captures = captures.iter().map(|r| regs[r.0 as usize].clone()).collect();
-                regs[dst.0 as usize] =
-                    Val::Closure(Rc::new(ClosureVal { func: *callee, captures }));
+            Instr::Closure {
+                dst,
+                func: callee,
+                captures,
+            } => {
+                let captures = captures
+                    .iter()
+                    .map(|r| regs[r.0 as usize].clone())
+                    .collect();
+                regs[dst.0 as usize] = Val::Closure(Rc::new(ClosureVal {
+                    func: *callee,
+                    captures,
+                }));
             }
             Instr::GlobalGet { dst, global } => {
                 regs[dst.0 as usize] = self.globals[global.0 as usize].clone();
@@ -383,7 +468,10 @@ impl<'m> Interp<'m> {
                         other => Err(bad("non-scalar UI value", other)),
                     })
                     .collect::<Res<Vec<_>>>()?;
-                self.ui_events.push(UiEvent::Open { template: *template, values: vals });
+                self.ui_events.push(UiEvent::Open {
+                    template: *template,
+                    values: vals,
+                });
             }
             Instr::UiClose => self.ui_events.push(UiEvent::Close),
             Instr::UiText { src } => {
@@ -391,7 +479,9 @@ impl<'m> Interp<'m> {
                 self.ui_events.push(UiEvent::Text(text));
             }
             Instr::UiTokens { template } => {
-                self.ui_events.push(UiEvent::Tokens { template: *template });
+                self.ui_events.push(UiEvent::Tokens {
+                    template: *template,
+                });
             }
             Instr::GlobalSet { global, src } => {
                 self.globals[global.0 as usize] = regs[src.0 as usize].clone();
@@ -404,15 +494,41 @@ impl<'m> Interp<'m> {
         if self.echo {
             println!("{line}");
         }
-        self.output.push(line);
+        if std::mem::take(&mut self.open_line) {
+            self.output.last_mut().expect("open line").push_str(&line);
+        } else {
+            self.output.push(line);
+        }
+    }
+
+    /// `print`: text without a trailing newline.
+    fn push_text(&mut self, text: String) {
+        if self.echo {
+            use std::io::Write;
+            print!("{text}");
+            let _ = std::io::stdout().flush();
+        }
+        if self.open_line {
+            self.output.last_mut().expect("open line").push_str(&text);
+        } else {
+            self.output.push(text);
+            self.open_line = true;
+        }
     }
 
     fn call_host(&mut self, func: &Func, regs: &[Val], f: HostFn, args: &[Reg]) -> Val {
         match f {
+            HostFn::Println => {
+                for arg in args {
+                    let line = display(self.module, func.reg_ty(*arg), &regs[arg.0 as usize]);
+                    self.push_line(line);
+                }
+                Val::Unit
+            }
             HostFn::Print => {
                 for arg in args {
-                    let line = debug(self.module, func.reg_ty(*arg), &regs[arg.0 as usize]);
-                    self.push_line(line);
+                    let text = display(self.module, func.reg_ty(*arg), &regs[arg.0 as usize]);
+                    self.push_text(text);
                 }
                 Val::Unit
             }
@@ -444,7 +560,11 @@ pub(crate) fn bad(what: &str, found: &Val) -> Trap {
 
 pub(crate) fn int_of(kind: NumKind, v: &Val) -> Res<i128> {
     match v {
-        Val::Int(i) => Ok(if kind == NumKind::U64 { (*i as u64) as i128 } else { *i as i128 }),
+        Val::Int(i) => Ok(if kind == NumKind::U64 {
+            (*i as u64) as i128
+        } else {
+            *i as i128
+        }),
         other => Err(bad("expected an integer", other)),
     }
 }
@@ -452,9 +572,16 @@ pub(crate) fn int_of(kind: NumKind, v: &Val) -> Res<i128> {
 pub(crate) fn int_to(kind: NumKind, value: i128) -> Res<Val> {
     let (lo, hi) = kind.int_range();
     if value < lo || value > hi {
-        return Err(Trap::new(format!("{} arithmetic overflow: {value}", kind.name())));
+        return Err(Trap::new(format!(
+            "{} arithmetic overflow: {value}",
+            kind.name()
+        )));
     }
-    Ok(Val::Int(if kind == NumKind::U64 { (value as u64) as i64 } else { value as i64 }))
+    Ok(Val::Int(if kind == NumKind::U64 {
+        (value as u64) as i64
+    } else {
+        value as i64
+    }))
 }
 
 fn arith(op: BinOp, kind: NumKind, a: &Val, b: &Val) -> Res<Val> {
@@ -569,9 +696,11 @@ pub(crate) fn val_eq(types: &TypeTable, ty: TyId, a: &Val, b: &Val) -> Res<bool>
                 let def = types.adt(x.adt);
                 let field_tys: Vec<TyId> = match &def.body {
                     AdtBody::Struct(fields) => fields.iter().map(|f| f.ty).collect(),
-                    AdtBody::Enum(variants) => {
-                        variants[x.tag as usize].fields.iter().map(|f| f.ty).collect()
-                    }
+                    AdtBody::Enum(variants) => variants[x.tag as usize]
+                        .fields
+                        .iter()
+                        .map(|f| f.ty)
+                        .collect(),
                 };
                 all_eq(types, field_tys.into_iter(), &x.fields, &y.fields)?
             }
@@ -581,12 +710,7 @@ pub(crate) fn val_eq(types: &TypeTable, ty: TyId, a: &Val, b: &Val) -> Res<bool>
     })
 }
 
-fn all_eq(
-    types: &TypeTable,
-    tys: impl Iterator<Item = TyId>,
-    a: &[Val],
-    b: &[Val],
-) -> Res<bool> {
+fn all_eq(types: &TypeTable, tys: impl Iterator<Item = TyId>, a: &[Val], b: &[Val]) -> Res<bool> {
     if a.len() != b.len() {
         return Ok(false);
     }
@@ -600,7 +724,7 @@ fn all_eq(
 
 /// `as`: converts between numeric kinds, failing when the value does not fit
 /// or a float is not integral.
-pub(crate) fn cast_num(from: NumKind, to: NumKind, v: &Val) -> Res<Val> {
+pub fn cast_num(from: NumKind, to: NumKind, v: &Val) -> Res<Val> {
     if to.is_float() {
         let x = match v {
             Val::Int(i) => {

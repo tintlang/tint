@@ -26,10 +26,22 @@ pub(crate) struct Entered {
 impl<'a> Lowerer<'a> {
     pub fn stmt(&mut self, stmt: &Stmt) -> LResult<()> {
         match stmt {
-            Stmt::Let { pattern, ty, init, span } => {
-                let declared = match ty {
-                    Some(t) => Some(self.ast_ty(t)?),
-                    None => None,
+            Stmt::Let {
+                pattern,
+                ty,
+                init,
+                span,
+            } => {
+                // `let x: i64 = 5` keeps its annotation on the pattern; use it as
+                // the initializer's type so a literal is built as an i64, not as
+                // a `number` followed by a checked cast.
+                let mut annotated = pattern;
+                while let Pattern::Mut { inner, .. } = annotated {
+                    annotated = inner;
+                }
+                let declared = match (ty, annotated) {
+                    (Some(t), _) | (None, Pattern::Typed { ty: t, .. }) => Some(self.ast_ty(t)?),
+                    _ => None,
                 };
                 let init_expr = match init {
                     LetInit::Assign(e) | LetInit::Tint(e) => e,
@@ -54,7 +66,12 @@ impl<'a> Lowerer<'a> {
                 self.store_place(&place, value);
                 Ok(())
             }
-            Stmt::CompoundAssign { name, op, expr, span } => {
+            Stmt::CompoundAssign {
+                name,
+                op,
+                expr,
+                span,
+            } => {
                 let Some(place) = self.place_of(&Expr::Ident(name.clone(), *span))? else {
                     return self.err(Some(*span), format!("unknown variable `{name}`"));
                 };
@@ -70,7 +87,10 @@ impl<'a> Lowerer<'a> {
                             "*=" => BinOp::Mul,
                             "/=" => BinOp::Div,
                             "%=" => BinOp::Rem,
-                            other => return self.err(Some(*span), format!("`{other}` cannot be lowered")),
+                            other => {
+                                return self
+                                    .err(Some(*span), format!("`{other}` cannot be lowered"))
+                            }
                         };
                         self.arith(op, kind, ty, current, rhs)
                     }
@@ -87,11 +107,17 @@ impl<'a> Lowerer<'a> {
                 self.expr(e, None)?;
                 Ok(())
             }
-            Stmt::If { cond, then, else_, .. } => {
+            Stmt::If {
+                cond, then, else_, ..
+            } => {
                 let bool_ty = self.bool_ty();
                 let c = self.expr_as(cond, bool_ty)?;
                 let (then_b, else_b, join) = (self.new_block(), self.new_block(), self.new_block());
-                self.terminate(Term::Branch { cond: c, then_: then_b, else_: else_b });
+                self.terminate(Term::Branch {
+                    cond: c,
+                    then_: then_b,
+                    else_: else_b,
+                });
                 self.switch_to(then_b);
                 self.block(then, None)?;
                 self.terminate(Term::Jump(join));
@@ -109,7 +135,11 @@ impl<'a> Lowerer<'a> {
                 self.terminate(Term::Jump(head));
                 self.switch_to(head);
                 let c = self.expr_as(cond, bool_ty)?;
-                self.terminate(Term::Branch { cond: c, then_: body_b, else_: exit });
+                self.terminate(Term::Branch {
+                    cond: c,
+                    then_: body_b,
+                    else_: exit,
+                });
                 self.switch_to(body_b);
                 self.loop_body(body, exit, head)?;
                 self.terminate(Term::Jump(head));
@@ -125,11 +155,19 @@ impl<'a> Lowerer<'a> {
                 self.switch_to(exit);
                 if !breaks(body) {
                     // Nothing leaves this loop except `return`.
-                    self.terminate(Term::Trap("unreachable: a loop without `break` ended".into()));
+                    self.terminate(Term::Trap(
+                        "unreachable: a loop without `break` ended".into(),
+                    ));
                 }
                 Ok(())
             }
-            Stmt::For { var, start, end, body, span } => {
+            Stmt::For {
+                var,
+                start,
+                end,
+                body,
+                span,
+            } => {
                 let i32_ty = self.num_ty(NumKind::I32);
                 let bool_ty = self.bool_ty();
                 let s = self.expr(start, None)?;
@@ -137,13 +175,26 @@ impl<'a> Lowerer<'a> {
                 let e = self.expr(end, None)?;
                 let e = self.coerce(e, i32_ty, Some(*span))?;
                 let counter = self.mov(s);
-                let (head, body_b, step, exit) =
-                    (self.new_block(), self.new_block(), self.new_block(), self.new_block());
+                let (head, body_b, step, exit) = (
+                    self.new_block(),
+                    self.new_block(),
+                    self.new_block(),
+                    self.new_block(),
+                );
                 self.terminate(Term::Jump(head));
                 self.switch_to(head);
                 let more = self.new_reg(bool_ty);
-                self.emit(Instr::Cmp { dst: more, op: CmpOp::Lt, a: counter, b: e });
-                self.terminate(Term::Branch { cond: more, then_: body_b, else_: exit });
+                self.emit(Instr::Cmp {
+                    dst: more,
+                    op: CmpOp::Lt,
+                    a: counter,
+                    b: e,
+                });
+                self.terminate(Term::Branch {
+                    cond: more,
+                    then_: body_b,
+                    else_: exit,
+                });
                 self.switch_to(body_b);
                 self.push_scope();
                 let item = self.mov(counter);
@@ -155,12 +206,20 @@ impl<'a> Lowerer<'a> {
                 self.switch_to(step);
                 let one = self.const_reg(i32_ty, Const::Int(1));
                 let next = self.arith(BinOp::Add, NumKind::I32, i32_ty, counter, one);
-                self.emit(Instr::Mov { dst: counter, src: next });
+                self.emit(Instr::Mov {
+                    dst: counter,
+                    src: next,
+                });
                 self.terminate(Term::Jump(head));
                 self.switch_to(exit);
                 Ok(())
             }
-            Stmt::ForIn { var, iter, body, span } => {
+            Stmt::ForIn {
+                var,
+                iter,
+                body,
+                span,
+            } => {
                 let list = self.expr(iter, None)?;
                 let TyKind::List(elem) = self.tk(self.reg_ty(list)) else {
                     return self.err(Some(*span), "`for` over a non-list");
@@ -168,17 +227,34 @@ impl<'a> Lowerer<'a> {
                 let (num, bool_ty) = (self.num_ty(NumKind::Num), self.bool_ty());
                 let n = self.rt(RtFn::ListLen, vec![list], num);
                 let counter = self.const_reg(num, Const::Float(0.0));
-                let (head, body_b, step, exit) =
-                    (self.new_block(), self.new_block(), self.new_block(), self.new_block());
+                let (head, body_b, step, exit) = (
+                    self.new_block(),
+                    self.new_block(),
+                    self.new_block(),
+                    self.new_block(),
+                );
                 self.terminate(Term::Jump(head));
                 self.switch_to(head);
                 let more = self.new_reg(bool_ty);
-                self.emit(Instr::Cmp { dst: more, op: CmpOp::Lt, a: counter, b: n });
-                self.terminate(Term::Branch { cond: more, then_: body_b, else_: exit });
+                self.emit(Instr::Cmp {
+                    dst: more,
+                    op: CmpOp::Lt,
+                    a: counter,
+                    b: n,
+                });
+                self.terminate(Term::Branch {
+                    cond: more,
+                    then_: body_b,
+                    else_: exit,
+                });
                 self.switch_to(body_b);
                 self.push_scope();
                 let item = self.new_reg(elem);
-                self.emit(Instr::Get { dst: item, base: list, proj: Proj::Index(counter) });
+                self.emit(Instr::Get {
+                    dst: item,
+                    base: list,
+                    proj: Proj::Index(counter),
+                });
                 self.f().define(var, item);
                 let outcome = self.loop_body(body, exit, step);
                 self.pop_scope();
@@ -187,7 +263,10 @@ impl<'a> Lowerer<'a> {
                 self.switch_to(step);
                 let one = self.const_reg(num, Const::Float(1.0));
                 let next = self.arith(BinOp::Add, NumKind::Num, num, counter, one);
-                self.emit(Instr::Mov { dst: counter, src: next });
+                self.emit(Instr::Mov {
+                    dst: counter,
+                    src: next,
+                });
                 self.terminate(Term::Jump(head));
                 self.switch_to(exit);
                 Ok(())
@@ -211,7 +290,10 @@ impl<'a> Lowerer<'a> {
                 let v = self.expr(e, Some(ret))?;
                 self.finish_return(v, *span)
             }
-            Stmt::Match { span, .. } => self.err(Some(*span), "statement `match` is not produced by the parser"),
+            Stmt::Match { span, .. } => self.err(
+                Some(*span),
+                "statement `match` is not produced by the parser",
+            ),
         }
     }
 
@@ -229,22 +311,40 @@ impl<'a> Lowerer<'a> {
             Expr::Paren(inner, _) => self.place_of(inner),
             Expr::Ident(name, span) => self.variable_place(name, *span),
             Expr::SelfKw(span) => self.variable_place("self", *span),
-            Expr::Field { target, field, span } => {
-                let Some(mut place) = self.place_of(target)? else { return Ok(None) };
+            Expr::Field {
+                target,
+                field,
+                span,
+            } => {
+                let Some(mut place) = self.place_of(target)? else {
+                    return Ok(None);
+                };
                 let TyKind::Adt(adt) = self.tk(place.ty) else {
-                    return self.err(Some(*span), format!("`.{field}` on {}", self.show(place.ty)));
+                    return self.err(
+                        Some(*span),
+                        format!("`.{field}` on {}", self.show(place.ty)),
+                    );
                 };
                 let def = self.module.types.adt(adt);
                 let Some(index) = def.field_index(field) else {
-                    return self.err(Some(*span), format!("`{}` has no field `{field}`", self.show(place.ty)));
+                    return self.err(
+                        Some(*span),
+                        format!("`{}` has no field `{field}`", self.show(place.ty)),
+                    );
                 };
                 let ty = def.struct_fields()[index as usize].ty;
                 place.path.push((Proj::Field(index), ty));
                 place.ty = ty;
                 Ok(Some(place))
             }
-            Expr::TupleIndex { target, index, span } => {
-                let Some(mut place) = self.place_of(target)? else { return Ok(None) };
+            Expr::TupleIndex {
+                target,
+                index,
+                span,
+            } => {
+                let Some(mut place) = self.place_of(target)? else {
+                    return Ok(None);
+                };
                 let TyKind::Tuple(tys) = self.tk(place.ty) else {
                     return self.err(Some(*span), "tuple index on a non-tuple");
                 };
@@ -255,8 +355,14 @@ impl<'a> Lowerer<'a> {
                 place.ty = ty;
                 Ok(Some(place))
             }
-            Expr::Index { target, index, span } => {
-                let Some(mut place) = self.place_of(target)? else { return Ok(None) };
+            Expr::Index {
+                target,
+                index,
+                span,
+            } => {
+                let Some(mut place) = self.place_of(target)? else {
+                    return Ok(None);
+                };
                 match self.tk(place.ty) {
                     TyKind::List(item) => {
                         let num = self.num_ty(NumKind::Num);
@@ -269,7 +375,10 @@ impl<'a> Lowerer<'a> {
                         place.path.push((Proj::Key(key), item));
                         place.ty = item;
                     }
-                    _ => return self.err(Some(*span), format!("cannot index {}", self.show(place.ty))),
+                    _ => {
+                        return self
+                            .err(Some(*span), format!("cannot index {}", self.show(place.ty)))
+                    }
                 }
                 Ok(Some(place))
             }
@@ -280,14 +389,25 @@ impl<'a> Lowerer<'a> {
     fn variable_place(&mut self, name: &str, span: Span) -> LResult<Option<Place>> {
         if let Some(reg) = self.resolve_local(name) {
             if self.is_capture_reg(reg) {
-                return self.err(Some(span), format!("`{name}` is captured by a lambda and cannot be changed there"));
+                return self.err(
+                    Some(span),
+                    format!("`{name}` is captured by a lambda and cannot be changed there"),
+                );
             }
             let ty = self.reg_ty(reg);
-            return Ok(Some(Place { root: Root::Local(reg), path: Vec::new(), ty }));
+            return Ok(Some(Place {
+                root: Root::Local(reg),
+                path: Vec::new(),
+                ty,
+            }));
         }
         if let Some(global) = self.globals.get(name).copied() {
             let ty = self.module.globals[global.0 as usize].ty;
-            return Ok(Some(Place { root: Root::Global(global), path: Vec::new(), ty }));
+            return Ok(Some(Place {
+                root: Root::Global(global),
+                path: Vec::new(),
+                ty,
+            }));
         }
         Ok(None)
     }
@@ -311,7 +431,11 @@ impl<'a> Lowerer<'a> {
         }
         for (proj, ty) in &place.path {
             let dst = self.new_reg(*ty);
-            self.emit(Instr::Get { dst, base: cur, proj: *proj });
+            self.emit(Instr::Get {
+                dst,
+                base: cur,
+                proj: *proj,
+            });
             cur = dst;
         }
         cur
@@ -320,7 +444,10 @@ impl<'a> Lowerer<'a> {
     /// Takes the value at `path[..len]` out of the place so it can be changed
     /// in place; returns the register that holds it.
     fn enter(&mut self, place: &Place, len: usize) -> (Reg, Entered) {
-        let mut entered = Entered { chain: Vec::new(), global: None };
+        let mut entered = Entered {
+            chain: Vec::new(),
+            global: None,
+        };
         let mut cur = match place.root {
             Root::Local(reg) => reg,
             Root::Global(global) => {
@@ -333,7 +460,11 @@ impl<'a> Lowerer<'a> {
         };
         for (proj, ty) in &place.path[..len] {
             let taken = self.new_reg(*ty);
-            self.emit(Instr::Take { dst: taken, base: cur, proj: *proj });
+            self.emit(Instr::Take {
+                dst: taken,
+                base: cur,
+                proj: *proj,
+            });
             entered.chain.push((cur, *proj, taken));
             cur = taken;
         }
@@ -342,7 +473,11 @@ impl<'a> Lowerer<'a> {
 
     fn leave(&mut self, entered: Entered) {
         for (parent, proj, taken) in entered.chain.into_iter().rev() {
-            self.emit(Instr::Set { base: parent, proj, src: taken });
+            self.emit(Instr::Set {
+                base: parent,
+                proj,
+                src: taken,
+            });
         }
         if let Some((global, tmp)) = entered.global {
             self.emit(Instr::GlobalSet { global, src: tmp });
@@ -361,19 +496,31 @@ impl<'a> Lowerer<'a> {
     pub fn store_place(&mut self, place: &Place, value: Reg) {
         match place.path.split_last() {
             None => match place.root {
-                Root::Local(reg) => self.emit(Instr::Mov { dst: reg, src: value }),
+                Root::Local(reg) => self.emit(Instr::Mov {
+                    dst: reg,
+                    src: value,
+                }),
                 Root::Global(global) => self.emit(Instr::GlobalSet { global, src: value }),
             },
             Some(((proj, _), _)) => {
                 let (parent, entered) = self.enter(place, place.path.len() - 1);
-                self.emit(Instr::Set { base: parent, proj: *proj, src: value });
+                self.emit(Instr::Set {
+                    base: parent,
+                    proj: *proj,
+                    src: value,
+                });
                 self.leave(entered);
             }
         }
     }
 
     pub fn is_capture_reg(&self, reg: Reg) -> bool {
-        self.stack.last().unwrap().captures.iter().any(|c| c.inner == reg)
+        self.stack
+            .last()
+            .unwrap()
+            .captures
+            .iter()
+            .any(|c| c.inner == reg)
     }
 }
 

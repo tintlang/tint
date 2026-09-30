@@ -180,8 +180,10 @@ impl RtFn {
 /// Calls that leave the program: they talk to the host environment.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum HostFn {
-    /// `print`, `println`, `log`: one debug-formatted line per argument.
+    /// `print`: each argument in display form, no newline.
     Print,
+    /// `println`, `log`: one display-formatted line per argument.
+    Println,
     /// `dbg`, `debug`.
     Dbg,
     Error,
@@ -193,6 +195,7 @@ impl HostFn {
     pub fn name(self) -> &'static str {
         match self {
             HostFn::Print => "print",
+            HostFn::Println => "println",
             HostFn::Dbg => "dbg",
             HostFn::Error => "error",
             HostFn::ReadLine => "read_line",
@@ -203,58 +206,158 @@ impl HostFn {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Instr {
-    Const { dst: Reg, value: Const },
-    Mov { dst: Reg, src: Reg },
+    Const {
+        dst: Reg,
+        value: Const,
+    },
+    Mov {
+        dst: Reg,
+        src: Reg,
+    },
     /// Checked arithmetic on two registers of type `Num(kind)`.
-    Bin { dst: Reg, op: BinOp, kind: NumKind, a: Reg, b: Reg },
+    Bin {
+        dst: Reg,
+        op: BinOp,
+        kind: NumKind,
+        a: Reg,
+        b: Reg,
+    },
     /// Comparison, `dst: bool`. `Eq`/`Ne` compare any two values of one type
     /// structurally; the ordering operators need numbers or strings.
-    Cmp { dst: Reg, op: CmpOp, a: Reg, b: Reg },
-    Not { dst: Reg, src: Reg },
-    Neg { dst: Reg, src: Reg },
+    Cmp {
+        dst: Reg,
+        op: CmpOp,
+        a: Reg,
+        b: Reg,
+    },
+    Not {
+        dst: Reg,
+        src: Reg,
+    },
+    Neg {
+        dst: Reg,
+        src: Reg,
+    },
     /// Checked numeric conversion (`as`): fails at run time when the value
     /// does not fit or is not integral.
-    Cast { dst: Reg, src: Reg },
+    Cast {
+        dst: Reg,
+        src: Reg,
+    },
     /// The text `"{value}"` produces, for any type.
-    ToStr { dst: Reg, src: Reg },
-    Tuple { dst: Reg, items: Vec<Reg> },
+    ToStr {
+        dst: Reg,
+        src: Reg,
+    },
+    Tuple {
+        dst: Reg,
+        items: Vec<Reg>,
+    },
     /// Fields in declaration order.
-    Struct { dst: Reg, adt: AdtId, fields: Vec<Reg> },
-    Variant { dst: Reg, adt: AdtId, variant: u32, fields: Vec<Reg> },
-    List { dst: Reg, items: Vec<Reg> },
+    Struct {
+        dst: Reg,
+        adt: AdtId,
+        fields: Vec<Reg>,
+    },
+    Variant {
+        dst: Reg,
+        adt: AdtId,
+        variant: u32,
+        fields: Vec<Reg>,
+    },
+    List {
+        dst: Reg,
+        items: Vec<Reg>,
+    },
     /// Entries in source order; later duplicates win.
-    Map { dst: Reg, entries: Vec<(String, Reg)> },
+    Map {
+        dst: Reg,
+        entries: Vec<(String, Reg)>,
+    },
     /// Reads a part of `base` (shares the storage; use before a mutation only
     /// when the copy is wanted).
-    Get { dst: Reg, base: Reg, proj: Proj },
+    Get {
+        dst: Reg,
+        base: Reg,
+        proj: Proj,
+    },
     /// Moves a part out of `base`, leaving it empty until a `Set` fills it
     /// again. Used to modify nested places without copying.
-    Take { dst: Reg, base: Reg, proj: Proj },
+    Take {
+        dst: Reg,
+        base: Reg,
+        proj: Proj,
+    },
     /// Overwrites a part of `base`. `Index`/`Key` must exist already, except a
     /// map key, which is inserted.
-    Set { base: Reg, proj: Proj, src: Reg },
+    Set {
+        base: Reg,
+        proj: Proj,
+        src: Reg,
+    },
     /// Index of the variant of an enum value, as `Num(I64)`.
-    Tag { dst: Reg, src: Reg },
+    Tag {
+        dst: Reg,
+        src: Reg,
+    },
     /// Field `index` of the payload of `src`, which must be variant `variant`.
-    Payload { dst: Reg, src: Reg, variant: u32, index: u32 },
-    Rt { dst: Reg, f: RtFn, args: Vec<Reg> },
-    Host { dst: Reg, f: HostFn, args: Vec<Reg> },
-    Call { dst: Reg, func: FuncId, args: Vec<Reg> },
-    CallClosure { dst: Reg, callee: Reg, args: Vec<Reg> },
+    Payload {
+        dst: Reg,
+        src: Reg,
+        variant: u32,
+        index: u32,
+    },
+    Rt {
+        dst: Reg,
+        f: RtFn,
+        args: Vec<Reg>,
+    },
+    Host {
+        dst: Reg,
+        f: HostFn,
+        args: Vec<Reg>,
+    },
+    Call {
+        dst: Reg,
+        func: FuncId,
+        args: Vec<Reg>,
+    },
+    CallClosure {
+        dst: Reg,
+        callee: Reg,
+        args: Vec<Reg>,
+    },
     /// A function value. The captured registers become the first parameters of
     /// `func` when it is called.
-    Closure { dst: Reg, func: FuncId, captures: Vec<Reg> },
-    GlobalGet { dst: Reg, global: GlobalId },
-    GlobalSet { global: GlobalId, src: Reg },
+    Closure {
+        dst: Reg,
+        func: FuncId,
+        captures: Vec<Reg>,
+    },
+    GlobalGet {
+        dst: Reg,
+        global: GlobalId,
+    },
+    GlobalSet {
+        global: GlobalId,
+        src: Reg,
+    },
     /// Starts the element `Module::ui_templates[template]`. `values` fill its
     /// non-`Unused` slots (`UiSlot`), in order.
-    UiOpen { template: u32, values: Vec<Reg> },
+    UiOpen {
+        template: u32,
+        values: Vec<Reg>,
+    },
     /// Finishes the innermost open element.
     UiClose,
     /// A text child (`src: string`) of the innermost open element.
-    UiText { src: Reg },
+    UiText {
+        src: Reg,
+    },
     /// Activates the theme tokens `Module::ui_templates[template]`.
-    UiTokens { template: u32 },
+    UiTokens {
+        template: u32,
+    },
 }
 
 impl Instr {
@@ -284,7 +387,12 @@ impl Instr {
             | CallClosure { dst, .. }
             | Closure { dst, .. }
             | GlobalGet { dst, .. } => Some(*dst),
-            Set { .. } | GlobalSet { .. } | UiOpen { .. } | UiClose | UiText { .. } | UiTokens { .. } => None,
+            Set { .. }
+            | GlobalSet { .. }
+            | UiOpen { .. }
+            | UiClose
+            | UiText { .. }
+            | UiTokens { .. } => None,
         }
     }
 
@@ -349,9 +457,17 @@ impl Instr {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Term {
     Jump(BlockId),
-    Branch { cond: Reg, then_: BlockId, else_: BlockId },
+    Branch {
+        cond: Reg,
+        then_: BlockId,
+        else_: BlockId,
+    },
     /// Jumps on the integer value of `value` (a `Tag`).
-    Switch { value: Reg, cases: Vec<(i64, BlockId)>, default: BlockId },
+    Switch {
+        value: Reg,
+        cases: Vec<(i64, BlockId)>,
+        default: BlockId,
+    },
     Return(Reg),
     /// Stops the program with an error.
     Trap(String),
@@ -383,7 +499,9 @@ pub enum FuncKind {
     Fn,
     /// A method. With `inout_self` the function returns `(result, self)` and
     /// the caller writes the second part back into the receiver.
-    Method { inout_self: bool },
+    Method {
+        inout_self: bool,
+    },
     Lambda,
     /// Evaluates the initializers of all globals.
     Init,

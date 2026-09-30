@@ -3,6 +3,7 @@ members = [
     "crates/tint-lexer",
     "crates/tint-ast",
     "crates/tint-ir",
+    "crates/tint-codegen",
     "crates/tint-parser",
     "crates/tint-runtime",
     "crates/tint-semantics",

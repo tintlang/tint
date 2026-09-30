@@ -3,13 +3,17 @@
 //! a wrong answer later.
 
 use super::ir::*;
-use super::ui::*;
 use super::ty::*;
+use super::ui::*;
 
 pub fn verify(module: &Module) -> Vec<String> {
     let mut problems = Vec::new();
     for (index, func) in module.funcs.iter().enumerate() {
-        let mut v = Verifier { module, func, problems: Vec::new() };
+        let mut v = Verifier {
+            module,
+            func,
+            problems: Vec::new(),
+        };
         v.run();
         for p in v.problems {
             problems.push(format!("{} (#{index}): {p}", func.name));
@@ -33,7 +37,10 @@ impl<'m> Verifier<'m> {
         if (reg.0 as usize) < self.func.regs.len() {
             true
         } else {
-            self.fail(at.to_string(), format!("register r{} does not exist", reg.0));
+            self.fail(
+                at.to_string(),
+                format!("register r{} does not exist", reg.0),
+            );
             false
         }
     }
@@ -62,7 +69,12 @@ impl<'m> Verifier<'m> {
         for (b, block) in func.blocks.iter().enumerate() {
             for (i, instr) in block.instrs.iter().enumerate() {
                 let at = format!("b{b}[{i}]");
-                if instr.uses().into_iter().chain(instr.dst()).all(|r| self.reg_ok(&at, r)) {
+                if instr
+                    .uses()
+                    .into_iter()
+                    .chain(instr.dst())
+                    .all(|r| self.reg_ok(&at, r))
+                {
                     if let Err(message) = self.instr(instr) {
                         self.fail(at, message);
                     }
@@ -79,7 +91,11 @@ impl<'m> Verifier<'m> {
         if self.ty(reg) == want {
             Ok(())
         } else {
-            Err(format!("{what}: expected {}, found {}", self.show(want), self.show(self.ty(reg))))
+            Err(format!(
+                "{what}: expected {}, found {}",
+                self.show(want),
+                self.show(self.ty(reg))
+            ))
         }
     }
 
@@ -111,7 +127,11 @@ impl<'m> Verifier<'m> {
                 self.target(*then_)?;
                 self.target(*else_)
             }
-            Term::Switch { value, cases, default } => {
+            Term::Switch {
+                value,
+                cases,
+                default,
+            } => {
                 if value.0 as usize >= self.func.regs.len() {
                     return Err("switch on a missing register".into());
                 }
@@ -144,9 +164,10 @@ impl<'m> Verifier<'m> {
                     .ok_or_else(|| format!("field {i} out of range")),
                 AdtBody::Enum(_) => Err("field of an enum".into()),
             },
-            (TyKind::Tuple(items), Proj::Tuple(i)) => {
-                items.get(*i as usize).copied().ok_or_else(|| format!("tuple element {i} out of range"))
-            }
+            (TyKind::Tuple(items), Proj::Tuple(i)) => items
+                .get(*i as usize)
+                .copied()
+                .ok_or_else(|| format!("tuple element {i} out of range")),
             (TyKind::List(item), Proj::Index(r)) => {
                 if self.is_num(*r).is_none() {
                     return Err("list index is not a number".into());
@@ -175,10 +196,19 @@ impl<'m> Verifier<'m> {
                     (Const::Float(_), TyKind::Num(k)) => k.is_float(),
                     _ => false,
                 };
-                if ok { Ok(()) } else { Err(format!("constant {value:?} does not fit {}", self.show(self.ty(*dst)))) }
+                if ok {
+                    Ok(())
+                } else {
+                    Err(format!(
+                        "constant {value:?} does not fit {}",
+                        self.show(self.ty(*dst))
+                    ))
+                }
             }
             Instr::Mov { dst, src } => self.expect("mov", *src, self.ty(*dst)),
-            Instr::Bin { dst, kind, a, b, .. } => {
+            Instr::Bin {
+                dst, kind, a, b, ..
+            } => {
                 let ty = self.ty(*dst);
                 if !matches!(self.kind(ty), TyKind::Num(k) if k == kind) {
                     return Err(format!("arithmetic result must be {}", kind.name()));
@@ -216,7 +246,11 @@ impl<'m> Verifier<'m> {
                 Ok(())
             }
             Instr::ToStr { dst, .. } => {
-                if matches!(self.kind(self.ty(*dst)), TyKind::Str) { Ok(()) } else { Err("to_str result is not a string".into()) }
+                if matches!(self.kind(self.ty(*dst)), TyKind::Str) {
+                    Ok(())
+                } else {
+                    Err("to_str result is not a string".into())
+                }
             }
             Instr::Tuple { dst, items } => match self.kind(self.ty(*dst)) {
                 TyKind::Tuple(tys) if tys.len() == items.len() => {
@@ -231,21 +265,35 @@ impl<'m> Verifier<'m> {
                 self.expect("struct", *dst, self.adt_ty_of(*adt)?)?;
                 let defs = types.adt(*adt).struct_fields();
                 if defs.len() != fields.len() {
-                    return Err(format!("struct has {} fields, given {}", defs.len(), fields.len()));
+                    return Err(format!(
+                        "struct has {} fields, given {}",
+                        defs.len(),
+                        fields.len()
+                    ));
                 }
                 for (r, d) in fields.iter().zip(defs) {
                     self.expect(&format!("field {}", d.name), *r, d.ty)?;
                 }
                 Ok(())
             }
-            Instr::Variant { dst, adt, variant, fields } => {
+            Instr::Variant {
+                dst,
+                adt,
+                variant,
+                fields,
+            } => {
                 self.expect("variant", *dst, self.adt_ty_of(*adt)?)?;
                 let def = types.adt(*adt);
                 let Some(v) = def.variants().get(*variant as usize) else {
                     return Err(format!("variant {variant} does not exist"));
                 };
                 if v.fields.len() != fields.len() {
-                    return Err(format!("{} takes {} fields, given {}", v.name, v.fields.len(), fields.len()));
+                    return Err(format!(
+                        "{} takes {} fields, given {}",
+                        v.name,
+                        v.fields.len(),
+                        fields.len()
+                    ));
                 }
                 for (r, d) in fields.iter().zip(&v.fields) {
                     self.expect(&format!("field {}", d.name), *r, d.ty)?;
@@ -280,18 +328,30 @@ impl<'m> Verifier<'m> {
             }
             Instr::Tag { dst, src } => match self.kind(self.ty(*src)) {
                 TyKind::Adt(id) if types.adt(*id).is_enum() => {
-                    if matches!(self.kind(self.ty(*dst)), TyKind::Num(NumKind::I64)) { Ok(()) } else { Err("tag is not an i64".into()) }
+                    if matches!(self.kind(self.ty(*dst)), TyKind::Num(NumKind::I64)) {
+                        Ok(())
+                    } else {
+                        Err("tag is not an i64".into())
+                    }
                 }
                 other => Err(format!("tag of {other:?}")),
             },
-            Instr::Payload { dst, src, variant, index } => match self.kind(self.ty(*src)) {
+            Instr::Payload {
+                dst,
+                src,
+                variant,
+                index,
+            } => match self.kind(self.ty(*src)) {
                 TyKind::Adt(id) => {
                     let v = types
                         .adt(*id)
                         .variants()
                         .get(*variant as usize)
                         .ok_or_else(|| format!("variant {variant} does not exist"))?;
-                    let f = v.fields.get(*index as usize).ok_or_else(|| format!("payload {index} does not exist"))?;
+                    let f = v
+                        .fields
+                        .get(*index as usize)
+                        .ok_or_else(|| format!("payload {index} does not exist"))?;
                     self.expect("payload", *dst, f.ty)
                 }
                 other => Err(format!("payload of {other:?}")),
@@ -299,25 +359,50 @@ impl<'m> Verifier<'m> {
             Instr::Rt { dst, f, args } => self.rt(*dst, *f, args),
             Instr::Host { dst, f, .. } => {
                 let want = match f {
-                    HostFn::Print | HostFn::Dbg | HostFn::Error => matches!(self.kind(self.ty(*dst)), TyKind::Unit),
-                    HostFn::ReadLine | HostFn::ReadKey => matches!(self.kind(self.ty(*dst)), TyKind::Str),
+                    HostFn::Print | HostFn::Println | HostFn::Dbg | HostFn::Error => {
+                        matches!(self.kind(self.ty(*dst)), TyKind::Unit)
+                    }
+                    HostFn::ReadLine | HostFn::ReadKey => {
+                        matches!(self.kind(self.ty(*dst)), TyKind::Str)
+                    }
                 };
-                if want { Ok(()) } else { Err("host call result has the wrong type".into()) }
+                if want {
+                    Ok(())
+                } else {
+                    Err("host call result has the wrong type".into())
+                }
             }
             Instr::Call { dst, func, args } => {
-                let callee = self.module.funcs.get(func.0 as usize).ok_or("call of a missing function")?;
+                let callee = self
+                    .module
+                    .funcs
+                    .get(func.0 as usize)
+                    .ok_or("call of a missing function")?;
                 if callee.params.len() != args.len() {
-                    return Err(format!("`{}` takes {} arguments, given {}", callee.name, callee.params.len(), args.len()));
+                    return Err(format!(
+                        "`{}` takes {} arguments, given {}",
+                        callee.name,
+                        callee.params.len(),
+                        args.len()
+                    ));
                 }
                 for (r, p) in args.iter().zip(&callee.params) {
-                    self.expect(&format!("argument of `{}`", callee.name), *r, callee.reg_ty(*p))?;
+                    self.expect(
+                        &format!("argument of `{}`", callee.name),
+                        *r,
+                        callee.reg_ty(*p),
+                    )?;
                 }
                 self.expect("call result", *dst, callee.ret)
             }
             Instr::CallClosure { dst, callee, args } => match self.kind(self.ty(*callee)) {
                 TyKind::Fn(params, ret) => {
                     if params.len() != args.len() {
-                        return Err(format!("closure takes {} arguments, given {}", params.len(), args.len()));
+                        return Err(format!(
+                            "closure takes {} arguments, given {}",
+                            params.len(),
+                            args.len()
+                        ));
                     }
                     for (r, p) in args.iter().zip(params) {
                         self.expect("closure argument", *r, *p)?;
@@ -326,20 +411,38 @@ impl<'m> Verifier<'m> {
                 }
                 other => Err(format!("call of {other:?}")),
             },
-            Instr::Closure { dst, func, captures } => {
-                let callee = self.module.funcs.get(func.0 as usize).ok_or("closure of a missing function")?;
+            Instr::Closure {
+                dst,
+                func,
+                captures,
+            } => {
+                let callee = self
+                    .module
+                    .funcs
+                    .get(func.0 as usize)
+                    .ok_or("closure of a missing function")?;
                 let n = captures.len();
                 if n != callee.ncaptures as usize {
-                    return Err(format!("`{}` captures {} values, given {n}", callee.name, callee.ncaptures));
+                    return Err(format!(
+                        "`{}` captures {} values, given {n}",
+                        callee.name, callee.ncaptures
+                    ));
                 }
                 for (r, p) in captures.iter().zip(&callee.params) {
                     self.expect("captured value", *r, callee.reg_ty(*p))?;
                 }
                 match self.kind(self.ty(*dst)) {
                     TyKind::Fn(params, ret) => {
-                        let rest: Vec<TyId> = callee.params[n..].iter().map(|p| callee.reg_ty(*p)).collect();
+                        let rest: Vec<TyId> = callee.params[n..]
+                            .iter()
+                            .map(|p| callee.reg_ty(*p))
+                            .collect();
                         if *params != rest || *ret != callee.ret {
-                            return Err(format!("closure type {} does not match `{}`", self.show(self.ty(*dst)), callee.name));
+                            return Err(format!(
+                                "closure type {} does not match `{}`",
+                                self.show(self.ty(*dst)),
+                                callee.name
+                            ));
                         }
                         Ok(())
                     }
@@ -347,20 +450,39 @@ impl<'m> Verifier<'m> {
                 }
             }
             Instr::GlobalGet { dst, global } => {
-                let g = self.module.globals.get(global.0 as usize).ok_or("missing global")?;
+                let g = self
+                    .module
+                    .globals
+                    .get(global.0 as usize)
+                    .ok_or("missing global")?;
                 self.expect("global", *dst, g.ty)
             }
             Instr::GlobalSet { global, src } => {
-                let g = self.module.globals.get(global.0 as usize).ok_or("missing global")?;
+                let g = self
+                    .module
+                    .globals
+                    .get(global.0 as usize)
+                    .ok_or("missing global")?;
                 self.expect("global", *src, g.ty)
             }
             Instr::UiOpen { template, values } => {
-                let Some(UiTemplate::Element(e)) = self.module.ui_templates.get(*template as usize) else {
+                let Some(UiTemplate::Element(e)) = self.module.ui_templates.get(*template as usize)
+                else {
                     return Err(format!("ui.open of a missing element template #{template}"));
                 };
-                let wanted: Vec<UiSlot> = e.slots.iter().copied().filter(|s| *s != UiSlot::Unused).collect();
+                let wanted: Vec<UiSlot> = e
+                    .slots
+                    .iter()
+                    .copied()
+                    .filter(|s| *s != UiSlot::Unused)
+                    .collect();
                 if wanted.len() != values.len() {
-                    return Err(format!("ui.open {}: {} values for {} slots", e.tag, values.len(), wanted.len()));
+                    return Err(format!(
+                        "ui.open {}: {} values for {} slots",
+                        e.tag,
+                        values.len(),
+                        wanted.len()
+                    ));
                 }
                 for (slot, reg) in wanted.iter().zip(values) {
                     let ok = match (slot, self.kind(self.ty(*reg))) {
@@ -370,7 +492,12 @@ impl<'m> Verifier<'m> {
                         _ => false,
                     };
                     if !ok {
-                        return Err(format!("ui.open {}: a {:?} slot got {}", e.tag, slot, self.show(self.ty(*reg))));
+                        return Err(format!(
+                            "ui.open {}: a {:?} slot got {}",
+                            e.tag,
+                            slot,
+                            self.show(self.ty(*reg))
+                        ));
                     }
                 }
                 if self.func.kind != FuncKind::Ui {
@@ -417,27 +544,51 @@ impl<'m> Verifier<'m> {
         let types = &self.module.types;
         let name = f.name();
         let count = |allowed: &[usize]| -> Result<(), String> {
-            if allowed.contains(&args.len()) { Ok(()) } else { Err(format!("{name} takes {allowed:?} arguments, given {}", args.len())) }
+            if allowed.contains(&args.len()) {
+                Ok(())
+            } else {
+                Err(format!(
+                    "{name} takes {allowed:?} arguments, given {}",
+                    args.len()
+                ))
+            }
         };
         let is = |reg: Reg, pred: &dyn Fn(&TyKind) -> bool| pred(self.kind(self.ty(reg)));
         let strs = |r: Reg| is(r, &|k| matches!(k, TyKind::Str));
         let num = |r: Reg| is(r, &|k| matches!(k, TyKind::Num(NumKind::Num)));
         let list_of = |r: Reg| -> Option<TyId> {
-            match self.kind(self.ty(r)) { TyKind::List(t) => Some(*t), _ => None }
+            match self.kind(self.ty(r)) {
+                TyKind::List(t) => Some(*t),
+                _ => None,
+            }
         };
         let map_of = |r: Reg| -> Option<TyId> {
-            match self.kind(self.ty(r)) { TyKind::Map(t) => Some(*t), _ => None }
+            match self.kind(self.ty(r)) {
+                TyKind::Map(t) => Some(*t),
+                _ => None,
+            }
         };
         let ret = |pred: &dyn Fn(&TyKind) -> bool, what: &str| -> Result<(), String> {
-            if pred(self.kind(self.ty(dst))) { Ok(()) } else { Err(format!("{name} must produce {what}")) }
+            if pred(self.kind(self.ty(dst))) {
+                Ok(())
+            } else {
+                Err(format!("{name} must produce {what}"))
+            }
         };
         let need = |ok: bool, what: &str| -> Result<(), String> {
-            if ok { Ok(()) } else { Err(format!("{name}: {what}")) }
+            if ok {
+                Ok(())
+            } else {
+                Err(format!("{name}: {what}"))
+            }
         };
         // `Option<t>` / `Result<..>` results of a given payload type.
         let option_of = |t: TyId| -> bool {
             match self.kind(self.ty(dst)) {
-                TyKind::Adt(a) => { let d = types.adt(*a); d.base == "Option" && d.args == [t] }
+                TyKind::Adt(a) => {
+                    let d = types.adt(*a);
+                    d.base == "Option" && d.args == [t]
+                }
                 _ => false,
             }
         };
@@ -446,43 +597,126 @@ impl<'m> Verifier<'m> {
                 need(args.iter().all(|a| strs(*a)), "arguments must be strings")?;
                 ret(&|k| matches!(k, TyKind::Str), "a string")
             }
-            RtFn::StrLen => { count(&[1])?; need(strs(args[0]), "string expected")?; ret(&|k| matches!(k, TyKind::Num(NumKind::Num)), "number") }
-            RtFn::StrIsEmpty => { count(&[1])?; need(strs(args[0]), "string expected")?; ret(&|k| matches!(k, TyKind::Bool), "bool") }
-            RtFn::StrTrim | RtFn::StrUpper | RtFn::StrLower => { count(&[1])?; need(strs(args[0]), "string expected")?; ret(&|k| matches!(k, TyKind::Str), "a string") }
-            RtFn::StrContains | RtFn::StrStartsWith | RtFn::StrEndsWith => { count(&[2])?; need(strs(args[0]) && strs(args[1]), "strings expected")?; ret(&|k| matches!(k, TyKind::Bool), "bool") }
-            RtFn::StrSlice => { count(&[2, 3])?; need(strs(args[0]) && args[1..].iter().all(|a| num(*a)), "string and numbers expected")?; ret(&|k| matches!(k, TyKind::Str), "a string") }
-            RtFn::StrSplit => {
-                count(&[2])?; need(strs(args[0]) && strs(args[1]), "strings expected")?;
-                ret(&|k| matches!(k, TyKind::List(t) if matches!(types.kind(*t), TyKind::Str)), "[string]")
+            RtFn::StrLen => {
+                count(&[1])?;
+                need(strs(args[0]), "string expected")?;
+                ret(&|k| matches!(k, TyKind::Num(NumKind::Num)), "number")
             }
-            RtFn::StrReplace => { count(&[3])?; need(args.iter().all(|a| strs(*a)), "strings expected")?; ret(&|k| matches!(k, TyKind::Str), "a string") }
-            RtFn::ListLen => { count(&[1])?; need(list_of(args[0]).is_some(), "list expected")?; ret(&|k| matches!(k, TyKind::Num(NumKind::Num)), "number") }
-            RtFn::ListIsEmpty => { count(&[1])?; need(list_of(args[0]).is_some(), "list expected")?; ret(&|k| matches!(k, TyKind::Bool), "bool") }
+            RtFn::StrIsEmpty => {
+                count(&[1])?;
+                need(strs(args[0]), "string expected")?;
+                ret(&|k| matches!(k, TyKind::Bool), "bool")
+            }
+            RtFn::StrTrim | RtFn::StrUpper | RtFn::StrLower => {
+                count(&[1])?;
+                need(strs(args[0]), "string expected")?;
+                ret(&|k| matches!(k, TyKind::Str), "a string")
+            }
+            RtFn::StrContains | RtFn::StrStartsWith | RtFn::StrEndsWith => {
+                count(&[2])?;
+                need(strs(args[0]) && strs(args[1]), "strings expected")?;
+                ret(&|k| matches!(k, TyKind::Bool), "bool")
+            }
+            RtFn::StrSlice => {
+                count(&[2, 3])?;
+                need(
+                    strs(args[0]) && args[1..].iter().all(|a| num(*a)),
+                    "string and numbers expected",
+                )?;
+                ret(&|k| matches!(k, TyKind::Str), "a string")
+            }
+            RtFn::StrSplit => {
+                count(&[2])?;
+                need(strs(args[0]) && strs(args[1]), "strings expected")?;
+                ret(
+                    &|k| matches!(k, TyKind::List(t) if matches!(types.kind(*t), TyKind::Str)),
+                    "[string]",
+                )
+            }
+            RtFn::StrReplace => {
+                count(&[3])?;
+                need(args.iter().all(|a| strs(*a)), "strings expected")?;
+                ret(&|k| matches!(k, TyKind::Str), "a string")
+            }
+            RtFn::ListLen => {
+                count(&[1])?;
+                need(list_of(args[0]).is_some(), "list expected")?;
+                ret(&|k| matches!(k, TyKind::Num(NumKind::Num)), "number")
+            }
+            RtFn::ListIsEmpty => {
+                count(&[1])?;
+                need(list_of(args[0]).is_some(), "list expected")?;
+                ret(&|k| matches!(k, TyKind::Bool), "bool")
+            }
             RtFn::ListPush => {
                 count(&[2])?;
                 let t = list_of(args[0]).ok_or("list expected")?;
                 need(self.ty(args[1]) == t, "element type differs")?;
                 ret(&|k| matches!(k, TyKind::Unit), "unit")
             }
-            RtFn::ListPop => { count(&[1])?; let t = list_of(args[0]).ok_or("list expected")?; need(option_of(t), "result must be Option of the element")?; Ok(()) }
+            RtFn::ListPop => {
+                count(&[1])?;
+                let t = list_of(args[0]).ok_or("list expected")?;
+                need(option_of(t), "result must be Option of the element")?;
+                Ok(())
+            }
             RtFn::ListRemove => {
                 count(&[2])?;
                 let t = list_of(args[0]).ok_or("list expected")?;
                 need(num(args[1]), "index must be a number")?;
                 need(self.ty(dst) == t, "result must be the element")
             }
-            RtFn::ListReverse | RtFn::ListSort => { count(&[1])?; need(list_of(args[0]).is_some(), "list expected")?; need(self.ty(dst) == self.ty(args[0]), "result must be the same list type") }
-            RtFn::ListSlice => { count(&[2, 3])?; need(list_of(args[0]).is_some() && args[1..].iter().all(|a| num(*a)), "list and numbers expected")?; need(self.ty(dst) == self.ty(args[0]), "result must be the same list type") }
+            RtFn::ListReverse | RtFn::ListSort => {
+                count(&[1])?;
+                need(list_of(args[0]).is_some(), "list expected")?;
+                need(
+                    self.ty(dst) == self.ty(args[0]),
+                    "result must be the same list type",
+                )
+            }
+            RtFn::ListSlice => {
+                count(&[2, 3])?;
+                need(
+                    list_of(args[0]).is_some() && args[1..].iter().all(|a| num(*a)),
+                    "list and numbers expected",
+                )?;
+                need(
+                    self.ty(dst) == self.ty(args[0]),
+                    "result must be the same list type",
+                )
+            }
             RtFn::ListContains => {
                 count(&[2])?;
                 let t = list_of(args[0]).ok_or("list expected")?;
                 need(self.ty(args[1]) == t, "element type differs")?;
                 ret(&|k| matches!(k, TyKind::Bool), "bool")
             }
-            RtFn::ListJoin => { count(&[2])?; need(list_of(args[0]).is_some() && strs(args[1]), "list and string expected")?; ret(&|k| matches!(k, TyKind::Str), "a string") }
-            RtFn::MapLen => { count(&[1])?; need(map_of(args[0]).is_some(), "map expected")?; ret(&|k| matches!(k, TyKind::Num(NumKind::Num)), "number") }
-            RtFn::MapIsEmpty => { count(&[1])?; need(map_of(args[0]).is_some(), "map expected")?; ret(&|k| matches!(k, TyKind::Bool), "bool") }
-            RtFn::MapHas => { count(&[2])?; need(map_of(args[0]).is_some() && strs(args[1]), "map and string expected")?; ret(&|k| matches!(k, TyKind::Bool), "bool") }
+            RtFn::ListJoin => {
+                count(&[2])?;
+                need(
+                    list_of(args[0]).is_some() && strs(args[1]),
+                    "list and string expected",
+                )?;
+                ret(&|k| matches!(k, TyKind::Str), "a string")
+            }
+            RtFn::MapLen => {
+                count(&[1])?;
+                need(map_of(args[0]).is_some(), "map expected")?;
+                ret(&|k| matches!(k, TyKind::Num(NumKind::Num)), "number")
+            }
+            RtFn::MapIsEmpty => {
+                count(&[1])?;
+                need(map_of(args[0]).is_some(), "map expected")?;
+                ret(&|k| matches!(k, TyKind::Bool), "bool")
+            }
+            RtFn::MapHas => {
+                count(&[2])?;
+                need(
+                    map_of(args[0]).is_some() && strs(args[1]),
+                    "map and string expected",
+                )?;
+                ret(&|k| matches!(k, TyKind::Bool), "bool")
+            }
             RtFn::MapGet | RtFn::MapRemove => {
                 count(&[2])?;
                 let t = map_of(args[0]).ok_or("map expected")?;
@@ -492,24 +726,59 @@ impl<'m> Verifier<'m> {
             RtFn::MapSet => {
                 count(&[3])?;
                 let t = map_of(args[0]).ok_or("map expected")?;
-                need(strs(args[1]) && self.ty(args[2]) == t, "key string and value expected")?;
+                need(
+                    strs(args[1]) && self.ty(args[2]) == t,
+                    "key string and value expected",
+                )?;
                 ret(&|k| matches!(k, TyKind::Unit), "unit")
             }
-            RtFn::MapKeys => { count(&[1])?; need(map_of(args[0]).is_some(), "map expected")?; ret(&|k| matches!(k, TyKind::List(t) if matches!(types.kind(*t), TyKind::Str)), "[string]") }
+            RtFn::MapKeys => {
+                count(&[1])?;
+                need(map_of(args[0]).is_some(), "map expected")?;
+                ret(
+                    &|k| matches!(k, TyKind::List(t) if matches!(types.kind(*t), TyKind::Str)),
+                    "[string]",
+                )
+            }
             RtFn::MapValues => {
                 count(&[1])?;
                 let t = map_of(args[0]).ok_or("map expected")?;
-                need(matches!(self.kind(self.ty(dst)), TyKind::List(e) if *e == t), "result must list the values")
+                need(
+                    matches!(self.kind(self.ty(dst)), TyKind::List(e) if *e == t),
+                    "result must list the values",
+                )
             }
-            RtFn::Sqrt | RtFn::Abs | RtFn::Sign => { count(&[1])?; need(num(args[0]), "number expected")?; ret(&|k| matches!(k, TyKind::Num(NumKind::Num)), "number") }
-            RtFn::Min | RtFn::Max => { count(&[2])?; need(args.iter().all(|a| num(*a)), "numbers expected")?; ret(&|k| matches!(k, TyKind::Num(NumKind::Num)), "number") }
-            RtFn::Clamp => { count(&[3])?; need(args.iter().all(|a| num(*a)), "numbers expected")?; ret(&|k| matches!(k, TyKind::Num(NumKind::Num)), "number") }
+            RtFn::Sqrt | RtFn::Abs | RtFn::Sign => {
+                count(&[1])?;
+                need(num(args[0]), "number expected")?;
+                ret(&|k| matches!(k, TyKind::Num(NumKind::Num)), "number")
+            }
+            RtFn::Min | RtFn::Max => {
+                count(&[2])?;
+                need(args.iter().all(|a| num(*a)), "numbers expected")?;
+                ret(&|k| matches!(k, TyKind::Num(NumKind::Num)), "number")
+            }
+            RtFn::Clamp => {
+                count(&[3])?;
+                need(args.iter().all(|a| num(*a)), "numbers expected")?;
+                ret(&|k| matches!(k, TyKind::Num(NumKind::Num)), "number")
+            }
             RtFn::ParseNumber => {
-                count(&[1])?; need(strs(args[0]), "string expected")?;
-                ret(&|k| matches!(k, TyKind::Adt(a) if types.adt(*a).base == "Result"), "a Result")
+                count(&[1])?;
+                need(strs(args[0]), "string expected")?;
+                ret(
+                    &|k| matches!(k, TyKind::Adt(a) if types.adt(*a).base == "Result"),
+                    "a Result",
+                )
             }
-            RtFn::Vec2Length => { count(&[1])?; ret(&|k| matches!(k, TyKind::Num(NumKind::Num)), "number") }
-            RtFn::Vec2Normalized => { count(&[1])?; need(self.ty(dst) == self.ty(args[0]), "result must be a Vec2") }
+            RtFn::Vec2Length => {
+                count(&[1])?;
+                ret(&|k| matches!(k, TyKind::Num(NumKind::Num)), "number")
+            }
+            RtFn::Vec2Normalized => {
+                count(&[1])?;
+                need(self.ty(dst) == self.ty(args[0]), "result must be a Vec2")
+            }
         }
     }
 }

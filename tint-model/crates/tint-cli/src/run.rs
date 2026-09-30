@@ -28,6 +28,19 @@ fn run_file(path: &str, function: &str) {
         report_semantic_error(&loaded.entry_source, error);
     }
 
+    // `TINT_ENGINE=tree` forces the tree-walker; `native` makes a fallback an error.
+    let engine = std::env::var("TINT_ENGINE").unwrap_or_default();
+    if engine != "tree" && has_fn(&program, function) {
+        match try_native(&loaded.program, function) {
+            Ok(()) => return,
+            Err(why) if engine == "native" => {
+                eprintln!("native engine unavailable: {why}");
+                std::process::exit(2);
+            }
+            Err(_) => {}
+        }
+    }
+
     let mut vm = TintVM::new();
     register_natives(&mut vm);
     vm.run_program(&program);
@@ -48,6 +61,26 @@ fn run_file(path: &str, function: &str) {
             std::process::exit(1);
         }
     }
+}
+
+/// Compile the whole program to machine code and run `function`. Any reason the
+/// program is outside the native subset (UI, `read_line`, unsupported types, ...)
+/// comes back as `Err` before anything has run, so the caller can fall back.
+fn try_native(program: &tint_ast::Program, function: &str) -> Result<(), String> {
+    use tint_semantics::prelude::CheckerContext;
+    use tint_semantics::SemanticChecker;
+
+    let ctx = CheckerContext { strict: true, ..Default::default() };
+    let (errors, model) = SemanticChecker::new(ctx).check_with_model(program);
+    if !errors.is_empty() {
+        return Err("type errors".into());
+    }
+    let lowered = tint_ir::typed::lower_program(program, &model);
+    if !lowered.errors.is_empty() {
+        return Err(format!("lowering: {:?}", lowered.errors));
+    }
+    let jit = tint_codegen::compile_for(lowered.module, &[function]).map_err(|e| e.to_string())?;
+    jit.run_fn(function).map(|_| ())
 }
 
 fn register_natives(vm: &mut TintVM) {

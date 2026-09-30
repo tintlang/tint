@@ -5,7 +5,8 @@ use super::analysis::builtin_mutator;
 use super::*;
 use tint_ast::Expr;
 
-const BUILTIN_ENUMS: [(&str, [&str; 2]); 2] = [("Option", ["None", "Some"]), ("Result", ["Ok", "Err"])];
+const BUILTIN_ENUMS: [(&str, [&str; 2]); 2] =
+    [("Option", ["None", "Some"]), ("Result", ["Ok", "Err"])];
 
 impl<'a> Lowerer<'a> {
     fn has_variant(&self, enum_name: &str, variant: &str) -> bool {
@@ -37,7 +38,14 @@ impl<'a> Lowerer<'a> {
         }
     }
 
-    pub fn call(&mut self, call: &Expr, target: &Expr, args: &[Expr], hint: Option<TyId>, span: Span) -> LResult<Reg> {
+    pub fn call(
+        &mut self,
+        call: &Expr,
+        target: &Expr,
+        args: &[Expr],
+        hint: Option<TyId>,
+        span: Span,
+    ) -> LResult<Reg> {
         // Enum constructors: `Enum::Variant(..)` and a bare `Some(..)`.
         let variant = match target {
             Expr::Namespace { base, item, .. } => match base.as_ref() {
@@ -51,7 +59,8 @@ impl<'a> Lowerer<'a> {
                     && !self.globals.contains_key(name)
                     && !self.fns.contains_key(name) =>
             {
-                self.owner_of_variant(name).map(|owner| (owner, name.clone()))
+                self.owner_of_variant(name)
+                    .map(|owner| (owner, name.clone()))
             }
             _ => None,
         };
@@ -59,7 +68,12 @@ impl<'a> Lowerer<'a> {
             return self.variant_call(call, &enum_name, &variant, args, hint, span);
         }
 
-        if let Expr::Field { target: receiver, field: method, span: field_span } = target {
+        if let Expr::Field {
+            target: receiver,
+            field: method,
+            span: field_span,
+        } = target
+        {
             return self.method_call(call, receiver, method, args, hint, *field_span);
         }
 
@@ -70,7 +84,10 @@ impl<'a> Lowerer<'a> {
             if let Some(global) = self.globals.get(name).copied() {
                 let ty = self.module.globals[global.0 as usize].ty;
                 let callee = self.new_reg(ty);
-                self.emit(Instr::GlobalGet { dst: callee, global });
+                self.emit(Instr::GlobalGet {
+                    dst: callee,
+                    global,
+                });
                 return self.call_closure_exprs(callee, args, span);
             }
             let info = match self.fns.get(name).cloned() {
@@ -78,9 +95,15 @@ impl<'a> Lowerer<'a> {
                 None if self.generic_fns.contains_key(name) => {
                     let key = target as *const Expr as usize;
                     let Some(types) = self.model.instances.get(&key).cloned() else {
-                        return self.err(Some(span), format!("no type arguments were inferred for this call of `{name}`"));
+                        return self.err(
+                            Some(span),
+                            format!("no type arguments were inferred for this call of `{name}`"),
+                        );
                     };
-                    let targs = types.iter().map(|t| self.conv(t)).collect::<LResult<Vec<_>>>()?;
+                    let targs = types
+                        .iter()
+                        .map(|t| self.conv(t))
+                        .collect::<LResult<Vec<_>>>()?;
                     Some(self.fn_instance(name, targs, span)?)
                 }
                 None => None,
@@ -92,31 +115,45 @@ impl<'a> Lowerer<'a> {
                 };
                 // Arguments are evaluated in the order they are written; the
                 // registers are then put in parameter order.
-                let mut given: Vec<(usize, usize)> = slots.iter().enumerate().filter_map(|(p, a)| a.map(|a| (a, p))).collect();
+                let mut given: Vec<(usize, usize)> = slots
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(p, a)| a.map(|a| (a, p)))
+                    .collect();
                 given.sort();
                 let mut regs: Vec<Option<Reg>> = vec![None; info.params.len()];
                 for (arg_index, param) in given {
-                    regs[param] = Some(self.expr_as(tint_ast::arg_value(&args[arg_index]), info.params[param])?);
+                    regs[param] = Some(
+                        self.expr_as(tint_ast::arg_value(&args[arg_index]), info.params[param])?,
+                    );
                 }
                 let mut ordered = Vec::with_capacity(regs.len());
                 for (param, reg) in regs.into_iter().enumerate() {
                     ordered.push(match reg {
                         Some(reg) => reg,
                         None => {
-                            let default = info.defaults[param].expect("bind_call_args checked the default");
+                            let default =
+                                info.defaults[param].expect("bind_call_args checked the default");
                             self.default_arg(default, info.params[param])?
                         }
                     });
                 }
                 let regs = ordered;
                 let dst = self.new_reg(info.ret);
-                self.emit(Instr::Call { dst, func: info.id, args: regs });
+                self.emit(Instr::Call {
+                    dst,
+                    func: info.id,
+                    args: regs,
+                });
                 return Ok(dst);
             }
             if let Some(result) = self.builtin_call(name, args, span)? {
                 return Ok(result);
             }
-            return self.err(Some(span), format!("call of `{name}`, which is not a function that can be lowered"));
+            return self.err(
+                Some(span),
+                format!("call of `{name}`, which is not a function that can be lowered"),
+            );
         }
 
         let callee = self.expr(target, None)?;
@@ -138,34 +175,70 @@ impl<'a> Lowerer<'a> {
         result
     }
 
-    fn variant_call(&mut self, call: &Expr, enum_name: &str, variant: &str, args: &[Expr], hint: Option<TyId>, span: Span) -> LResult<Reg> {
+    fn variant_call(
+        &mut self,
+        call: &Expr,
+        enum_name: &str,
+        variant: &str,
+        args: &[Expr],
+        hint: Option<TyId>,
+        span: Span,
+    ) -> LResult<Reg> {
         let ty = self.pick(call, hint)?;
         let TyKind::Adt(adt) = self.tk(ty) else {
             return self.err(Some(span), format!("`{enum_name}` is not an enum"));
         };
         let def = self.module.types.adt(adt);
         let Some(index) = def.variant_index(variant) else {
-            return self.err(Some(span), format!("`{enum_name}` has no variant `{variant}`"));
+            return self.err(
+                Some(span),
+                format!("`{enum_name}` has no variant `{variant}`"),
+            );
         };
         let fields = def.variants()[index as usize].fields.clone();
         if fields.len() != args.len() {
-            return self.err(Some(span), format!("`{enum_name}::{variant}` takes {} values, got {}", fields.len(), args.len()));
+            return self.err(
+                Some(span),
+                format!(
+                    "`{enum_name}::{variant}` takes {} values, got {}",
+                    fields.len(),
+                    args.len()
+                ),
+            );
         }
         let mut regs = Vec::new();
         for (arg, field) in args.iter().zip(&fields) {
             regs.push(self.expr_as(arg, field.ty)?);
         }
         let dst = self.new_reg(ty);
-        self.emit(Instr::Variant { dst, adt, variant: index, fields: regs });
+        self.emit(Instr::Variant {
+            dst,
+            adt,
+            variant: index,
+            fields: regs,
+        });
         Ok(dst)
     }
 
     pub fn call_closure_exprs(&mut self, callee: Reg, args: &[Expr], span: Span) -> LResult<Reg> {
         let TyKind::Fn(params, _) = self.tk(self.reg_ty(callee)) else {
-            return self.err(Some(span), format!("call of {}, which is not a function", self.show(self.reg_ty(callee))));
+            return self.err(
+                Some(span),
+                format!(
+                    "call of {}, which is not a function",
+                    self.show(self.reg_ty(callee))
+                ),
+            );
         };
         if params.len() != args.len() {
-            return self.err(Some(span), format!("function takes {} arguments, got {}", params.len(), args.len()));
+            return self.err(
+                Some(span),
+                format!(
+                    "function takes {} arguments, got {}",
+                    params.len(),
+                    args.len()
+                ),
+            );
         }
         let mut regs = Vec::new();
         for (arg, ty) in args.iter().zip(&params) {
@@ -180,14 +253,25 @@ impl<'a> Lowerer<'a> {
             return self.err(Some(span), "call of a non-function");
         };
         if params.len() != args.len() {
-            return self.err(Some(span), format!("function takes {} arguments, got {}", params.len(), args.len()));
+            return self.err(
+                Some(span),
+                format!(
+                    "function takes {} arguments, got {}",
+                    params.len(),
+                    args.len()
+                ),
+            );
         }
         let mut regs = Vec::new();
         for (arg, ty) in args.into_iter().zip(params) {
             regs.push(self.coerce(arg, ty, Some(span))?);
         }
         let dst = self.new_reg(ret);
-        self.emit(Instr::CallClosure { dst, callee, args: regs });
+        self.emit(Instr::CallClosure {
+            dst,
+            callee,
+            args: regs,
+        });
         Ok(dst)
     }
 
@@ -197,7 +281,10 @@ impl<'a> Lowerer<'a> {
             if args.len() == n {
                 Ok(())
             } else {
-                this.err(Some(span), format!("`{name}` takes {n} arguments, got {}", args.len()))
+                this.err(
+                    Some(span),
+                    format!("`{name}` takes {n} arguments, got {}", args.len()),
+                )
             }
         };
         let (f, n) = match name {
@@ -214,7 +301,11 @@ impl<'a> Lowerer<'a> {
                 let adt = self.adt_instance("Vec2", Vec::new())?;
                 let ty = self.module.types.adt_ty(adt);
                 let dst = self.new_reg(ty);
-                self.emit(Instr::Struct { dst, adt, fields: vec![x, y] });
+                self.emit(Instr::Struct {
+                    dst,
+                    adt,
+                    fields: vec![x, y],
+                });
                 return Ok(Some(dst));
             }
             "parse_number" => {
@@ -229,7 +320,8 @@ impl<'a> Lowerer<'a> {
                 let f = match name {
                     "dbg" | "debug" => HostFn::Dbg,
                     "error" => HostFn::Error,
-                    _ => HostFn::Print,
+                    "print" => HostFn::Print,
+                    _ => HostFn::Println,
                 };
                 let mut regs = Vec::new();
                 for arg in args {
@@ -242,10 +334,18 @@ impl<'a> Lowerer<'a> {
             }
             "read_line" | "read_key" => {
                 arity(self, 0)?;
-                let f = if name == "read_line" { HostFn::ReadLine } else { HostFn::ReadKey };
+                let f = if name == "read_line" {
+                    HostFn::ReadLine
+                } else {
+                    HostFn::ReadKey
+                };
                 let ty = self.str_ty();
                 let dst = self.new_reg(ty);
-                self.emit(Instr::Host { dst, f, args: Vec::new() });
+                self.emit(Instr::Host {
+                    dst,
+                    f,
+                    args: Vec::new(),
+                });
                 return Ok(Some(dst));
             }
             _ => return Ok(None),
@@ -260,14 +360,26 @@ impl<'a> Lowerer<'a> {
 
     // ------------------------------------------------------------ methods
 
-    fn method_call(&mut self, call: &Expr, recv: &Expr, method: &str, args: &[Expr], hint: Option<TyId>, span: Span) -> LResult<Reg> {
+    fn method_call(
+        &mut self,
+        call: &Expr,
+        recv: &Expr,
+        method: &str,
+        args: &[Expr],
+        hint: Option<TyId>,
+        span: Span,
+    ) -> LResult<Reg> {
         let recv_ty = self.model.type_of(recv).cloned();
         if let Some(ty) = &recv_ty {
             if builtin_mutator(ty, method) {
                 return self.mutating_builtin(recv, method, args, span);
             }
             if let Type::Struct(name) = ty {
-                if let Some(info) = self.methods.get(&(name.clone(), method.to_string())).cloned() {
+                if let Some(info) = self
+                    .methods
+                    .get(&(name.clone(), method.to_string()))
+                    .cloned()
+                {
                     return self.user_method(recv, method, args, info, span);
                 }
             }
@@ -281,7 +393,9 @@ impl<'a> Lowerer<'a> {
             TyKind::Adt(adt) => {
                 let base = self.module.types.adt(adt).base.clone();
                 match base.as_str() {
-                    "Option" | "Result" => self.option_method(call, r, adt, method, args, hint, span),
+                    "Option" | "Result" => {
+                        self.option_method(call, r, adt, method, args, hint, span)
+                    }
                     "Vec2" => self.vec2_method(r, method, args, span),
                     _ => {
                         // A field that holds a function.
@@ -290,23 +404,51 @@ impl<'a> Lowerer<'a> {
                             Some(index) => {
                                 let fty = def.struct_fields()[index as usize].ty;
                                 let f = self.new_reg(fty);
-                                self.emit(Instr::Get { dst: f, base: r, proj: Proj::Field(index) });
+                                self.emit(Instr::Get {
+                                    dst: f,
+                                    base: r,
+                                    proj: Proj::Field(index),
+                                });
                                 self.call_closure_exprs(f, args, span)
                             }
-                            None => self.err(Some(span), format!("`{}` has no method `{method}`", self.show(r_ty))),
+                            None => self.err(
+                                Some(span),
+                                format!("`{}` has no method `{method}`", self.show(r_ty)),
+                            ),
                         }
                     }
                 }
             }
-            _ => self.err(Some(span), format!("no method `{method}` on {}", self.show(r_ty))),
+            _ => self.err(
+                Some(span),
+                format!("no method `{method}` on {}", self.show(r_ty)),
+            ),
         }
     }
 
-    fn user_method(&mut self, recv: &Expr, method: &str, args: &[Expr], info: MethodInfo, span: Span) -> LResult<Reg> {
+    fn user_method(
+        &mut self,
+        recv: &Expr,
+        method: &str,
+        args: &[Expr],
+        info: MethodInfo,
+        span: Span,
+    ) -> LResult<Reg> {
         if info.params.len() != args.len() {
-            return self.err(Some(span), format!("`{method}` takes {} arguments, got {}", info.params.len(), args.len()));
+            return self.err(
+                Some(span),
+                format!(
+                    "`{method}` takes {} arguments, got {}",
+                    info.params.len(),
+                    args.len()
+                ),
+            );
         }
-        let place = if info.inout_self { self.place_of(recv)? } else { None };
+        let place = if info.inout_self {
+            self.place_of(recv)?
+        } else {
+            None
+        };
         let me = match &place {
             Some(p) => self.read_place(p),
             None => self.expr(recv, None)?,
@@ -317,18 +459,34 @@ impl<'a> Lowerer<'a> {
         }
         if !info.inout_self {
             let dst = self.new_reg(info.ret);
-            self.emit(Instr::Call { dst, func: info.id, args: regs });
+            self.emit(Instr::Call {
+                dst,
+                func: info.id,
+                args: regs,
+            });
             return Ok(dst);
         }
         let pair_ty = self.module.funcs[info.id.0 as usize].ret;
         let me_ty = self.reg_ty(me);
         let pair = self.new_reg(pair_ty);
-        self.emit(Instr::Call { dst: pair, func: info.id, args: regs });
+        self.emit(Instr::Call {
+            dst: pair,
+            func: info.id,
+            args: regs,
+        });
         let result = self.new_reg(info.ret);
-        self.emit(Instr::Get { dst: result, base: pair, proj: Proj::Tuple(0) });
+        self.emit(Instr::Get {
+            dst: result,
+            base: pair,
+            proj: Proj::Tuple(0),
+        });
         if let Some(p) = &place {
             let updated = self.new_reg(me_ty);
-            self.emit(Instr::Get { dst: updated, base: pair, proj: Proj::Tuple(1) });
+            self.emit(Instr::Get {
+                dst: updated,
+                base: pair,
+                proj: Proj::Tuple(1),
+            });
             self.store_place(p, updated);
         }
         Ok(result)
@@ -338,7 +496,13 @@ impl<'a> Lowerer<'a> {
         if allowed.contains(&args.len()) {
             Ok(())
         } else {
-            self.err(Some(span), format!("`.{method}` takes {allowed:?} arguments, got {}", args.len()))
+            self.err(
+                Some(span),
+                format!(
+                    "`.{method}` takes {allowed:?} arguments, got {}",
+                    args.len()
+                ),
+            )
         }
     }
 
@@ -372,7 +536,15 @@ impl<'a> Lowerer<'a> {
         Ok(self.rt(f, regs, ret))
     }
 
-    fn list_method(&mut self, r: Reg, elem: TyId, method: &str, args: &[Expr], hint: Option<TyId>, span: Span) -> LResult<Reg> {
+    fn list_method(
+        &mut self,
+        r: Reg,
+        elem: TyId,
+        method: &str,
+        args: &[Expr],
+        hint: Option<TyId>,
+        span: Span,
+    ) -> LResult<Reg> {
         let (str_ty, num, bool_ty) = (self.str_ty(), self.num_ty(NumKind::Num), self.bool_ty());
         let list_ty = self.reg_ty(r);
         let (f, arg_tys, ret): (RtFn, Vec<TyId>, TyId) = match method {
@@ -404,7 +576,14 @@ impl<'a> Lowerer<'a> {
         Ok(self.rt(f, regs, ret))
     }
 
-    fn map_method(&mut self, r: Reg, value: TyId, method: &str, args: &[Expr], span: Span) -> LResult<Reg> {
+    fn map_method(
+        &mut self,
+        r: Reg,
+        value: TyId,
+        method: &str,
+        args: &[Expr],
+        span: Span,
+    ) -> LResult<Reg> {
         let (str_ty, num, bool_ty) = (self.str_ty(), self.num_ty(NumKind::Num), self.bool_ty());
         let option = self.adt_instance("Option", vec![value])?;
         let option_ty = self.module.types.adt_ty(option);
@@ -419,7 +598,11 @@ impl<'a> Lowerer<'a> {
             "values" => (RtFn::MapValues, values),
             _ => return self.err(Some(span), format!("Map has no method `{method}`")),
         };
-        let want = if matches!(method, "has" | "get") { 1 } else { 0 };
+        let want = if matches!(method, "has" | "get") {
+            1
+        } else {
+            0
+        };
         self.arity(method, args, &[want], span)?;
         let mut regs = vec![r];
         for arg in args {
@@ -430,7 +613,13 @@ impl<'a> Lowerer<'a> {
 
     /// `push`, `pop`, `remove` on lists and `set`, `remove` on maps: they
     /// change the variable they are called on.
-    fn mutating_builtin(&mut self, recv: &Expr, method: &str, args: &[Expr], span: Span) -> LResult<Reg> {
+    fn mutating_builtin(
+        &mut self,
+        recv: &Expr,
+        method: &str,
+        args: &[Expr],
+        span: Span,
+    ) -> LResult<Reg> {
         let place = self.place_of(recv)?;
         let recv_ty = match &place {
             Some(p) => p.ty,
@@ -491,7 +680,11 @@ impl<'a> Lowerer<'a> {
 
     /// Runs `body` once per element of `list`. `body` gets the element and the
     /// block after the loop, which it may jump to.
-    fn list_loop(&mut self, list: Reg, mut body: impl FnMut(&mut Self, Reg, BlockId) -> LResult<()>) -> LResult<()> {
+    fn list_loop(
+        &mut self,
+        list: Reg,
+        mut body: impl FnMut(&mut Self, Reg, BlockId) -> LResult<()>,
+    ) -> LResult<()> {
         let TyKind::List(elem) = self.tk(self.reg_ty(list)) else {
             return self.err(None, "iteration over a non-list");
         };
@@ -503,11 +696,24 @@ impl<'a> Lowerer<'a> {
         self.terminate(Term::Jump(head));
         self.switch_to(head);
         let more = self.new_reg(bool_ty);
-        self.emit(Instr::Cmp { dst: more, op: CmpOp::Lt, a: i, b: n });
-        self.terminate(Term::Branch { cond: more, then_: body_b, else_: exit });
+        self.emit(Instr::Cmp {
+            dst: more,
+            op: CmpOp::Lt,
+            a: i,
+            b: n,
+        });
+        self.terminate(Term::Branch {
+            cond: more,
+            then_: body_b,
+            else_: exit,
+        });
         self.switch_to(body_b);
         let item = self.new_reg(elem);
-        self.emit(Instr::Get { dst: item, base: list, proj: Proj::Index(i) });
+        self.emit(Instr::Get {
+            dst: item,
+            base: list,
+            proj: Proj::Index(i),
+        });
         body(self, item, exit)?;
         let one = self.const_reg(num, Const::Float(1.0));
         let next = self.arith(BinOp::Add, NumKind::Num, num, i, one);
@@ -526,17 +732,29 @@ impl<'a> Lowerer<'a> {
         Ok(f)
     }
 
-    fn list_map(&mut self, list: Reg, elem: TyId, args: &[Expr], hint: Option<TyId>, span: Span) -> LResult<Reg> {
+    fn list_map(
+        &mut self,
+        list: Reg,
+        elem: TyId,
+        args: &[Expr],
+        hint: Option<TyId>,
+        span: Span,
+    ) -> LResult<Reg> {
         let _ = elem;
         let f = self.function_arg(args, "map", span)?;
-        let TyKind::Fn(_, ret) = self.tk(self.reg_ty(f)) else { unreachable!() };
+        let TyKind::Fn(_, ret) = self.tk(self.reg_ty(f)) else {
+            unreachable!()
+        };
         let out_elem = match hint.map(|h| self.tk(h)) {
             Some(TyKind::List(h)) if self.compat(ret, h) => h,
             _ => ret,
         };
         let out_ty = self.module.types.list(out_elem);
         let out = self.new_reg(out_ty);
-        self.emit(Instr::List { dst: out, items: Vec::new() });
+        self.emit(Instr::List {
+            dst: out,
+            items: Vec::new(),
+        });
         let unit = self.unit_ty();
         self.list_loop(list, |this, item, _| {
             let mapped = this.call_closure_regs(f, vec![item], span)?;
@@ -551,14 +769,21 @@ impl<'a> Lowerer<'a> {
         let f = self.function_arg(args, "filter", span)?;
         let out_ty = self.reg_ty(list);
         let out = self.new_reg(out_ty);
-        self.emit(Instr::List { dst: out, items: Vec::new() });
+        self.emit(Instr::List {
+            dst: out,
+            items: Vec::new(),
+        });
         let unit = self.unit_ty();
         let bool_ty = self.bool_ty();
         self.list_loop(list, |this, item, _| {
             let keep = this.call_closure_regs(f, vec![item], span)?;
             let keep = this.coerce(keep, bool_ty, Some(span))?;
             let (yes, join) = (this.new_block(), this.new_block());
-            this.terminate(Term::Branch { cond: keep, then_: yes, else_: join });
+            this.terminate(Term::Branch {
+                cond: keep,
+                then_: yes,
+                else_: join,
+            });
             this.switch_to(yes);
             let item = this.coerce(item, elem, Some(span))?;
             this.rt(RtFn::ListPush, vec![out, item], unit);
@@ -576,15 +801,29 @@ impl<'a> Lowerer<'a> {
         let none = self.module.types.adt(option).variant_index("None").unwrap();
         let some = self.module.types.adt(option).variant_index("Some").unwrap();
         let result = self.new_reg(option_ty);
-        self.emit(Instr::Variant { dst: result, adt: option, variant: none, fields: Vec::new() });
+        self.emit(Instr::Variant {
+            dst: result,
+            adt: option,
+            variant: none,
+            fields: Vec::new(),
+        });
         let bool_ty = self.bool_ty();
         self.list_loop(list, |this, item, exit| {
             let hit = this.call_closure_regs(f, vec![item], span)?;
             let hit = this.coerce(hit, bool_ty, Some(span))?;
             let (yes, no) = (this.new_block(), this.new_block());
-            this.terminate(Term::Branch { cond: hit, then_: yes, else_: no });
+            this.terminate(Term::Branch {
+                cond: hit,
+                then_: yes,
+                else_: no,
+            });
             this.switch_to(yes);
-            this.emit(Instr::Variant { dst: result, adt: option, variant: some, fields: vec![item] });
+            this.emit(Instr::Variant {
+                dst: result,
+                adt: option,
+                variant: some,
+                fields: vec![item],
+            });
             this.terminate(Term::Jump(exit));
             this.switch_to(no);
             Ok(())
@@ -602,7 +841,11 @@ impl<'a> Lowerer<'a> {
         let tag = self.new_reg(tag_ty);
         self.emit(Instr::Tag { dst: tag, src: r });
         let (hit, miss) = (self.new_block(), self.new_block());
-        self.terminate(Term::Switch { value: tag, cases: vec![(index, hit)], default: miss });
+        self.terminate(Term::Switch {
+            value: tag,
+            cases: vec![(index, hit)],
+            default: miss,
+        });
         (tag, hit, miss)
     }
 
@@ -614,12 +857,26 @@ impl<'a> Lowerer<'a> {
         }
         let err_ty = def.variants()[1].fields[0].ty;
         let e = self.new_reg(err_ty);
-        self.emit(Instr::Payload { dst: e, src: r, variant: 1, index: 0 });
+        self.emit(Instr::Payload {
+            dst: e,
+            src: r,
+            variant: 1,
+            index: 0,
+        });
         vec![e]
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn option_method(&mut self, call: &Expr, r: Reg, adt: AdtId, method: &str, args: &[Expr], hint: Option<TyId>, span: Span) -> LResult<Reg> {
+    fn option_method(
+        &mut self,
+        call: &Expr,
+        r: Reg,
+        adt: AdtId,
+        method: &str,
+        args: &[Expr],
+        hint: Option<TyId>,
+        span: Span,
+    ) -> LResult<Reg> {
         let def = self.module.types.adt(adt).clone();
         let is_option = def.base == "Option";
         let ok_index: u32 = if is_option { 1 } else { 0 };
@@ -643,23 +900,44 @@ impl<'a> Lowerer<'a> {
                 let want = if wants_ok { ok_index } else { 1 - ok_index };
                 let c = self.const_reg(tag_ty, Const::Int(want as i64));
                 let dst = self.new_reg(bool_ty);
-                self.emit(Instr::Cmp { dst, op: CmpOp::Eq, a: tag, b: c });
+                self.emit(Instr::Cmp {
+                    dst,
+                    op: CmpOp::Eq,
+                    a: tag,
+                    b: c,
+                });
                 Ok(dst)
             }
             "unwrap" | "expect" => {
-                self.arity(method, args, &[if method == "expect" { 1 } else { 0 }], span)?;
+                self.arity(
+                    method,
+                    args,
+                    &[if method == "expect" { 1 } else { 0 }],
+                    span,
+                )?;
                 for arg in args {
                     self.expr(arg, None)?;
                 }
                 let tag = self.new_reg(tag_ty);
                 self.emit(Instr::Tag { dst: tag, src: r });
                 let (ok, fail) = (self.new_block(), self.new_block());
-                self.terminate(Term::Switch { value: tag, cases: vec![(ok_index as i64, ok)], default: fail });
+                self.terminate(Term::Switch {
+                    value: tag,
+                    cases: vec![(ok_index as i64, ok)],
+                    default: fail,
+                });
                 self.switch_to(fail);
-                self.terminate(Term::Trap(format!("{method} called on an empty or failed value")));
+                self.terminate(Term::Trap(format!(
+                    "{method} called on an empty or failed value"
+                )));
                 self.switch_to(ok);
                 let dst = self.new_reg(payload_ty);
-                self.emit(Instr::Payload { dst, src: r, variant: ok_index, index: 0 });
+                self.emit(Instr::Payload {
+                    dst,
+                    src: r,
+                    variant: ok_index,
+                    index: 0,
+                });
                 Ok(dst)
             }
             "unwrap_or" => {
@@ -669,19 +947,33 @@ impl<'a> Lowerer<'a> {
                 self.emit(Instr::Tag { dst: tag, src: r });
                 let result = self.new_reg(payload_ty);
                 let (ok, other, join) = (self.new_block(), self.new_block(), self.new_block());
-                self.terminate(Term::Switch { value: tag, cases: vec![(ok_index as i64, ok)], default: other });
+                self.terminate(Term::Switch {
+                    value: tag,
+                    cases: vec![(ok_index as i64, ok)],
+                    default: other,
+                });
                 self.switch_to(ok);
-                self.emit(Instr::Payload { dst: result, src: r, variant: ok_index, index: 0 });
+                self.emit(Instr::Payload {
+                    dst: result,
+                    src: r,
+                    variant: ok_index,
+                    index: 0,
+                });
                 self.terminate(Term::Jump(join));
                 self.switch_to(other);
-                self.emit(Instr::Mov { dst: result, src: fallback });
+                self.emit(Instr::Mov {
+                    dst: result,
+                    src: fallback,
+                });
                 self.terminate(Term::Jump(join));
                 self.switch_to(join);
                 Ok(result)
             }
             "map" | "and_then" => {
                 let f = self.function_arg(args, method, span)?;
-                let TyKind::Fn(_, f_ret) = self.tk(self.reg_ty(f)) else { unreachable!() };
+                let TyKind::Fn(_, f_ret) = self.tk(self.reg_ty(f)) else {
+                    unreachable!()
+                };
                 // The type of the whole result.
                 let result_ty = if method == "and_then" {
                     f_ret
@@ -696,48 +988,91 @@ impl<'a> Lowerer<'a> {
                     _ => result_ty,
                 };
                 let TyKind::Adt(result_adt) = self.tk(result_ty) else {
-                    return self.err(Some(span), format!("`.{method}` must return an {}", def.base));
+                    return self.err(
+                        Some(span),
+                        format!("`.{method}` must return an {}", def.base),
+                    );
                 };
                 let result_def = self.module.types.adt(result_adt).clone();
                 if result_def.base != def.base {
-                    return self.err(Some(span), format!("`.{method}` must return an {}", def.base));
+                    return self.err(
+                        Some(span),
+                        format!("`.{method}` must return an {}", def.base),
+                    );
                 }
                 let _ = call;
                 let tag = self.new_reg(tag_ty);
                 self.emit(Instr::Tag { dst: tag, src: r });
                 let result = self.new_reg(result_ty);
                 let (ok, fail, join) = (self.new_block(), self.new_block(), self.new_block());
-                self.terminate(Term::Switch { value: tag, cases: vec![(ok_index as i64, ok)], default: fail });
+                self.terminate(Term::Switch {
+                    value: tag,
+                    cases: vec![(ok_index as i64, ok)],
+                    default: fail,
+                });
                 self.switch_to(ok);
                 let payload = self.new_reg(payload_ty);
-                self.emit(Instr::Payload { dst: payload, src: r, variant: ok_index, index: 0 });
+                self.emit(Instr::Payload {
+                    dst: payload,
+                    src: r,
+                    variant: ok_index,
+                    index: 0,
+                });
                 let out = self.call_closure_regs(f, vec![payload], span)?;
                 if method == "and_then" {
                     let out = self.coerce(out, result_ty, Some(span))?;
-                    self.emit(Instr::Mov { dst: result, src: out });
+                    self.emit(Instr::Mov {
+                        dst: result,
+                        src: out,
+                    });
                 } else {
                     let want = result_def.variants()[ok_index as usize].fields[0].ty;
                     let out = self.coerce(out, want, Some(span))?;
-                    self.emit(Instr::Variant { dst: result, adt: result_adt, variant: ok_index, fields: vec![out] });
+                    self.emit(Instr::Variant {
+                        dst: result,
+                        adt: result_adt,
+                        variant: ok_index,
+                        fields: vec![out],
+                    });
                 }
                 self.terminate(Term::Jump(join));
                 self.switch_to(fail);
                 if is_option {
-                    self.emit(Instr::Variant { dst: result, adt: result_adt, variant: 0, fields: Vec::new() });
+                    self.emit(Instr::Variant {
+                        dst: result,
+                        adt: result_adt,
+                        variant: 0,
+                        fields: Vec::new(),
+                    });
                 } else {
                     let err_ty = def.variants()[1].fields[0].ty;
                     let want = result_def.variants()[1].fields[0].ty;
                     let e = self.new_reg(err_ty);
-                    self.emit(Instr::Payload { dst: e, src: r, variant: 1, index: 0 });
+                    self.emit(Instr::Payload {
+                        dst: e,
+                        src: r,
+                        variant: 1,
+                        index: 0,
+                    });
                     let e = self.coerce(e, want, Some(span))?;
-                    self.emit(Instr::Variant { dst: result, adt: result_adt, variant: 1, fields: vec![e] });
+                    self.emit(Instr::Variant {
+                        dst: result,
+                        adt: result_adt,
+                        variant: 1,
+                        fields: vec![e],
+                    });
                 }
                 self.terminate(Term::Jump(join));
                 self.switch_to(join);
                 Ok(result)
             }
             "unwrap_err" | "expect_err" if !is_option => {
-                self.arity(method, args, &[if method == "expect_err" { 1 } else { 0 }], span)?;
+                self.arity(
+                    method,
+                    args,
+                    &[if method == "expect_err" { 1 } else { 0 }],
+                    span,
+                )?;
                 for arg in args {
                     self.expr(arg, None)?;
                 }
@@ -747,12 +1082,18 @@ impl<'a> Lowerer<'a> {
                 self.switch_to(ok);
                 let err_ty = def.variants()[1].fields[0].ty;
                 let dst = self.new_reg(err_ty);
-                self.emit(Instr::Payload { dst, src: r, variant: 1, index: 0 });
+                self.emit(Instr::Payload {
+                    dst,
+                    src: r,
+                    variant: 1,
+                    index: 0,
+                });
                 Ok(dst)
             }
             "is_some_and" | "is_ok_and" | "is_err_and" => {
                 let want = if method == "is_err_and" { 1 } else { ok_index };
-                if (method == "is_some_and") != is_option || (is_option && method != "is_some_and") {
+                if (method == "is_some_and") != is_option || (is_option && method != "is_some_and")
+                {
                     return self.err(Some(span), format!("{} has no method `{method}`", def.base));
                 }
                 let f = self.function_arg(args, method, span)?;
@@ -762,14 +1103,25 @@ impl<'a> Lowerer<'a> {
                 self.switch_to(yes);
                 let inner_ty = def.variants()[want as usize].fields[0].ty;
                 let payload = self.new_reg(inner_ty);
-                self.emit(Instr::Payload { dst: payload, src: r, variant: want, index: 0 });
+                self.emit(Instr::Payload {
+                    dst: payload,
+                    src: r,
+                    variant: want,
+                    index: 0,
+                });
                 let out = self.call_closure_regs(f, vec![payload], span)?;
                 let out = self.coerce(out, bool_ty, Some(span))?;
-                self.emit(Instr::Mov { dst: result, src: out });
+                self.emit(Instr::Mov {
+                    dst: result,
+                    src: out,
+                });
                 self.terminate(Term::Jump(join));
                 self.switch_to(no);
                 let no_value = self.const_reg(bool_ty, Const::Bool(false));
-                self.emit(Instr::Mov { dst: result, src: no_value });
+                self.emit(Instr::Mov {
+                    dst: result,
+                    src: no_value,
+                });
                 self.terminate(Term::Jump(join));
                 self.switch_to(join);
                 Ok(result)
@@ -780,13 +1132,21 @@ impl<'a> Lowerer<'a> {
                 let (_, ok, other) = self.split_on(r, ok_index as i64);
                 let join = self.new_block();
                 self.switch_to(ok);
-                self.emit(Instr::Payload { dst: result, src: r, variant: ok_index, index: 0 });
+                self.emit(Instr::Payload {
+                    dst: result,
+                    src: r,
+                    variant: ok_index,
+                    index: 0,
+                });
                 self.terminate(Term::Jump(join));
                 self.switch_to(other);
                 let fallback_args = self.failure_payload(r, &def, is_option);
                 let out = self.call_closure_regs(f, fallback_args, span)?;
                 let out = self.coerce(out, payload_ty, Some(span))?;
-                self.emit(Instr::Mov { dst: result, src: out });
+                self.emit(Instr::Mov {
+                    dst: result,
+                    src: out,
+                });
                 self.terminate(Term::Jump(join));
                 self.switch_to(join);
                 Ok(result)
@@ -804,13 +1164,24 @@ impl<'a> Lowerer<'a> {
                 let join = self.new_block();
                 self.switch_to(ok);
                 let payload = self.new_reg(payload_ty);
-                self.emit(Instr::Payload { dst: payload, src: r, variant: ok_index, index: 0 });
+                self.emit(Instr::Payload {
+                    dst: payload,
+                    src: r,
+                    variant: ok_index,
+                    index: 0,
+                });
                 let out = self.call_closure_regs(f, vec![payload], span)?;
                 let out = self.coerce(out, out_ty, Some(span))?;
-                self.emit(Instr::Mov { dst: result, src: out });
+                self.emit(Instr::Mov {
+                    dst: result,
+                    src: out,
+                });
                 self.terminate(Term::Jump(join));
                 self.switch_to(other);
-                self.emit(Instr::Mov { dst: result, src: default });
+                self.emit(Instr::Mov {
+                    dst: result,
+                    src: default,
+                });
                 self.terminate(Term::Jump(join));
                 self.switch_to(join);
                 Ok(result)
@@ -823,19 +1194,41 @@ impl<'a> Lowerer<'a> {
                 let join = self.new_block();
                 self.switch_to(some);
                 let payload = self.new_reg(payload_ty);
-                self.emit(Instr::Payload { dst: payload, src: r, variant: ok_index, index: 0 });
+                self.emit(Instr::Payload {
+                    dst: payload,
+                    src: r,
+                    variant: ok_index,
+                    index: 0,
+                });
                 let keep = self.call_closure_regs(f, vec![payload], span)?;
                 let keep = self.coerce(keep, bool_ty, Some(span))?;
                 let (yes, no) = (self.new_block(), self.new_block());
-                self.terminate(Term::Branch { cond: keep, then_: yes, else_: no });
+                self.terminate(Term::Branch {
+                    cond: keep,
+                    then_: yes,
+                    else_: no,
+                });
                 self.switch_to(yes);
-                self.emit(Instr::Mov { dst: result, src: r });
+                self.emit(Instr::Mov {
+                    dst: result,
+                    src: r,
+                });
                 self.terminate(Term::Jump(join));
                 self.switch_to(no);
-                self.emit(Instr::Variant { dst: result, adt, variant: 0, fields: Vec::new() });
+                self.emit(Instr::Variant {
+                    dst: result,
+                    adt,
+                    variant: 0,
+                    fields: Vec::new(),
+                });
                 self.terminate(Term::Jump(join));
                 self.switch_to(none);
-                self.emit(Instr::Variant { dst: result, adt, variant: 0, fields: Vec::new() });
+                self.emit(Instr::Variant {
+                    dst: result,
+                    adt,
+                    variant: 0,
+                    fields: Vec::new(),
+                });
                 self.terminate(Term::Jump(join));
                 self.switch_to(join);
                 Ok(result)
@@ -843,12 +1236,20 @@ impl<'a> Lowerer<'a> {
             "or" | "or_else" => {
                 let other = if method == "or" {
                     self.arity(method, args, &[1], span)?;
-                    let hint_ty = if is_option { Some(self.reg_ty(r)) } else { hint };
+                    let hint_ty = if is_option {
+                        Some(self.reg_ty(r))
+                    } else {
+                        hint
+                    };
                     Some(self.expr(&args[0], hint_ty)?)
                 } else {
                     None
                 };
-                let f = if method == "or_else" { Some(self.function_arg(args, method, span)?) } else { None };
+                let f = if method == "or_else" {
+                    Some(self.function_arg(args, method, span)?)
+                } else {
+                    None
+                };
                 let result_ty = match (other, f) {
                     (Some(o), _) => self.reg_ty(o),
                     (_, Some(f)) => match self.tk(self.reg_ty(f)) {
@@ -858,21 +1259,37 @@ impl<'a> Lowerer<'a> {
                     _ => unreachable!(),
                 };
                 let TyKind::Adt(result_adt) = self.tk(result_ty) else {
-                    return self.err(Some(span), format!("`.{method}` must produce an {}", def.base));
+                    return self.err(
+                        Some(span),
+                        format!("`.{method}` must produce an {}", def.base),
+                    );
                 };
                 let result_def = self.module.types.adt(result_adt).clone();
                 if result_def.base != def.base {
-                    return self.err(Some(span), format!("`.{method}` must produce an {}", def.base));
+                    return self.err(
+                        Some(span),
+                        format!("`.{method}` must produce an {}", def.base),
+                    );
                 }
                 let result = self.new_reg(result_ty);
                 let (_, ok, other_block) = self.split_on(r, ok_index as i64);
                 let join = self.new_block();
                 self.switch_to(ok);
                 let payload = self.new_reg(payload_ty);
-                self.emit(Instr::Payload { dst: payload, src: r, variant: ok_index, index: 0 });
+                self.emit(Instr::Payload {
+                    dst: payload,
+                    src: r,
+                    variant: ok_index,
+                    index: 0,
+                });
                 let want = result_def.variants()[ok_index as usize].fields[0].ty;
                 let payload = self.coerce(payload, want, Some(span))?;
-                self.emit(Instr::Variant { dst: result, adt: result_adt, variant: ok_index, fields: vec![payload] });
+                self.emit(Instr::Variant {
+                    dst: result,
+                    adt: result_adt,
+                    variant: ok_index,
+                    fields: vec![payload],
+                });
                 self.terminate(Term::Jump(join));
                 self.switch_to(other_block);
                 let out = match (other, f) {
@@ -884,13 +1301,20 @@ impl<'a> Lowerer<'a> {
                     _ => unreachable!(),
                 };
                 let out = self.coerce(out, result_ty, Some(span))?;
-                self.emit(Instr::Mov { dst: result, src: out });
+                self.emit(Instr::Mov {
+                    dst: result,
+                    src: out,
+                });
                 self.terminate(Term::Jump(join));
                 self.switch_to(join);
                 Ok(result)
             }
             "ok_or" | "ok_or_else" if is_option => {
-                let f = if method == "ok_or_else" { Some(self.function_arg(args, method, span)?) } else { None };
+                let f = if method == "ok_or_else" {
+                    Some(self.function_arg(args, method, span)?)
+                } else {
+                    None
+                };
                 let err_value = if method == "ok_or" {
                     self.arity(method, args, &[1], span)?;
                     let err_hint = match hint.map(|h| self.tk(h)) {
@@ -918,8 +1342,18 @@ impl<'a> Lowerer<'a> {
                 let join = self.new_block();
                 self.switch_to(some);
                 let payload = self.new_reg(payload_ty);
-                self.emit(Instr::Payload { dst: payload, src: r, variant: 1, index: 0 });
-                self.emit(Instr::Variant { dst: result, adt: result_adt, variant: 0, fields: vec![payload] });
+                self.emit(Instr::Payload {
+                    dst: payload,
+                    src: r,
+                    variant: 1,
+                    index: 0,
+                });
+                self.emit(Instr::Variant {
+                    dst: result,
+                    adt: result_adt,
+                    variant: 0,
+                    fields: vec![payload],
+                });
                 self.terminate(Term::Jump(join));
                 self.switch_to(none);
                 let e = match (err_value, f) {
@@ -928,14 +1362,21 @@ impl<'a> Lowerer<'a> {
                     _ => unreachable!(),
                 };
                 let e = self.coerce(e, err_ty, Some(span))?;
-                self.emit(Instr::Variant { dst: result, adt: result_adt, variant: 1, fields: vec![e] });
+                self.emit(Instr::Variant {
+                    dst: result,
+                    adt: result_adt,
+                    variant: 1,
+                    fields: vec![e],
+                });
                 self.terminate(Term::Jump(join));
                 self.switch_to(join);
                 Ok(result)
             }
             "map_err" if !is_option => {
                 let f = self.function_arg(args, method, span)?;
-                let TyKind::Fn(_, new_err) = self.tk(self.reg_ty(f)) else { unreachable!() };
+                let TyKind::Fn(_, new_err) = self.tk(self.reg_ty(f)) else {
+                    unreachable!()
+                };
                 let result_adt = self.adt_instance("Result", vec![payload_ty, new_err])?;
                 let result_ty = self.module.types.adt_ty(result_adt);
                 let result = self.new_reg(result_ty);
@@ -943,21 +1384,40 @@ impl<'a> Lowerer<'a> {
                 let join = self.new_block();
                 self.switch_to(ok);
                 let payload = self.new_reg(payload_ty);
-                self.emit(Instr::Payload { dst: payload, src: r, variant: 0, index: 0 });
-                self.emit(Instr::Variant { dst: result, adt: result_adt, variant: 0, fields: vec![payload] });
+                self.emit(Instr::Payload {
+                    dst: payload,
+                    src: r,
+                    variant: 0,
+                    index: 0,
+                });
+                self.emit(Instr::Variant {
+                    dst: result,
+                    adt: result_adt,
+                    variant: 0,
+                    fields: vec![payload],
+                });
                 self.terminate(Term::Jump(join));
                 self.switch_to(fail);
                 let fallback_args = self.failure_payload(r, &def, false);
                 let e = self.call_closure_regs(f, fallback_args, span)?;
                 let e = self.coerce(e, new_err, Some(span))?;
-                self.emit(Instr::Variant { dst: result, adt: result_adt, variant: 1, fields: vec![e] });
+                self.emit(Instr::Variant {
+                    dst: result,
+                    adt: result_adt,
+                    variant: 1,
+                    fields: vec![e],
+                });
                 self.terminate(Term::Jump(join));
                 self.switch_to(join);
                 Ok(result)
             }
             "ok" | "err" if !is_option => {
                 self.arity(method, args, &[0], span)?;
-                let (keep, keep_ty) = if method == "ok" { (0u32, payload_ty) } else { (1u32, def.variants()[1].fields[0].ty) };
+                let (keep, keep_ty) = if method == "ok" {
+                    (0u32, payload_ty)
+                } else {
+                    (1u32, def.variants()[1].fields[0].ty)
+                };
                 let option_adt = self.adt_instance("Option", vec![keep_ty])?;
                 let option_ty = self.module.types.adt_ty(option_adt);
                 let result = self.new_reg(option_ty);
@@ -965,11 +1425,26 @@ impl<'a> Lowerer<'a> {
                 let join = self.new_block();
                 self.switch_to(hit);
                 let payload = self.new_reg(keep_ty);
-                self.emit(Instr::Payload { dst: payload, src: r, variant: keep, index: 0 });
-                self.emit(Instr::Variant { dst: result, adt: option_adt, variant: 1, fields: vec![payload] });
+                self.emit(Instr::Payload {
+                    dst: payload,
+                    src: r,
+                    variant: keep,
+                    index: 0,
+                });
+                self.emit(Instr::Variant {
+                    dst: result,
+                    adt: option_adt,
+                    variant: 1,
+                    fields: vec![payload],
+                });
                 self.terminate(Term::Jump(join));
                 self.switch_to(miss);
-                self.emit(Instr::Variant { dst: result, adt: option_adt, variant: 0, fields: Vec::new() });
+                self.emit(Instr::Variant {
+                    dst: result,
+                    adt: option_adt,
+                    variant: 0,
+                    fields: Vec::new(),
+                });
                 self.terminate(Term::Jump(join));
                 self.switch_to(join);
                 Ok(result)
@@ -981,35 +1456,61 @@ impl<'a> Lowerer<'a> {
     fn vec2_method(&mut self, r: Reg, method: &str, args: &[Expr], span: Span) -> LResult<Reg> {
         let num = self.num_ty(NumKind::Num);
         let r_ty = self.reg_ty(r);
-        let TyKind::Adt(adt) = self.tk(r_ty) else { unreachable!() };
+        let TyKind::Adt(adt) = self.tk(r_ty) else {
+            unreachable!()
+        };
         match method {
             "length" | "normalized" => {
                 self.arity(method, args, &[0], span)?;
-                let (f, ret) = if method == "length" { (RtFn::Vec2Length, num) } else { (RtFn::Vec2Normalized, r_ty) };
+                let (f, ret) = if method == "length" {
+                    (RtFn::Vec2Length, num)
+                } else {
+                    (RtFn::Vec2Normalized, r_ty)
+                };
                 Ok(self.rt(f, vec![r], ret))
             }
             "add" | "sub" | "scale" => {
                 self.arity(method, args, &[1], span)?;
-                let op = if method == "sub" { BinOp::Sub } else { BinOp::Add };
+                let op = if method == "sub" {
+                    BinOp::Sub
+                } else {
+                    BinOp::Add
+                };
                 let mut parts = Vec::new();
                 if method == "scale" {
                     let k = self.expr_as(&args[0], num)?;
                     for i in 0..2u32 {
                         let c = self.new_reg(num);
-                        self.emit(Instr::Get { dst: c, base: r, proj: Proj::Field(i) });
+                        self.emit(Instr::Get {
+                            dst: c,
+                            base: r,
+                            proj: Proj::Field(i),
+                        });
                         parts.push(self.arith(BinOp::Mul, NumKind::Num, num, c, k));
                     }
                 } else {
                     let other = self.expr_as(&args[0], r_ty)?;
                     for i in 0..2u32 {
                         let (a, b) = (self.new_reg(num), self.new_reg(num));
-                        self.emit(Instr::Get { dst: a, base: r, proj: Proj::Field(i) });
-                        self.emit(Instr::Get { dst: b, base: other, proj: Proj::Field(i) });
+                        self.emit(Instr::Get {
+                            dst: a,
+                            base: r,
+                            proj: Proj::Field(i),
+                        });
+                        self.emit(Instr::Get {
+                            dst: b,
+                            base: other,
+                            proj: Proj::Field(i),
+                        });
                         parts.push(self.arith(op, NumKind::Num, num, a, b));
                     }
                 }
                 let dst = self.new_reg(r_ty);
-                self.emit(Instr::Struct { dst, adt, fields: parts });
+                self.emit(Instr::Struct {
+                    dst,
+                    adt,
+                    fields: parts,
+                });
                 Ok(dst)
             }
             _ => self.err(Some(span), format!("Vec2 has no method `{method}`")),

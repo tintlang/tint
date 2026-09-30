@@ -1,0 +1,21 @@
+struct S { x: number, y: number }
+
+fn bump(l) {
+    let mut m = l
+    m[1].x = m[1].x + 10.0
+    m[0].y = 7.0
+    m
+}
+
+// expect: "1 2 3 4 | 7 13 | 23"
+fn list_field_write_keeps_copies_apart() {
+    let a = [S { x: 1.0, y: 2.0 }, S { x: 3.0, y: 4.0 }]
+    let b = bump(a)
+    let c = bump(b)
+    "{a[0].x} {a[0].y} {a[1].x} {a[1].y} | {b[0].y} {b[1].x} | {c[1].x}"
+}
+
+// expect: 33
+fn math_builtins() {
+    sqrt(16.0) + min(2.0, 1.0) + max(2.0, 5.0) + clamp(9.0, 0.0, 3.0) + abs(0.0 - 4.0) + sign(0.0 - 2.0) + 17.0
+}

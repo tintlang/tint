@@ -1,0 +1,20 @@
+[package]
+name = "tint-codegen"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+tint-ir = { path = "../tint-ir" }
+cranelift-codegen = "0.135"
+cranelift-frontend = "0.135"
+cranelift-module = "0.135"
+cranelift-jit = "0.135"
+cranelift-native = "0.135"
+tint-lexer = { path = "../tint-lexer" }
+tint-parser = { path = "../tint-parser" }
+tint-semantics = { path = "../tint-semantics" }
+
+[[bin]]
+name = "tint-native-case"
+path = "src/bin/native_case.rs"
