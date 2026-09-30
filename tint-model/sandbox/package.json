@@ -6,6 +6,6 @@
   "scripts": {
     "wasm": "sh build-wasm.sh",
     "dev": "sh dev.sh",
-    "build": "cargo run -q --manifest-path ../Cargo.toml -p tint-cli -- build src/site.tn -o dist/index.html"
+    "build": "cargo run -q --manifest-path ../Cargo.toml -p tint-cli --no-default-features -- build src/site.tn -o dist/index.html"
   }
 }

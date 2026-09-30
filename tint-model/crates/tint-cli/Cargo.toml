@@ -8,6 +8,11 @@ license.workspace = true
 name = "tint"
 path = "src/main.rs"
 
+[features]
+default = ["native"]
+# Cranelift JIT engine for `tint run`; needs a newer rustc than the site build has.
+native = ["dep:tint-codegen"]
+
 [dependencies]
 tint-compiler = { path = "../tint-compiler" }
 tint-lexer = { path = "../tint-lexer" }
@@ -16,7 +21,7 @@ tint-parser = { path = "../tint-parser" }
 tint-runtime = { path = "../tint-runtime" }
 tint-evaluator = { path = "../tint-evaluator" }
 tint-semantics = { path = "../tint-semantics" }
-tint-codegen = { path = "../tint-codegen" }
+tint-codegen = { path = "../tint-codegen", optional = true }
 tint-ir = { path = "../tint-ir" }
 base64 = "0.22"
 crossterm = "0.28"

@@ -66,6 +66,12 @@ fn run_file(path: &str, function: &str) {
 /// Compile the whole program to machine code and run `function`. Any reason the
 /// program is outside the native subset (UI, `read_line`, unsupported types, ...)
 /// comes back as `Err` before anything has run, so the caller can fall back.
+#[cfg(not(feature = "native"))]
+fn try_native(_program: &tint_ast::Program, _function: &str) -> Result<(), String> {
+    Err("built without the `native` feature".into())
+}
+
+#[cfg(feature = "native")]
 fn try_native(program: &tint_ast::Program, function: &str) -> Result<(), String> {
     use tint_semantics::prelude::CheckerContext;
     use tint_semantics::SemanticChecker;
