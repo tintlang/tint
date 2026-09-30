@@ -1,0 +1,89 @@
+fn make_rows(n) {
+    let mut out = [""]
+    out.pop()
+    for i in 0..n {
+        next_id = next_id + 1
+        out.push("{next_id} item {next_id}")
+    }
+    out
+}
+
+fn create1k() { rows = make_rows(1000) }
+fn create10k() { rows = make_rows(10000) }
+fn append1k() {
+    let mut out = rows.slice(0)
+    let extra = make_rows(1000)
+    let mut j = 0
+    while j < extra.len() { out.push(extra[j]); j = j + 1 }
+    rows = out
+}
+fn update10th() {
+    let mut out = [""]
+    out.pop()
+    let mut i = 0
+    for r in rows.slice(0) {
+        if i % 10 == 0 { out.push("{r} !!!") } else { out.push(r) }
+        i = i + 1
+    }
+    rows = out
+}
+fn swap_rows() {
+    let cur = rows.slice(0)
+    let n = cur.len()
+    let mut out = [""]
+    out.pop()
+    let mut i = 0
+    for r in cur {
+        if i == 1 { out.push(cur[n - 2]) }
+        else if i == n - 2 { out.push(cur[1]) }
+        else { out.push(r) }
+        i = i + 1
+    }
+    rows = out
+}
+fn select5() { selected = rows.slice(0)[4] }
+fn remove5() {
+    let mut out = [""]
+    out.pop()
+    let mut i = 0
+    for r in rows.slice(0) {
+        if i != 4 { out.push(r) }
+        i = i + 1
+    }
+    rows = out
+}
+fn clear_rows() { rows = make_rows(0) }
+fn noop() {}
+
+ui fn App() {
+    state rows = make_rows(0)
+    state next_id = 0
+    state selected = ""
+
+    Page {
+        direction::column
+        Bar {
+            direction::row gap::6
+            Button { click||create1k "Create 1,000 rows" }
+            Button { click||create10k "Create 10,000 rows" }
+            Button { click||append1k "Append 1,000 rows" }
+            Button { click||update10th "Update every 10th row" }
+            Button { click||swap_rows "Swap rows" }
+            Button { click||select5 "Select row" }
+            Button { click||remove5 "Remove row" }
+            Button { click||clear_rows "Clear" }
+        }
+        Table {
+            direction::column
+            for{r in rows}
+            Line { direction::row gap::8 background::#1b1e26 key::{r} if{r != selected}
+                Cell { grow::1 Text { "{r}" } }
+                Button { click||noop "x" }
+            }
+            Line { direction::row gap::8 background::#6c5ce7 key::{r} if{r == selected}
+                Cell { grow::1 Text { "{r}" } }
+                Button { click||noop "x" }
+            }
+        }
+    }
+}
