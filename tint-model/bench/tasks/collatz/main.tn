@@ -1,0 +1,29 @@
+fn steps(n) {
+    let mut x = n
+    let mut c = 0
+    while x != 1 {
+        if x % 2 == 0 {
+            x = x / 2
+        } else {
+            x = 3 * x + 1
+        }
+        c = c + 1
+    }
+    c
+}
+
+fn main() {
+    let mut best = 0
+    let mut best_n = 0
+    let mut n = 1
+    while n < 20000 {
+        let s = steps(n)
+        if s > best {
+            best = s
+            best_n = n
+        }
+        n = n + 1
+    }
+    println(best_n)
+    println(best)
+}

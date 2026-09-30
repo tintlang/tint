@@ -1,0 +1,29 @@
+fn main() {
+    let n = 3000
+    let mut flags = []
+    let mut i = 0
+    while i <= n {
+        flags.push(true)
+        i = i + 1
+    }
+    let mut p = 2
+    while p * p <= n {
+        if flags[p] {
+            let mut j = p * p
+            while j <= n {
+                flags[j] = false
+                j = j + p
+            }
+        }
+        p = p + 1
+    }
+    let mut count = 0
+    let mut k = 2
+    while k <= n {
+        if flags[k] {
+            count = count + 1
+        }
+        k = k + 1
+    }
+    println(count)
+}

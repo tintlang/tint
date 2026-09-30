@@ -1,0 +1,27 @@
+fn main() {
+    let size = 200
+    let mut inside = 0
+    let mut y = 0
+    while y < size {
+        let mut x = 0
+        while x < size {
+            let cr = 2.0 * x / size - 1.5
+            let ci = 2.0 * y / size - 1.0
+            let mut zr = 0.0
+            let mut zi = 0.0
+            let mut it = 0
+            while it < 50 && zr * zr + zi * zi <= 4.0 {
+                let t = zr * zr - zi * zi + cr
+                zi = 2.0 * zr * zi + ci
+                zr = t
+                it = it + 1
+            }
+            if it == 50 {
+                inside = inside + 1
+            }
+            x = x + 1
+        }
+        y = y + 1
+    }
+    println(inside)
+}

@@ -1,0 +1,48 @@
+struct Body { x: number, y: number, vx: number, vy: number, m: number }
+
+fn step(list, dt) {
+    let mut bodies = list
+    let n = bodies.len()
+    let mut i = 0
+    while i < n {
+        let mut j = i + 1
+        while j < n {
+            let dx = bodies[i].x - bodies[j].x
+            let dy = bodies[i].y - bodies[j].y
+            let d2 = dx * dx + dy * dy + 0.01
+            let mag = dt / (d2 * sqrt(d2))
+            bodies[i].vx = bodies[i].vx - dx * bodies[j].m * mag
+            bodies[i].vy = bodies[i].vy - dy * bodies[j].m * mag
+            bodies[j].vx = bodies[j].vx + dx * bodies[i].m * mag
+            bodies[j].vy = bodies[j].vy + dy * bodies[i].m * mag
+            j = j + 1
+        }
+        i = i + 1
+    }
+    let mut k = 0
+    while k < n {
+        bodies[k].x = bodies[k].x + dt * bodies[k].vx
+        bodies[k].y = bodies[k].y + dt * bodies[k].vy
+        k = k + 1
+    }
+    bodies
+}
+
+fn main() {
+    let mut bodies = [
+        Body { x: 0.0, y: 0.0, vx: 0.0, vy: 0.0, m: 10.0 },
+        Body { x: 1.0, y: 0.0, vx: 0.0, vy: 3.0, m: 1.0 },
+        Body { x: 0.0, y: 2.0, vx: 2.0, vy: 0.0, m: 1.0 },
+        Body { x: -3.0, y: 0.0, vx: 0.0, vy: -1.5, m: 0.5 },
+        Body { x: 0.0, y: -4.0, vx: -1.2, vy: 0.0, m: 0.5 },
+        Body { x: 5.0, y: 5.0, vx: -0.5, vy: 0.5, m: 0.2 },
+    ]
+    let mut s = 0
+    while s < 200000 {
+        bodies = step(bodies, 0.001)
+        s = s + 1
+    }
+    let mut e = 0.0
+    for b in bodies { e = e + 0.5 * b.m * (b.vx * b.vx + b.vy * b.vy) }
+    println(e * 1000.0 - (e * 1000.0) % 1.0)
+}

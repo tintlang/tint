@@ -1,0 +1,12 @@
+fn main() {
+    let mut parts = []
+    let mut i = 0
+    while i < 100000 {
+        parts.push("item{i}")
+        i = i + 1
+    }
+    let joined = parts.join(",")
+    let back = joined.split(",")
+    println(joined.len())
+    println(back.len())
+}

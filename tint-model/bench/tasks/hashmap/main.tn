@@ -1,0 +1,15 @@
+fn main() {
+    let mut m = map { a{0} }
+    let mut i = 0
+    while i < 100000 {
+        m.set("k{i}", i)
+        i = i + 1
+    }
+    let mut sum = 0
+    i = 0
+    while i < 100000 {
+        sum = sum + m.get("k{i}").unwrap()
+        i = i + 1
+    }
+    println(sum)
+}

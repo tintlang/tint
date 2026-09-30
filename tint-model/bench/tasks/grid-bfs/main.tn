@@ -1,0 +1,56 @@
+fn bfs(seed) {
+    let n = 400
+    let mut rng = seed
+    let mut wall = []
+    let mut i = 0
+    while i < n * n {
+        rng = (rng * 1664525 + 1013904223) % 4294967296
+        wall.push(if rng % 100 < 28 { 1 } else { 0 })
+        i = i + 1
+    }
+    wall[0] = 0
+    wall[n * n - 1] = 0
+    let mut dist = []
+    i = 0
+    while i < n * n {
+        dist.push(0 - 1)
+        i = i + 1
+    }
+    let mut queue = [0]
+    dist[0] = 0
+    let mut head = 0
+    while head < queue.len() {
+        let cur = queue[head]
+        head = head + 1
+        let x = cur % n
+        let y = (cur - x) / n
+        let d = dist[cur] + 1
+        if x > 0 && wall[cur - 1] == 0 && dist[cur - 1] < 0 {
+            dist[cur - 1] = d
+            queue.push(cur - 1)
+        }
+        if x < n - 1 && wall[cur + 1] == 0 && dist[cur + 1] < 0 {
+            dist[cur + 1] = d
+            queue.push(cur + 1)
+        }
+        if y > 0 && wall[cur - n] == 0 && dist[cur - n] < 0 {
+            dist[cur - n] = d
+            queue.push(cur - n)
+        }
+        if y < n - 1 && wall[cur + n] == 0 && dist[cur + n] < 0 {
+            dist[cur + n] = d
+            queue.push(cur + n)
+        }
+    }
+    dist[n * n - 1] * 1000 + queue.len()
+}
+
+fn main() {
+    let mut total = 0
+    let mut s = 1
+    while s <= 10 {
+        total = total + bfs(s)
+        s = s + 1
+    }
+    println(total)
+}

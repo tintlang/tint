@@ -1,0 +1,29 @@
+enum Tree {
+    Leaf,
+    Node(Tree, Tree),
+}
+
+fn make(d) {
+    if d == 0 {
+        Tree::Leaf
+    } else {
+        Tree::Node(make(d - 1), make(d - 1))
+    }
+}
+
+fn check(t) {
+    match t {
+        Leaf => 1,
+        Node(l, r) => 1 + check(l) + check(r),
+    }
+}
+
+fn main() {
+    let mut total = 0
+    let mut i = 0
+    while i < 20 {
+        total = total + check(make(16))
+        i = i + 1
+    }
+    println(total)
+}

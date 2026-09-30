@@ -1,0 +1,29 @@
+fn main() {
+    let mut rng = 7
+    let mut words = []
+    let mut i = 0
+    while i < 300000 {
+        rng = (rng * 1664525 + 1013904223) % 4294967296
+        let k = rng % 5000
+        words.push("w{k}")
+        i = i + 1
+    }
+    let text = words.join(" ")
+    let parts = text.split(" ")
+    let mut counts = map { seed{0} }
+    for w in parts {
+        if counts.has(w) {
+            counts.set(w, counts.get(w).unwrap() + 1)
+        } else {
+            counts.set(w, 1)
+        }
+    }
+    let mut best = 0
+    let mut chars = 0
+    for k in counts.keys() {
+        let c = counts.get(k).unwrap()
+        if c > best { best = c }
+        chars = chars + c * k.len()
+    }
+    println("{counts.len()} {best} {chars}")
+}
