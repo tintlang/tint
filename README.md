@@ -44,6 +44,10 @@ Tint puts them in one statically typed language:
 - **State and logic next to the UI.** `state`, event handlers, `if`/`for`/`match`
   and typed functions are ordinary language features. The type checker sees
   the UI and the logic together.
+- **One small thing to learn.** I think Tint is easier to learn than React
+  together with CSS and a build setup. You learn one small language and use
+  one tool (`tint dev` / `tint build`), with no Node, bundler or framework to
+  set up.
 - **No virtual DOM, no framework.** `DomSession` creates real DOM elements and
   updates them directly through `web-sys`.
 - **Rust when you need it.** Heavy work stays in Rust and is called from Tint
