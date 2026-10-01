@@ -860,7 +860,7 @@ dependencies = [
 
 [[package]]
 name = "tint"
-version = "0.1.3"
+version = "0.2.0"
 dependencies = [
  "inventory",
  "js-sys",
@@ -876,7 +876,7 @@ dependencies = [
 
 [[package]]
 name = "tint-analyzer"
-version = "0.1.3"
+version = "0.2.0"
 dependencies = [
  "serde_json",
  "tint-ast",
@@ -888,14 +888,14 @@ dependencies = [
 
 [[package]]
 name = "tint-ast"
-version = "0.1.3"
+version = "0.2.0"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "tint-cli"
-version = "0.1.3"
+version = "0.2.0"
 dependencies = [
  "base64",
  "crossterm",
@@ -913,7 +913,7 @@ dependencies = [
 
 [[package]]
 name = "tint-codegen"
-version = "0.1.3"
+version = "0.2.0"
 dependencies = [
  "cranelift-codegen",
  "cranelift-frontend",
@@ -928,7 +928,7 @@ dependencies = [
 
 [[package]]
 name = "tint-compiler"
-version = "0.1.3"
+version = "0.2.0"
 dependencies = [
  "tint-ast",
  "tint-lexer",
@@ -938,7 +938,7 @@ dependencies = [
 
 [[package]]
 name = "tint-evaluator"
-version = "0.1.3"
+version = "0.2.0"
 dependencies = [
  "thiserror",
  "tint-ast",
@@ -946,7 +946,7 @@ dependencies = [
 
 [[package]]
 name = "tint-ir"
-version = "0.1.3"
+version = "0.2.0"
 dependencies = [
  "tint-ast",
  "tint-lexer",
@@ -956,14 +956,14 @@ dependencies = [
 
 [[package]]
 name = "tint-lexer"
-version = "0.1.3"
+version = "0.2.0"
 dependencies = [
  "tint-ast",
 ]
 
 [[package]]
 name = "tint-macros"
-version = "0.1.3"
+version = "0.2.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -974,7 +974,7 @@ dependencies = [
 
 [[package]]
 name = "tint-parser"
-version = "0.1.3"
+version = "0.2.0"
 dependencies = [
  "tint-ast",
  "tint-lexer",
@@ -982,7 +982,7 @@ dependencies = [
 
 [[package]]
 name = "tint-runtime"
-version = "0.1.3"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "futures",
@@ -1001,7 +1001,7 @@ dependencies = [
 
 [[package]]
 name = "tint-semantics"
-version = "0.1.3"
+version = "0.2.0"
 dependencies = [
  "tint-ast",
  "tint-lexer",
@@ -1010,7 +1010,7 @@ dependencies = [
 
 [[package]]
 name = "tint-wasm"
-version = "0.1.3"
+version = "0.2.0"
 dependencies = [
  "js-sys",
  "serde",

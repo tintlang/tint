@@ -4,6 +4,8 @@ All notable changes to Tint are documented here.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-01
+
 - JS and CSS from Tint: `app { js::"./utils.js" css::"./theme.css" }`. Every function a JS module exports is callable from `.tn` as `name(...)` (sync; numbers, strings, bools, lists, maps); stylesheets are loaded and nodes take `class||"a b"`. Works in `tint build`/`tint dev` (files are embedded) and in `mount()` (`natives` and `baseUrl` options, `import()` loading). `DomSession`/`from_bytecode` take an optional `natives` object; new `app_assets(source)`. See `docs/guide/escape-hatches.md`.
 - Host components: `Host { component||"Chart" props||{ ChartProps { ... } } }` mounts a JS component into the node. `mount(..., { components })` runs mount/update/destroy (props compared as canonical JSON; the element survives re-renders); `reactComponent(C)` in `@tintlang/react`. Not available in `tint build` pages.
 - Rust interop (`docs/guide/rust-interop.md`): new `tint` crate (`Tint::new(..).call::<R>(name, args)`, `FromTint`/`IntoTint` + derives, `tint_file!`, `UiSession` access) and `#[tint::export]` to call Rust from `.tn`. `app { rs::"./native.rs" }` makes `tint run` build and use a runner with those functions linked in. `tint-cli` is now also a library (`tint_cli::main_with`).
