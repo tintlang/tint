@@ -90,8 +90,8 @@ is sugar for it. See [Rust interop](tint-model/docs/guide/rust-interop.md),
 Run it locally:
 
 ```bash
-# install the CLI (macOS/Linux)
-curl -fsSL https://raw.githubusercontent.com/tintlang/tint/main/scripts/install-tint.sh | bash
+# install the CLI (macOS/Linux); the same script as scripts/install-tint.sh
+curl -fsSL tint-gamma.vercel.app/install | bash
 
 tint check app.tn                # check syntax and types
 tint run app.tn                  # run a program

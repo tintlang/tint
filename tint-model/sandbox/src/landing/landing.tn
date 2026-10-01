@@ -5,7 +5,7 @@ ui fn Landing() {
     state theme = storage_get_or("theme", "dark")
     state code = include_str("./demo-app.tn")
     state tint_src = include_str("./demo-counter.tn")
-    state install_cmd = "curl -fsSL https://raw.githubusercontent.com/tintlang/tint/main/scripts/install-tint.sh | bash"
+    state install_cmd = "curl -fsSL tint-gamma.vercel.app/install | bash"
     state copy_label = "Copy"
     state compare_file = "index.html"
     state web_shown = include_str("./compare/index.html.txt")
@@ -125,7 +125,7 @@ ui fn Landing() {
     }
 
     style InstallSection {
-        layout::{ direction::column, align::center, gap::14, padding.x::16, padding.y::48..80, width::"100%", min-width::0 }
+        layout::{ direction::column, align::center, gap::14, padding.x::16, padding.t::0, padding.b::48..80, width::"100%", min-width::0 }
     }
 
     style FooterBase {
@@ -173,7 +173,6 @@ ui fn Landing() {
                 import "./demo.tn";
                 InstallSection {
                     use::InstallSection
-                    Text { text::{22..30, bold, @text-main} "Try it in one command" }
                     import "./install.tn";
                 }
             }

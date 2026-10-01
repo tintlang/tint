@@ -20,10 +20,11 @@ Install **Tint Language** from the
 The extension provides syntax highlighting immediately. To use build and
 syntax-check commands, install the Tint CLI from the
 [GitHub Releases page](https://github.com/tintlang/tint/releases). On macOS or
-Linux, the latest release can be installed with:
+Linux, the latest release can be installed with the command below (it redirects to
+`scripts/install-tint.sh` in the repository):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/tintlang/tint/main/scripts/install-tint.sh | bash
+curl -fsSL tint-gamma.vercel.app/install | bash
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
