@@ -61,7 +61,7 @@ pub enum Imp {
 }
 
 impl Imp {
-    pub const COUNT: usize = 47;
+    pub const COUNT: usize = 46;
 }
 
 const I32: ValType = ValType::I32;
@@ -74,7 +74,6 @@ const SIGS: [Sig; Imp::COUNT] = [
     ("trap", &[I32], &[]),
     ("tint_fmod", &[F64, F64], &[F64]),
     ("cast_fail", &[I32, I32, I64], &[]),
-    ("retain", &[I32], &[]),
     ("release", &[I32], &[]),
     ("obj_new", &[I32, I64], &[I32]),
     ("obj_unique", &[I32], &[I32]),
