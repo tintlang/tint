@@ -316,7 +316,7 @@ const BASE_CSS: &str = concat!(
     ":where([data-tag]){box-sizing:border-box}",
     ":where(a[data-tag]){color:inherit;text-decoration:none}",
     ":where(textarea[data-tag]){appearance:none;border:0;margin:0;padding:0;background:transparent;color:inherit;font:inherit;resize:none;outline:none;overflow:hidden}",
-    ":where(button[data-tag]){-webkit-tap-highlight-color:transparent;appearance:none;border:0;margin:0;font:inherit;color:inherit;text-align:inherit}",
+    ":where(button[data-tag]){-webkit-tap-highlight-color:transparent;appearance:none;background:none;border:none;padding:0;margin:0;font:inherit;color:inherit;text-align:inherit}",
 );
 
 fn ensure_base_styles(document: &Document) -> Result<(), JsValue> {
@@ -482,7 +482,24 @@ thread_local! {
     static SCAN_CACHE: std::cell::RefCell<ScanCache> = std::cell::RefCell::new(ScanCache::default());
 }
 
+thread_local! {
+    static EMPTY_SCAN: Rc<TreeScan> = Rc::new(TreeScan::default());
+}
+
 fn scan_node(node: &Rc<UiRenderNode>, old: &ScanCache, new: &mut ScanCache) -> Rc<TreeScan> {
+    // Leaves are summarized directly: caching them costs more than looking at them.
+    if node.children.is_empty() {
+        let plain = node.on_key_down.is_none()
+            && node.on_key_up.is_none()
+            && node.on_pointer_move.is_none()
+            && node.on_pointer_up.is_none()
+            && node.on_frame.is_none()
+            && node.on_tick.is_none()
+            && node.breakpoints.is_empty();
+        if plain {
+            return EMPTY_SCAN.with(Rc::clone);
+        }
+    }
     let addr = Rc::as_ptr(node) as usize;
     if let Some((_, s)) = new.get(&addr) {
         return Rc::clone(s);
@@ -515,7 +532,7 @@ fn scan_node(node: &Rc<UiRenderNode>, old: &ScanCache, new: &mut ScanCache) -> R
             out.merge(&c);
         }
     }
-    let out = Rc::new(out);
+    let out = if out.is_empty() { EMPTY_SCAN.with(Rc::clone) } else { Rc::new(out) };
     new.insert(addr, (Rc::clone(node), Rc::clone(&out)));
     out
 }
@@ -1158,9 +1175,6 @@ fn patch_node(
         || old.hover_style != new.hover_style;
     if style_changed || hoverable {
         let mut props = Vec::new();
-        if dom_tag_name(new) == "button" {
-            props.extend(BUTTON_RESET.iter().map(|(k, v)| (k.to_string(), v.to_string())));
-        }
         props.extend(new.style.iter().cloned());
         for styles in matching_breakpoints(new, breakpoint) {
             props.extend(styles.iter().cloned());
@@ -1255,25 +1269,7 @@ fn style_to_css_text(props: &[(String, String)]) -> String {
         .join(" ")
 }
 
-/// Neutralizes the browser's own UA stylesheet for `<button>` (border,
-/// background, padding, font -- the "grey embossed" default look), the
-/// same reset `UiPreviewNode.svelte` applies for the same reason: without
-/// it, a Button with nothing style-related set by the language still
-/// shows the browser's chrome, which looks like *our* renderer invented a
-/// button style when it didn't. Deliberately NOT adding `cursor: pointer`
-/// here either -- that was explicitly removed on the Svelte side as an
-/// invented default the language itself never asked for; see this
-/// crate's sibling ui/style.rs and the Svelte component's own history.
-const BUTTON_RESET: &[(&str, &str)] = &[
-    ("appearance", "none"),
-    ("background", "none"),
-    ("border", "none"),
-    ("padding", "0"),
-    ("margin", "0"),
-    ("font", "inherit"),
-    ("color", "inherit"),
-    ("text-align", "inherit"),
-];
+// The `<button>` UA reset lives in BASE_CSS (zero specificity), not inline on every button.
 
 /// Callbacks that fire after their host call returned (a settled Promise, a
 /// JS timer) run against the live session and re-render it.

@@ -11,7 +11,6 @@ fn build_node(
         return Ok(mounted);
     }
     let tag_name = dom_tag_name(node);
-    let is_button = tag_name == "button";
     let el = document.create_element(tag_name)?;
     el.set_attribute("data-tag", &node.tag)?;
     if !node.tint_source.is_empty() {
@@ -73,13 +72,6 @@ fn build_node(
     // the reset -- resetting the whole `style` attribute to just
     // `node.style` would bring the browser's button chrome right back.
     let mut base_props: Vec<(String, String)> = Vec::new();
-    if is_button {
-        base_props.extend(
-            BUTTON_RESET
-                .iter()
-                .map(|(k, v)| (k.to_string(), v.to_string())),
-        );
-    }
     base_props.extend(node.style.iter().cloned());
 
     // Layer the current viewport's breakpoint style (if the node has
@@ -260,9 +252,6 @@ thread_local! {
 fn node_css(node: &UiRenderNode, is_button: bool, breakpoint: &str) -> Rc<str> {
     let compute = || -> Rc<str> {
         let mut props: Vec<(String, String)> = Vec::new();
-        if is_button {
-            props.extend(BUTTON_RESET.iter().map(|(k, v)| (k.to_string(), v.to_string())));
-        }
         props.extend(node.style.iter().cloned());
         for bp_style in matching_breakpoints(node, breakpoint) {
             props.extend(bp_style.iter().cloned());
