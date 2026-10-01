@@ -1,7 +1,9 @@
-import { useEffect, useRef, type CSSProperties } from "react";
+import { createElement, useEffect, useRef, type ComponentType, type CSSProperties } from "react";
+import { createRoot } from "react-dom/client";
 import {
   mount,
   type TintApp,
+  type TintComponent,
   type TintEntry,
   type TintMountOptions,
 } from "@tintlang/runtime";
@@ -76,4 +78,21 @@ export function Tint({
 
 function toError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
+}
+
+/**
+ * Turns a React component into a Tint host component:
+ * `mount(src, el, { components: { Chart: reactComponent(Chart) } })` and, in
+ * Tint, `Host { component||"Chart" props||{ ChartProps { ... } } }`.
+ * Each props change re-renders the same React root.
+ */
+export function reactComponent<P extends object>(Component: ComponentType<P>): TintComponent {
+  return (element, props) => {
+    const root = createRoot(element);
+    root.render(createElement(Component, props as P));
+    return {
+      update: (next) => root.render(createElement(Component, next as P)),
+      destroy: () => root.unmount(),
+    };
+  };
 }

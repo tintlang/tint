@@ -23,6 +23,12 @@ fn run_file(path: &str, function: &str) {
     let loaded = module_loader::load(path);
     let program = &loaded.program;
 
+    // `rs::"./x.rs"` files need a build with those functions linked in.
+    let rs_files = program.app_meta().rs;
+    if !rs_files.is_empty() && !crate::native_runner::active() {
+        crate::native_runner::exec(path, &rs_files);
+    }
+
     for error in &semantic_check(&loaded) {
         eprintln!("warning: semantic:");
         report_semantic_error(&loaded.entry_source, error);
@@ -164,6 +170,11 @@ fn register_natives(vm: &mut TintVM) {
             .unwrap_or(0.0);
         Ok(Value::Number(millis))
     });
+
+    // Registered last so a host function can shadow a built-in.
+    for (name, function) in crate::user_natives() {
+        vm.register_native(name, move |args| function(args));
+    }
 }
 
 fn native_error(message: &str) -> EvalError {

@@ -86,6 +86,8 @@ pub(super) fn call_value(host: &mut HostVM, value: Value, args: &[Value], span: 
             host.pop_scope();
             result
         }
+        Value::Callback(callback) => (callback.0)(args)
+            .unwrap_or_else(|error| panic!("callback failed: {error}")),
         _ => panic!("Value is not callable at {:?}", span),
     }
 }

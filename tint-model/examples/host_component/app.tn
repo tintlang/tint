@@ -1,0 +1,30 @@
+struct CounterProps {
+    count: number,
+    label: string,
+}
+
+fn bump() { count = count + 1 }
+fn toggle() { show = !show }
+
+ui fn App() {
+    state count = 0
+    state show = true
+
+    Column {
+        direction::column
+        padding::24
+        gap::12
+
+        Row {
+            gap::8
+            Button { click||bump "bump" }
+            Button { click||toggle "toggle" }
+        }
+
+        Host {
+            component||"Counter"
+            props||{ CounterProps { count: count, label: "clicks" } }
+            if{show}
+        }
+    }
+}

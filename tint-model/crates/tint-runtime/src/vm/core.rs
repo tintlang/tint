@@ -79,6 +79,16 @@ impl TintVM {
 
     // PROGRAM ENTRY
     pub fn run_program(&mut self, program: &Program) {
+        self.load_program(program);
+        self.mount_ui(program);
+        self.last_result = EvalValue::Unit;
+    }
+
+    /// `run_program` without the `App`/`Main` auto-mount: registers everything
+    /// but renders nothing. A `UiSession` renders by itself once its `state`
+    /// exists; the auto-mount would only run the UI body (and any host JS it
+    /// calls) before that state is bound.
+    pub fn load_program(&mut self, program: &Program) {
         #[cfg(feature = "ir")]
         {
             let mut compiler = SsaCompiler::new();
@@ -87,8 +97,6 @@ impl TintVM {
         }
         self.register_functions(program);
         self.register_constants(program);
-        self.mount_ui(program);
-        self.last_result = EvalValue::Unit;
     }
 
     // FUNCTION REGISTRATION

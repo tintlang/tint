@@ -4,6 +4,7 @@ impl SemanticChecker {
             ctx,
             scopes: Scopes::new(),
             known_fns: HashSet::new(),
+            host_js: false,
             ui_tokens: HashSet::new(),
             ui_styles: HashSet::new(),
             ui_variants: HashSet::new(),
@@ -85,6 +86,9 @@ impl SemanticChecker {
         self.var_info.clear();
         self.deferred.clear();
         self.known_fns.extend(self.external_context.known_fns.iter().cloned());
+        self.known_fns.extend(self.ctx.host_fns.iter().cloned());
+        let meta = program.app_meta();
+        self.host_js = !meta.js.is_empty() || !meta.rs.is_empty();
         self.collect_top_level_names(&program.items);
         self.type_ui_state(&program.items);
         for item in &program.items {

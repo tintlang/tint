@@ -10,6 +10,8 @@ members = [
     "crates/tint-evaluator",
     "crates/tint-wasm",
     "crates/tint-cli",
+    "crates/tint",
+    "crates/tint-macros",
     "crates/tint-compiler",
     "crates/tint-analyzer",
 ]

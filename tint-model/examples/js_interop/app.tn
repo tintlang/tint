@@ -1,0 +1,31 @@
+app {
+    title::"JS interop"
+    js::"./utils.js"
+    css::"./theme.css"
+}
+
+fn bump() {
+    n = n + 1
+}
+
+ui fn App() {
+    state n = 1
+    state pt = make_point(3, 4)
+    state greeting = shout("hello")
+
+    Column {
+        direction::column
+        padding::24
+        gap::12
+        background::#12141a
+
+        Card {
+            class||"card"
+            Text { class||"accent" text::{18, bold, white} "{greeting}" }
+            Text { text::{14, white} "sum: {sum_all([1, 2, n])}" }
+            Text { text::{14, white} "point: {describe(pt)}" }
+        }
+
+        Button { click||bump "bump" }
+    }
+}

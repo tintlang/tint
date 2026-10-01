@@ -1,0 +1,15 @@
+<!doctype html>
+<div id="root"></div>
+<script type="module">
+  import { mount } from "@tintlang/runtime";
+
+  // A plain-DOM component; a React one is `reactComponent(Counter)` from @tintlang/react.
+  function Counter(element, props) {
+    const render = (p) => { element.textContent = `${p.label}: ${p.count}`; };
+    render(props);
+    return { update: render, destroy: () => console.log("Counter destroyed") };
+  }
+
+  const source = await (await fetch("./app.tn")).text();
+  await mount(source, document.getElementById("root"), { components: { Counter } });
+</script>

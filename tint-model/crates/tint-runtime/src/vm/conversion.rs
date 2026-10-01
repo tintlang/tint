@@ -68,6 +68,7 @@ impl TintVM {
             EvalValue::Lambda { .. }
             | EvalValue::Function { .. }
             | EvalValue::HostFunction(_)
+            | EvalValue::Callback(_)
             | EvalValue::Namespace { .. } => IrValue::Unit,
         }
     }

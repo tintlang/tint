@@ -4,6 +4,10 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[lib]
+name = "tint_cli"
+path = "src/lib.rs"
+
 [[bin]]
 name = "tint"
 path = "src/main.rs"
@@ -25,3 +29,4 @@ tint-codegen = { path = "../tint-codegen", optional = true }
 tint-ir = { path = "../tint-ir" }
 base64 = "0.22"
 crossterm = "0.28"
+flate2 = "1"

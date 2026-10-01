@@ -9,7 +9,7 @@ use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::thread;
 
-use crate::build::{infer_entry, standalone_html};
+use crate::build::{infer_entry, read_inline_assets, standalone_html};
 use crate::module_loader;
 use crate::support::{require_arg, semantic_check};
 
@@ -98,7 +98,14 @@ fn version(path: &str) -> String {
     static STARTED: std::sync::OnceLock<std::time::SystemTime> = std::sync::OnceLock::new();
     STARTED.get_or_init(std::time::SystemTime::now).hash(&mut hasher);
     match module_loader::try_load(path) {
-        Ok(loaded) => loaded.all_sources.hash(&mut hasher),
+        Ok(loaded) => {
+            loaded.all_sources.hash(&mut hasher);
+            if let Ok(inline) = read_inline_assets(path, &loaded.program.app_meta()) {
+                inline.js.hash(&mut hasher);
+                inline.wasm.as_ref().map(|w| w.wasm_gz.hash(&mut hasher));
+                inline.css.hash(&mut hasher);
+            }
+        }
         Err(error) => error.hash(&mut hasher),
     }
     hasher.finish().to_string()
@@ -112,11 +119,19 @@ fn page(path: &str, entry: Option<&str>) -> String {
                 crate::support::report_semantic_error(&loaded.entry_source, error);
             }
             let entry = entry.map_or_else(|| infer_entry(&loaded.entry_source), str::to_owned);
-            standalone_html(
-                &loaded.all_sources.join("\n\n"),
-                &entry,
-                &loaded.program.app_meta(),
-            )
+            let meta = loaded.program.app_meta();
+            match read_inline_assets(path, &meta) {
+                Ok(inline) => {
+                    standalone_html(&loaded.all_sources.join("\n\n"), &entry, &meta, &inline)
+                }
+                Err(error) => {
+                    eprintln!("{}", error);
+                    format!(
+                        "<!DOCTYPE html><meta charset=\"utf-8\"><body style=\"font-family:monospace\"><pre>{}</pre></body>",
+                        error.replace('&', "&amp;").replace('<', "&lt;")
+                    )
+                }
+            }
         }
         Err(error) => {
             eprintln!("{}", error);

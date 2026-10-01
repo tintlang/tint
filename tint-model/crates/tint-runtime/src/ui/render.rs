@@ -49,6 +49,9 @@ pub struct UiRenderNode {
     pub route: Option<String>,
     pub target: Option<String>,
     pub reference: Option<String>,
+    pub class: Option<String>,
+    pub component: Option<String>,
+    pub props: Option<String>,
     pub on_js: Option<String>,
     /// Shared so a subtree that did not change between two renders is the
     /// very same allocation both times (`Rc::ptr_eq`), which lets a renderer
@@ -85,6 +88,9 @@ impl PartialEq for UiRenderNode {
             && self.route == other.route
             && self.target == other.target
             && self.reference == other.reference
+            && self.class == other.class
+            && self.component == other.component
+            && self.props == other.props
             && self.on_js == other.on_js
             && self.children.len() == other.children.len()
             && self
@@ -206,6 +212,9 @@ pub fn to_render_tree(tree: &UiTree, id: UiNodeId) -> UiRenderNode {
         route: node.route.clone(),
         target: node.target.clone(),
         reference: node.reference.clone(),
+        class: node.class.clone(),
+        component: node.component.clone(),
+        props: node.props.clone(),
         on_js: node.on_js.clone(),
         children: if folds_text || lone_text.is_some() {
             Vec::new()

@@ -35,6 +35,10 @@ pub const VIEWPORT_WIDTH_VAR: &str = "viewport_width";
 /// navigation, so `if{route_path == "/pong"}` picks the page to render.
 pub const ROUTE_PATH_VAR: &str = "route_path";
 
+/// A host function made callable from `.tn` as `name(...)` (see
+/// `UiSession::new_with_natives`).
+pub type NativeFn = Rc<dyn Fn(&[EvalValue]) -> EvalResult<EvalValue>>;
+
 pub struct UiSession {
     vm: TintVM,
     ui_fn_name: String,
@@ -60,11 +64,22 @@ impl UiSession {
         ui_fn_name: &str,
         storage: HashMap<String, String>,
     ) -> Result<Self, String> {
+        Self::new_with_natives(source, ui_fn_name, storage, &[])
+    }
+
+    /// Like `new_with_storage`, with host functions registered BEFORE the
+    /// program runs, so `state x = host_fn()` can call them.
+    pub fn new_with_natives(
+        source: &str,
+        ui_fn_name: &str,
+        storage: HashMap<String, String>,
+        natives: &[(String, NativeFn)],
+    ) -> Result<Self, String> {
         let tokens = collect_tokens(&mut Lexer::new(source));
         let mut parser = Parser::new(tokens);
         let program = parser.parse_program().map_err(|e| format!("{:?}", e))?;
 
-        Self::from_program_with_storage(program, ui_fn_name, storage)
+        Self::from_program_with_natives(program, ui_fn_name, storage, natives)
     }
 
     /// Builds a session from a serialized Tint program. This uses the same
@@ -72,8 +87,17 @@ impl UiSession {
     /// is skipped.
     #[cfg(feature = "bytecode")]
     pub fn from_bytecode(bytes: &[u8], ui_fn_name: &str) -> Result<Self, String> {
+        Self::from_bytecode_with_natives(bytes, ui_fn_name, &[])
+    }
+
+    #[cfg(feature = "bytecode")]
+    pub fn from_bytecode_with_natives(
+        bytes: &[u8],
+        ui_fn_name: &str,
+        natives: &[(String, NativeFn)],
+    ) -> Result<Self, String> {
         let program = crate::bytecode::decode(bytes)?;
-        Self::from_program(program, ui_fn_name)
+        Self::from_program_with_natives(program, ui_fn_name, HashMap::new(), natives)
     }
 
     /// Builds a session from an already parsed program. Kept public so native
@@ -88,9 +112,22 @@ impl UiSession {
         ui_fn_name: &str,
         storage: HashMap<String, String>,
     ) -> Result<Self, String> {
+        Self::from_program_with_natives(program, ui_fn_name, storage, &[])
+    }
+
+    pub fn from_program_with_natives(
+        program: Program,
+        ui_fn_name: &str,
+        storage: HashMap<String, String>,
+        natives: &[(String, NativeFn)],
+    ) -> Result<Self, String> {
         #[cfg(feature = "semantic-check")]
         {
-            let semantic_errors = SemanticChecker::new(CheckerContext::default()).check(&program);
+            let semantic_errors = SemanticChecker::new(CheckerContext {
+                host_fns: natives.iter().map(|(name, _)| name.clone()).collect(),
+                ..Default::default()
+            })
+            .check(&program);
             if !semantic_errors.is_empty() {
                 return Err(format!("semantic errors: {:?}", semantic_errors));
             }
@@ -107,14 +144,15 @@ impl UiSession {
         let app_meta = program.app_meta();
         let outcome = catch_unwind(AssertUnwindSafe(|| {
             let mut vm = TintVM::new();
+            for (name, f) in natives {
+                let f = Rc::clone(f);
+                vm.register_native(name.clone(), move |args| f(args));
+            }
             vm.hydrate_storage(storage);
-            vm.run_program(&program);
-
-            // `run_program` may already have auto-mounted this same
-            // `ui fn` (if it's literally named App/Main) before any state
-            // existed -- harmless, that throwaway tree is discarded, and
-            // every real render happens through `render()`/`dispatch()`
-            // below, after state is bound.
+            // No auto-mount of `App`/`Main` here (`load_program`): every
+            // render happens through `render()`/`dispatch()` below, after
+            // state is bound.
+            vm.load_program(&program);
             let state_decls = vm
                 .ui_functions
                 .get(ui_fn_name)
@@ -253,6 +291,23 @@ impl UiSession {
         let reuse = self.reuse;
         let outcome = catch_unwind(AssertUnwindSafe(|| {
             vm.call_user_fn(handler, args, Span::dummy())?;
+            render(vm, name, reuse)
+        }));
+        unwrap_outcome(outcome)
+    }
+
+    /// Runs a Tint function value (a callback a host kept from a native call)
+    /// against the session, then re-renders.
+    pub fn call_value(
+        &mut self,
+        function: EvalValue,
+        args: &[EvalValue],
+    ) -> Result<Vec<Rc<UiRenderNode>>, String> {
+        let vm = &mut self.vm;
+        let name = &self.ui_fn_name;
+        let reuse = self.reuse;
+        let outcome = catch_unwind(AssertUnwindSafe(|| {
+            vm.call_value(function, args, Span::dummy());
             render(vm, name, reuse)
         }));
         unwrap_outcome(outcome)

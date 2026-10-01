@@ -240,6 +240,9 @@ pub struct SemanticChecker {
     /// lookup for both is what would make this checker flag every
     /// ordinary function call as an unknown identifier.
     known_fns: HashSet<String>,
+    /// The program loads host code (`app { js::"..." }` / `rs::"..."`): unknown
+    /// call targets may be functions it exports, which only the host knows.
+    host_js: bool,
     ui_tokens: HashSet<String>,
     ui_styles: HashSet<String>,
     ui_variants: HashSet<String>,

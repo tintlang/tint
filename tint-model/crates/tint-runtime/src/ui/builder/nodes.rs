@@ -170,6 +170,7 @@ impl UiBuilder {
         apply_target(&mut self.tree, id, attributes);
         apply_reference(&mut self.tree, id, attributes);
         apply_js_handler(&mut self.tree, id, attributes);
+        apply_component(&mut self.tree, id, attributes, host);
         apply_asset(&mut self.tree, id, attributes);
         apply_key(&mut self.tree, id, &expanded);
         apply_dynamic_key(&mut self.tree, id, &expanded, host);
@@ -389,6 +390,7 @@ impl UiBuilder {
         apply_target(&mut self.tree, id, attributes);
         apply_reference(&mut self.tree, id, attributes);
         apply_js_handler(&mut self.tree, id, attributes);
+        apply_component(&mut self.tree, id, attributes, host);
         apply_asset(&mut self.tree, id, attributes);
         apply_key(&mut self.tree, id, &expanded);
         apply_dynamic_key(&mut self.tree, id, &expanded, host);

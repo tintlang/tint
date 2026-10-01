@@ -9,7 +9,6 @@
 # Keep these notes locally while keeping the public docs limited to the current
 # runtime and browser implementation.
 /tint-model/docs/03-language-reference.md
-/tint-model/docs/guide/async.md
 /tint-model/docs/guide/gpu-kernels.md
 /tint-model/docs/guide/kits.md
 /tint-model/docs/guide/modules.md

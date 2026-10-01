@@ -65,6 +65,8 @@ struct Shared {
     /// Running `tick||`/`every||` intervals, reconciled against the
     /// mounted tree on every render (see `sync_tick_timers`).
     timers: RefCell<Vec<TickTimer>>,
+    /// Host JS functions callable from `.tn`; re-registered on `reload`.
+    natives: Vec<(String, tint_runtime::ui_session::NativeFn)>,
     /// The tree currently on screen and its DOM elements (see `Retained`).
     retained: RefCell<Option<Retained>>,
 }
@@ -102,6 +104,7 @@ pub struct DomSession {
     init_error: Option<String>,
 }
 
+include!("interop.rs");
 include!("session.rs");
 include!("helpers.rs");
 include!("render.rs");

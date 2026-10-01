@@ -71,7 +71,7 @@ impl Parser {
         }
 
         // -------- { BLOCK } --------
-        let block = self.parse_block()?;
+        let block = if async_span.is_some() { self.parse_async_block()? } else { self.parse_block()? };
         let span = Span::merge(start, block.span);
 
         Ok(FnDecl {
@@ -240,5 +240,73 @@ impl Parser {
 
         self.stream.expect(TokenKind::RParen)?;
         Ok(params)
+    }
+}
+
+impl Parser {
+    /// Body of an `async fn`. `await` is sugar for a trailing callback:
+    ///
+    /// ```text
+    /// let r = await fetch(url);   ==>   fetch(url, |r| { <rest of the block> });
+    /// await save(r);              ==>   save(r, |_| { <rest of the block> });
+    /// ```
+    ///
+    /// Only the top-level statements of the fn body may use it.
+    fn parse_async_block(&mut self) -> PResult<Block> {
+        let start = self.stream.expect(TokenKind::LBrace)?.span;
+        let block = self.parse_async_stmts(start)?;
+        Ok(block)
+    }
+
+    // Parses statements up to and including the closing `}`.
+    fn parse_async_stmts(&mut self, start: Span) -> PResult<Block> {
+        let mut stmts = Vec::new();
+        let mut last_span = start;
+        while !self.stream.consume_if(TokenKind::RBrace) {
+            // `await call(..)` or `let name = await call(..)`
+            let binding = if self.stream.peek_kind() == TokenKind::Await {
+                Some("_".to_string())
+            } else if self.stream.peek_kind() == TokenKind::Let
+                && self.stream.peek_n_kind(1) == TokenKind::Ident
+                && self.stream.peek_n_kind(2) == TokenKind::Eq
+                && self.stream.peek_n_kind(3) == TokenKind::Await
+            {
+                let name = self.stream.peek_n(1).lexeme.clone();
+                for _ in 0..3 {
+                    self.stream.next();
+                }
+                Some(name)
+            } else {
+                None
+            };
+            let Some(binding) = binding else {
+                let stmt = self.parse_stmt()?;
+                last_span = stmt.span();
+                stmts.push(stmt);
+                self.stream.consume_if(TokenKind::Semicolon);
+                continue;
+            };
+            let await_span = self.stream.expect(TokenKind::Await)?.span;
+            let call = self.parse_expr()?;
+            self.stream.consume_if(TokenKind::Semicolon);
+            let Expr::Call { target, mut args, span } = call else {
+                return Err(ParserError::Message {
+                    msg: "`await` needs a function call: `await name(args)`".into(),
+                    span: await_span,
+                });
+            };
+            let rest = self.parse_async_stmts(start)?;
+            let rest_span = rest.span;
+            args.push(Expr::Lambda {
+                params: vec![binding],
+                body: Box::new(Expr::Block(rest, rest_span)),
+                span: rest_span,
+            });
+            let call = Expr::Call { target, args, span: Span::merge(span, rest_span) };
+            last_span = call.span();
+            stmts.push(Stmt::Expr(call));
+            return Ok(Block { stmts, span: Span::merge(start, last_span) });
+        }
+        Ok(Block { stmts, span: Span::merge(start, last_span) })
     }
 }

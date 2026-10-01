@@ -10,8 +10,8 @@ impl TintVM {
         // 0) user-registered native Rust functions (see `register_native`) --
         // checked first so a native fn can shadow a builtin/UI/logic fn on
         // purpose.
-        if let Some(f) = self.native_fns.borrow().get(name) {
-            return f(args);
+        if let Some(result) = self.call_native(name, args) {
+            return result;
         }
 
         // A bare `Some(x)` / `Ok(x)` / `Err(x)` builds the variant, unless a
@@ -60,8 +60,8 @@ impl TintVM {
         // Native Rust functions are reachable from this path too, so a
         // `click||`/`hover_in||` handler can be a real Rust closure, not
         // just a Tint `fn`.
-        if let Some(f) = self.native_fns.borrow().get(name) {
-            return f(args);
+        if let Some(result) = self.call_native(name, args) {
+            return result;
         }
 
         let slots = args.iter().cloned().map(Some).collect();
@@ -366,6 +366,9 @@ impl TintVM {
             } => {
                 self.scopes.push();
                 for (name, value) in closure.values() {
+                    if self.is_root_binding(&name) {
+                        continue;
+                    }
                     self.host_define_var(&name, value);
                 }
                 for (param, arg) in params.iter().zip(args.iter()) {
@@ -381,6 +384,9 @@ impl TintVM {
             } => {
                 self.scopes.push();
                 for (name, value) in env.values() {
+                    if self.is_root_binding(&name) {
+                        continue;
+                    }
                     self.host_define_var(&name, value);
                 }
                 for (param, arg) in params.iter().zip(args.iter()) {
@@ -398,6 +404,9 @@ impl TintVM {
                 self.scopes.pop();
                 result
             }
+
+            EvalValue::Callback(callback) => (callback.0)(args)
+                .unwrap_or_else(|error| panic!("callback failed: {error}")),
 
             other => panic!("host_call_value not supported: {:?}", other),
         }

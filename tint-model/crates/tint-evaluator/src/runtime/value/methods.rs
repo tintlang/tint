@@ -170,7 +170,7 @@ impl Value {
             // value is the correct runtime check.
             (_, Type::Function { .. }) => matches!(
                 self,
-                Value::Lambda { .. } | Value::Function { .. } | Value::HostFunction(_)
+                Value::Lambda { .. } | Value::Function { .. } | Value::HostFunction(_) | Value::Callback(_)
             ),
 
             _ => false,

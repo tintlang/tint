@@ -70,6 +70,8 @@ pub struct HttpRequest {
     pub url: String,
 }
 
+mod callbacks;
+pub use callbacks::{set_deferred_runner, DeferredRunner};
 mod classification;
 #[cfg(feature = "ir")]
 mod conversion;

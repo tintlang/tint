@@ -297,8 +297,15 @@ pub fn eval_expr<H: EvalHost>(host: &mut H, expr: &Expr) -> Value {
             // stored in a variable/field, an IIFE, ...) still goes
             // through the original evaluate-then-call_value path.
             if let Expr::Ident(name, _) = target.as_ref() {
-                if let Ok(v) = host.call_fn(name, &arg_vals, *span) {
-                    return v;
+                match host.call_fn(name, &arg_vals, *span) {
+                    Ok(v) => return v,
+                    // Not a named function: fall through to a variable holding one.
+                    Err(crate::errors::EvalError::UnknownIdent { .. }) => {}
+                    Err(crate::errors::EvalError::InvalidOp { msg, .. })
+                        if msg.starts_with("Unknown function") => {}
+                    // The function ran and failed (a host function's error, say):
+                    // surface it instead of retrying as a value call.
+                    Err(error) => panic!("call of `{name}` failed: {error}"),
                 }
             }
 

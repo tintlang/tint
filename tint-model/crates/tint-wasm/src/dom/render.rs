@@ -35,6 +35,15 @@ fn build_node(
     if let Some(reference) = &node.reference {
         el.set_attribute("data-tint-ref", reference)?;
     }
+    if let Some(class) = &node.class {
+        el.set_attribute("class", class)?;
+    }
+    if let Some(component) = &node.component {
+        el.set_attribute("data-tint-component", component)?;
+    }
+    if let Some(props) = &node.props {
+        el.set_attribute("data-tint-props", props)?;
+    }
     if let Some(handler) = &node.on_js {
         el.set_attribute("data-tint-js", handler)?;
     }
@@ -195,6 +204,8 @@ fn bulk_size(node: &UiRenderNode, in_button: bool) -> Option<usize> {
         || node.route.is_some()
         || node.asset.is_some()
         || node.reference.is_some()
+        || node.class.is_some()
+        || node.component.is_some()
         || node.on_js.is_some()
         || node.svg.is_some()
         || node.tag == "Preview"

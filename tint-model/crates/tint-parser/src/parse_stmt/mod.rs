@@ -82,6 +82,12 @@ impl Parser {
                 let start = self.stream.next().span;
                 return self.parse_let_stmt(start);
             }
+            TokenKind::Await => {
+                return Err(ParserError::Message {
+                    msg: "`await` is only allowed at the top level of an `async fn` body".into(),
+                    span: self.stream.peek().span,
+                });
+            }
             TokenKind::Return => return self.parse_return_stmt(),
             TokenKind::If => return self.parse_if_stmt(),
             TokenKind::While => return self.parse_while_stmt(),

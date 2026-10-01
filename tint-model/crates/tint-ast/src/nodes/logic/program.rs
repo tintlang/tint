@@ -28,6 +28,14 @@ pub struct AppMeta {
     /// `route.Landing::"/"` or `route.Pong::{ path::"/pong", title::"Pong" }`:
     /// which `ui fn` the browser host renders for which URL path.
     pub routes: Vec<RouteDecl>,
+    /// `js::"./utils.js"`: ES modules the browser host loads; every exported
+    /// function becomes callable from `.tn` as `name(...)`. Repeatable.
+    pub js: Vec<String>,
+    /// `css::"./theme.css"`: stylesheets the browser host loads. Repeatable.
+    pub css: Vec<String>,
+    /// `rs::"./native.rs"`: Rust files whose `#[tint::export]` functions are
+    /// callable from `.tn` (native `tint run`). Repeatable.
+    pub rs: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -107,6 +115,9 @@ impl Program {
                     "title" => meta.title = Some(value.clone()),
                     "lang" => meta.lang = Some(value.clone()),
                     "router" => meta.router = value == "on",
+                    "js" => meta.js.push(value.clone()),
+                    "css" => meta.css.push(value.clone()),
+                    "rs" => meta.rs.push(value.clone()),
                     _ => {}
                 }
             }

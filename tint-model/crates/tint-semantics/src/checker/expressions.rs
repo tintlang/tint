@@ -809,7 +809,7 @@ impl SemanticChecker {
             if let Some(ty) = self.infer_builtin_call(name, args, span) {
                 return ty;
             }
-            if !self.known_fns.contains(name) {
+            if !self.known_fns.contains(name) && !self.host_js {
                 self.error(span, SemanticErrorKind::UnknownIdent(name.clone()));
             }
             self.infer_args(args, &[]);

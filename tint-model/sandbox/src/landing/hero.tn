@@ -9,7 +9,7 @@ Hero {
             Inline {
                 white-space::"nowrap"
                 "Tint"
-                Inline { layout::{ margin.l::1 } text::{18, bold, @text-main} ".tn" }
+                Inline {text::{18, bold, @text-main} ".tn" }
             }
         }
     }

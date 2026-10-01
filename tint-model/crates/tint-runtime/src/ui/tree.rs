@@ -89,6 +89,12 @@ pub struct UiElement {
     pub target: Option<String>,
     /// Stable DOM escape-hatch name from ref||"name".
     pub reference: Option<String>,
+    /// CSS class names from class||"a b" (styled by `app { css::"..." }` files).
+    pub class: Option<String>,
+    /// `component||"Name"`: a host-side (JS) component mounted into this element.
+    pub component: Option<String>,
+    /// `props||{expr}` for that component, as canonical JSON.
+    pub props: Option<String>,
     /// Host callback name from js||callback.
     pub on_js: Option<String>,
 
@@ -130,6 +136,9 @@ impl UiElement {
             route: None,
             target: None,
             reference: None,
+            class: None,
+            component: None,
+            props: None,
             on_js: None,
             prebuilt: None,
         }
@@ -342,6 +351,19 @@ impl UiTree {
     pub fn set_reference(&mut self, id: UiNodeId, reference: Option<String>) {
         if let Some(node) = self.nodes.get_mut(id) {
             node.reference = reference;
+        }
+    }
+
+    pub fn set_component(&mut self, id: UiNodeId, component: Option<String>, props: Option<String>) {
+        if let Some(node) = self.nodes.get_mut(id) {
+            node.component = component;
+            node.props = props;
+        }
+    }
+
+    pub fn set_class(&mut self, id: UiNodeId, class: Option<String>) {
+        if let Some(node) = self.nodes.get_mut(id) {
+            node.class = class;
         }
     }
 

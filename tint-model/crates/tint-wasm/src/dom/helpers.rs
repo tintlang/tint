@@ -1014,6 +1014,24 @@ fn patch_node(
             None => el.remove_attribute("data-tint-ref")?,
         }
     }
+    if old.class != new.class {
+        match &new.class {
+            Some(c) => el.set_attribute("class", c)?,
+            None => el.remove_attribute("class")?,
+        }
+    }
+    if old.component != new.component {
+        match &new.component {
+            Some(c) => el.set_attribute("data-tint-component", c)?,
+            None => el.remove_attribute("data-tint-component")?,
+        }
+    }
+    if old.props != new.props {
+        match &new.props {
+            Some(p) => el.set_attribute("data-tint-props", p)?,
+            None => el.remove_attribute("data-tint-props")?,
+        }
+    }
     if old.on_js != new.on_js {
         match &new.on_js {
             Some(r) => el.set_attribute("data-tint-js", r)?,
@@ -1177,3 +1195,24 @@ const BUTTON_RESET: &[(&str, &str)] = &[
     ("color", "inherit"),
     ("text-align", "inherit"),
 ];
+
+/// Callbacks that fire after their host call returned (a settled Promise, a
+/// JS timer) run against the live session and re-render it.
+fn install_deferred_runner(shared: &Rc<Shared>) {
+    let weak = Rc::downgrade(shared);
+    tint_runtime::vm::set_deferred_runner(Some(Rc::new(move |function, args| {
+        let Some(shared) = weak.upgrade() else { return };
+        let tree = match shared.session.try_borrow_mut() {
+            Ok(mut session) => session.call_value(function, &args),
+            Err(_) => Err("session is busy".to_string()),
+        };
+        match tree {
+            Ok(tree) => {
+                if let Err(e) = mount_tree(tree, &shared) {
+                    web_sys::console::error_1(&e);
+                }
+            }
+            Err(e) => web_sys::console::error_1(&JsValue::from_str(&format!("tint: async callback failed: {e}"))),
+        }
+    })));
+}

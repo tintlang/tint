@@ -4,6 +4,11 @@ mod methods;
 use crate::env::Env;
 use std::{collections::HashMap, rc::Rc};
 
+/// A function a host (Rust or JS) can call: Tint lambdas passed to a native
+/// function arrive as one, and host closures can be handed to Tint.
+#[derive(Clone)]
+pub struct Callback(pub Rc<dyn Fn(&[Value]) -> crate::errors::EvalResult<Value>>);
+
 /// Runtime value produced by the Tint evaluator.
 #[derive(Clone)]
 pub enum Value {
@@ -52,6 +57,8 @@ pub enum Value {
     },
 
     HostFunction(fn(Vec<Value>) -> Value),
+
+    Callback(Callback),
 
     Namespace {
         name: String,

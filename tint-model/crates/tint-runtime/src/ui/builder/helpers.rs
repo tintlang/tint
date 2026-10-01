@@ -195,6 +195,7 @@ pub(crate) fn apply_target(tree: &mut UiTree, id: UiNodeId, attributes: &[UiAttr
 /// Reads ref||"name" for a stable DOM escape-hatch reference.
 pub(crate) fn apply_reference(tree: &mut UiTree, id: UiNodeId, attributes: &[UiAttribute]) {
     tree.set_reference(id, find_literal(attributes, "ref"));
+    tree.set_class(id, find_literal(attributes, "class"));
 }
 
 /// Reads js||callback for a host-side click callback.
@@ -296,4 +297,97 @@ pub(crate) fn render_ui_text<H: EvalHost>(text: &UiText, host: &mut H) -> String
         }
     }
     out
+}
+
+/// `component||"Name"` with optional `props||{expr}`: a JS component the host
+/// mounts into this node's element. Props are evaluated now and kept as
+/// canonical JSON (map keys sorted) so an unchanged value compares equal.
+pub(crate) fn apply_component<H: tint_evaluator::EvalHost>(
+    tree: &mut UiTree,
+    id: UiNodeId,
+    attributes: &[UiAttribute],
+    host: &mut H,
+) {
+    let Some(name) = find_literal(attributes, "component") else { return };
+    let props = attributes.iter().find_map(|a| {
+        if a.name != "props" {
+            return None;
+        }
+        match &a.value {
+            UiAttrValue::Expr(expr) => Some(host.eval_expr(expr)),
+            UiAttrValue::Ident(name) => host.lookup_var(name),
+            _ => None,
+        }
+    });
+    tree.set_component(id, Some(name), props.map(|v| to_json(&v)));
+}
+
+fn to_json(value: &tint_evaluator::Value) -> String {
+    use tint_evaluator::Value as V;
+    let mut out = String::new();
+    match value {
+        V::Number(n) | V::F64(n) if n.is_finite() => out.push_str(&n.to_string()),
+        V::F32(n) if n.is_finite() => out.push_str(&n.to_string()),
+        V::I32(n) => out.push_str(&n.to_string()),
+        V::I64(n) => out.push_str(&n.to_string()),
+        V::U32(n) => out.push_str(&n.to_string()),
+        V::U64(n) => out.push_str(&n.to_string()),
+        V::U8(n) => out.push_str(&n.to_string()),
+        V::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
+        V::String(s) => json_string(s, &mut out),
+        V::List(items) | V::Tuple(items) => {
+            out.push('[');
+            for (i, item) in items.iter().enumerate() {
+                if i > 0 {
+                    out.push(',');
+                }
+                out.push_str(&to_json(item));
+            }
+            out.push(']');
+        }
+        V::Map(map) => {
+            let mut keys: Vec<&String> = map.keys().collect();
+            keys.sort();
+            out.push('{');
+            for (i, key) in keys.into_iter().enumerate() {
+                if i > 0 {
+                    out.push(',');
+                }
+                json_string(key, &mut out);
+                out.push(':');
+                out.push_str(&to_json(&map[key]));
+            }
+            out.push('}');
+        }
+        V::StructInstance { fields, .. } => {
+            out.push('{');
+            for (i, (key, item)) in fields.iter().enumerate() {
+                if i > 0 {
+                    out.push(',');
+                }
+                json_string(key, &mut out);
+                out.push(':');
+                out.push_str(&to_json(item));
+            }
+            out.push('}');
+        }
+        _ => out.push_str("null"),
+    }
+    out
+}
+
+fn json_string(text: &str, out: &mut String) {
+    out.push('"');
+    for c in text.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    out.push('"');
 }

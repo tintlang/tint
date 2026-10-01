@@ -1,0 +1,12 @@
+app {
+    rs::"./native.rs"
+}
+
+fn main() {
+    let s = stats([2, 4, 6, 8])
+    println("count {s.count}, mean {s.mean}")
+    println("{to_num(" 41 ")}")
+    let counts = word_count("a b a")
+    println("a appears {counts.get("a")}")
+    println("{to_num("oops")}")
+}

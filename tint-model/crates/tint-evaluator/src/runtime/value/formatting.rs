@@ -84,6 +84,7 @@ impl fmt::Display for Value {
             Value::Lambda { .. } => write!(f, "<lambda>"),
             Value::Function { name, .. } => write!(f, "<fn {}>", name),
             Value::HostFunction(_) => write!(f, "<host-fn>"),
+            Value::Callback(_) => write!(f, "<callback>"),
             Value::Namespace { name, .. } => write!(f, "<namespace {}>", name),
         }
     }
@@ -160,6 +161,7 @@ impl fmt::Debug for Value {
             Value::Function { name, .. } => write!(f, "<fn {}>", name),
 
             Value::HostFunction(_) => write!(f, "<host-fn>"),
+            Value::Callback(_) => write!(f, "<callback>"),
 
             Value::Namespace { name, .. } => write!(f, "<namespace {}>", name),
         }

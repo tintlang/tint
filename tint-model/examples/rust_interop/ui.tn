@@ -1,0 +1,23 @@
+app {
+    title::"Rust in the browser"
+    rs::"./native.rs"
+}
+
+fn bump() { n = n + 1 }
+
+ui fn App() {
+    state n = 3
+    state text = "a b a"
+    state s = stats([2, 4, 6, 8])
+
+    Column {
+        direction::column
+        padding::24
+        gap::8
+        Text { text::{16, white} "mean {s.mean} of {s.count}" }
+        Text { text::{16, white} "to_num: {to_num("41")}" }
+        Text { text::{16, white} "a x {word_count(text).get("a")}" }
+        Text { text::{16, white} "bad: {to_num("x")}" }
+        Button { click||bump "bump {n}" }
+    }
+}

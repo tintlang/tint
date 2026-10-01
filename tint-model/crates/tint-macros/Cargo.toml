@@ -1,0 +1,16 @@
+[package]
+name = "tint-macros"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Derive and attribute macros for the `tint` crate."
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = { version = "2", features = ["full"] }
+quote = "1"
+proc-macro2 = "1"
+tint-lexer = { path = "../tint-lexer" }
+tint-parser = { path = "../tint-parser" }

@@ -1,17 +1,25 @@
 #[wasm_bindgen]
 impl DomSession {
     #[wasm_bindgen(constructor)]
-    pub fn new(source: &str, ui_fn_name: &str, container_id: &str) -> DomSession {
+    pub fn new(
+        source: &str,
+        ui_fn_name: &str,
+        container_id: &str,
+        natives: Option<js_sys::Object>,
+    ) -> DomSession {
         dom_tree_shape();
+        let natives = natives_from_js(natives);
         Self::from_inner(
-            InnerSession::new_with_storage(
+            InnerSession::new_with_natives(
                 source,
                 ui_fn_name,
                 // Saved values only matter to a program that reads them.
                 if source.contains("storage_") { load_browser_storage() } else { Default::default() },
+                &natives,
             ),
             container_id,
             false,
+            natives,
         )
     }
 
@@ -19,9 +27,20 @@ impl DomSession {
     /// host can choose source mode for development and this mode for release
     /// artifacts without changing the DOM/session API.
     #[cfg(feature = "bytecode")]
-    pub fn from_bytecode(bytes: &[u8], ui_fn_name: &str, container_id: &str) -> DomSession {
+    pub fn from_bytecode(
+        bytes: &[u8],
+        ui_fn_name: &str,
+        container_id: &str,
+        natives: Option<js_sys::Object>,
+    ) -> DomSession {
         dom_tree_shape();
-        Self::from_inner(InnerSession::from_bytecode(bytes, ui_fn_name), container_id, false)
+        let natives = natives_from_js(natives);
+        Self::from_inner(
+            InnerSession::from_bytecode_with_natives(bytes, ui_fn_name, &natives),
+            container_id,
+            false,
+            natives,
+        )
     }
 
     /// Re-renders the session's current tree into the container,
@@ -173,7 +192,7 @@ impl DomSession {
             Some(s) => s.clone(),
             None => return self.init_error.clone(),
         };
-        match InnerSession::new(source, ui_fn_name) {
+        match InnerSession::new_with_natives(source, ui_fn_name, Default::default(), &shared.natives) {
             Ok(session) => *shared.session.borrow_mut() = session,
             Err(e) => return Some(e),
         }
@@ -194,7 +213,7 @@ impl DomSession {
             Some(s) => s.clone(),
             None => return self.init_error.clone(),
         };
-        match InnerSession::from_bytecode(bytes, ui_fn_name) {
+        match InnerSession::from_bytecode_with_natives(bytes, ui_fn_name, &shared.natives) {
             Ok(session) => *shared.session.borrow_mut() = session,
             Err(e) => return Some(e),
         }
@@ -223,6 +242,7 @@ impl DomSession {
         session: Result<InnerSession, String>,
         container_id: &str,
         nested: bool,
+        natives: Vec<(String, tint_runtime::ui_session::NativeFn)>,
     ) -> DomSession {
         match session {
             Ok(session) => {
@@ -245,10 +265,12 @@ impl DomSession {
                     key_up_bound: Cell::new(false),
                     last_frame_time: Cell::new(None),
                     timers: RefCell::new(Vec::new()),
+                    natives,
                     retained: RefCell::new(None),
                 });
                 bind_resize_listener(&shared);
                 if !nested {
+                    install_deferred_runner(&shared);
                     apply_app_meta(&shared);
                     bind_navigation(&shared);
                 }
@@ -266,6 +288,6 @@ impl DomSession {
 
     pub(crate) fn new_nested(source: &str, ui_fn_name: &str, container_id: &str) -> DomSession {
         dom_tree_shape();
-        Self::from_inner(InnerSession::new(source, ui_fn_name), container_id, true)
+        Self::from_inner(InnerSession::new(source, ui_fn_name), container_id, true, Vec::new())
     }
 }

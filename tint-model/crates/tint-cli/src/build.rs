@@ -79,15 +79,71 @@ fn build_file(path: &str, entry: Option<&str>, output: Option<&str>) {
         }
     }
 
+    let meta = loaded.program.app_meta();
+    let inline = read_inline_assets(path, &meta).unwrap_or_else(|error| {
+        eprintln!("{}", error);
+        std::process::exit(1);
+    });
     if let Err(error) = fs::write(
         &output,
-        standalone_html(&combined_source, entry, &loaded.program.app_meta()),
+        standalone_html(&combined_source, entry, &meta, &inline),
     ) {
         eprintln!("error writing '{}': {}", output, error);
         std::process::exit(1);
     }
 
     println!("built: {} (entry: `ui fn {}`)", output, entry);
+}
+
+/// File contents named by `app { js::"..." css::"..." }`, embedded into the page.
+#[derive(Default)]
+pub(crate) struct InlineAssets {
+    /// `rs::` files compiled to wasm.
+    pub wasm: Option<std::sync::Arc<crate::wasm_build::WasmAssets>>,
+    pub js: Vec<String>,
+    pub css: Vec<String>,
+}
+
+/// Reads the declared files, resolving paths against the entry file's folder.
+/// A JS module is embedded as one blob, so it cannot import other files.
+pub(crate) fn read_inline_assets(
+    entry_path: &str,
+    meta: &tint_ast::AppMeta,
+) -> Result<InlineAssets, String> {
+    let wasm = if meta.rs.is_empty() {
+        None
+    } else {
+        Some(crate::wasm_build::build(entry_path, &meta.rs)?)
+    };
+    let base = Path::new(entry_path).parent().unwrap_or(Path::new(""));
+    let read = |name: &String| {
+        fs::read_to_string(base.join(name))
+            .map_err(|error| format!("error reading '{}': {}", base.join(name).display(), error))
+    };
+    Ok(InlineAssets {
+        wasm,
+        js: meta.js.iter().map(read).collect::<Result<_, _>>()?,
+        css: meta.css.iter().map(read).collect::<Result<_, _>>()?,
+    })
+}
+
+fn js_string(text: &str) -> String {
+    // JSON string literal, safe inside a <script> element.
+    let mut out = String::from("\"");
+    for c in text.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '<' => out.push_str("\\u003c"),
+            '\u{2028}' => out.push_str("\\u2028"),
+            '\u{2029}' => out.push_str("\\u2029"),
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
 }
 
 /// `source` here is every reachable file's raw text concatenated together
@@ -100,7 +156,12 @@ fn build_file(path: &str, entry: Option<&str>, output: Option<&str>) {
 /// from every module are already present verbatim in the blob, directly
 /// callable by their bare name, exactly as the CLI-side loader's own
 /// flattening already relies on the VM being one flat namespace.
-pub(crate) fn standalone_html(source: &str, entry: &str, meta: &tint_ast::AppMeta) -> String {
+pub(crate) fn standalone_html(
+    source: &str,
+    entry: &str,
+    meta: &tint_ast::AppMeta,
+    inline: &InlineAssets,
+) -> String {
     let title = meta.title.as_deref().unwrap_or("Tint UI");
     let title = title.replace('&', "&amp;").replace('<', "&lt;");
     let lang = meta.lang.as_deref().unwrap_or("en");
@@ -124,6 +185,20 @@ pub(crate) fn standalone_html(source: &str, entry: &str, meta: &tint_ast::AppMet
         // A `</script>` inside the source (say, an embedded HTML sample) must
         // not end the page's own script element.
         .replace("</", "<\\/");
+    let user_css: String = inline
+        .css
+        .iter()
+        .map(|css| format!("    <style>\n{}\n    </style>\n", css.replace("</", "<\\/")))
+        .collect();
+    let user_js = inline.js.iter().map(|js| js_string(js)).collect::<Vec<_>>().join(", ");
+    let user_wasm = match &inline.wasm {
+        Some(assets) => format!(
+            "{{ glue: {}, data: \"{}\" }}",
+            js_string(&assets.glue),
+            base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &assets.wasm_gz)
+        ),
+        None => "null".to_string(),
+    };
     let wasm = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, TINT_WASM_BG);
 
 
@@ -142,13 +217,15 @@ pub(crate) fn standalone_html(source: &str, entry: &str, meta: &tint_ast::AppMet
         .error {{ background: #fee; border: 1px solid #fcc; border-radius: 4px; padding: 16px; color: #c00; font-family: monospace; white-space: pre-wrap; }}
         .loading {{ padding: 40px 20px; color: #666; }}
     </style>
-</head>
+{user_css}</head>
 <body>
     <div id="app" class="loading">Loading Tint UI...</div>
     <script type="module">
 {TINT_WASM_JS}
         const SOURCE = `{source}`;
         const ENTRY = "{entry}";
+        const USER_JS = [{user_js}];
+        const USER_WASM = {user_wasm};
         const WASM_BASE64 = "{wasm}";
         function base64ToBytes(b64) {{
             if (Uint8Array.fromBase64) return Uint8Array.fromBase64(b64);
@@ -166,7 +243,32 @@ pub(crate) fn standalone_html(source: &str, entry: &str, meta: &tint_ast::AppMet
             initSync({{ module: wasmBytes }});
             app.className = '';
             app.textContent = '';
-            const session = new DomSession(SOURCE, ENTRY, 'app');
+            // Exported functions of `app {{ js::"..." }}` modules, callable from .tn.
+            const natives = {{}};
+            if (USER_WASM) {{
+                // `rs::` files, compiled to wasm: `__tint_<name>(args)` per export.
+                const bytes = new Uint8Array(await new Response(
+                    new Blob([base64ToBytes(USER_WASM.data)]).stream().pipeThrough(new DecompressionStream('gzip'))
+                ).arrayBuffer());
+                const url = URL.createObjectURL(new Blob([USER_WASM.glue], {{ type: 'text/javascript' }}));
+                const mod = await import(url);
+                URL.revokeObjectURL(url);
+                mod.initSync({{ module: bytes }});
+                for (const [name, value] of Object.entries(mod)) {{
+                    if (name.startsWith('__tint_') && typeof value === 'function') {{
+                        natives[name.slice(7)] = (...args) => value(args);
+                    }}
+                }}
+            }}
+            for (const code of USER_JS) {{
+                const url = URL.createObjectURL(new Blob([code], {{ type: 'text/javascript' }}));
+                const mod = await import(url);
+                URL.revokeObjectURL(url);
+                for (const [name, value] of Object.entries(mod)) {{
+                    if (typeof value === 'function') natives[name] = value;
+                }}
+            }}
+            const session = new DomSession(SOURCE, ENTRY, 'app', natives);
             const error = session.rerender();
             if (error) {{
                 app.innerHTML = '<div class="error"></div>';
@@ -185,7 +287,7 @@ pub(crate) fn standalone_html(source: &str, entry: &str, meta: &tint_ast::AppMet
 
 #[cfg(test)]
 mod tests {
-    use super::standalone_html;
+    use super::{standalone_html, InlineAssets};
 
     #[test]
     fn embedded_source_cannot_close_the_script_element() {
@@ -193,6 +295,7 @@ mod tests {
             "fn s() = \"<script src='x'></script>\"\nui fn App() {}",
             "App",
             &tint_ast::AppMeta::default(),
+            &InlineAssets::default(),
         );
         assert!(!html.contains("'x'></script>"));
         assert!(html.contains("<\\/script>"));

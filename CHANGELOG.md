@@ -4,6 +4,14 @@ All notable changes to Tint are documented here.
 
 ## [Unreleased]
 
+- JS and CSS from Tint: `app { js::"./utils.js" css::"./theme.css" }`. Every function a JS module exports is callable from `.tn` as `name(...)` (sync; numbers, strings, bools, lists, maps); stylesheets are loaded and nodes take `class||"a b"`. Works in `tint build`/`tint dev` (files are embedded) and in `mount()` (`natives` and `baseUrl` options, `import()` loading). `DomSession`/`from_bytecode` take an optional `natives` object; new `app_assets(source)`. See `docs/guide/escape-hatches.md`.
+- Host components: `Host { component||"Chart" props||{ ChartProps { ... } } }` mounts a JS component into the node. `mount(..., { components })` runs mount/update/destroy (props compared as canonical JSON; the element survives re-renders); `reactComponent(C)` in `@tintlang/react`. Not available in `tint build` pages.
+- Rust interop (`docs/guide/rust-interop.md`): new `tint` crate (`Tint::new(..).call::<R>(name, args)`, `FromTint`/`IntoTint` + derives, `tint_file!`, `UiSession` access) and `#[tint::export]` to call Rust from `.tn`. `app { rs::"./native.rs" }` makes `tint run` build and use a runner with those functions linked in. `tint-cli` is now also a library (`tint_cli::main_with`).
+- `rs::` in the browser: `tint build`/`tint dev` compile the Rust files to wasm with `wasm-pack` (size-optimised, gzipped, ~46 KB for the example) and register the `#[tint::export]` functions as natives; the `tint` crate has a `host` feature (default) that can be turned off to link no interpreter. Structs, `Option` and `Result` cross to JS as tagged objects and come back as the same Tint values.
+- Callbacks and async (`docs/guide/async.md`): lambdas and `fn`s can be passed to JS and Rust functions (`tint::Callback` in Rust) and run against the live app after the call returned, re-rendering it. A JS function returning a Promise, or a Rust `async fn` (`#[tint::export]`, returns `Result<T, E: Display>`), takes a trailing callback that gets `Result::Ok/Err`. In `async fn`, `await f(a)` / `let r = await f(a)` is sugar for that callback (top level of the body only). Lambdas now see and assign `state`/root variables live. New `UiSession::call_value`, `tint_runtime::vm::set_deferred_runner`, `Value::Callback`. Example: `examples/async`.
+- A failing function call no longer silently falls back to a variable lookup (it is reported); the checker accepts the host functions a session is given.
+- A `UiSession` no longer auto-mounts `App`/`Main` before its `state` exists (`TintVM::load_program`).
+
 ## [0.1.3] - 2026-09-30
 
 - The Tint site and sandbox are now one `.tn` program (`sandbox/src/site.tn`) with no hand-written HTML, JS or CSS: `index.html`, `site.js`, the CodeMirror islands, `lib/*.js`, Vite config and the CSS files are gone. `tint dev` / `tint build` generate the page shell; `npm run wasm` rebuilds the runtime embedded in the CLI.
