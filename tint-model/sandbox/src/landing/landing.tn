@@ -24,7 +24,8 @@ ui fn Landing() {
     }
 
     style ButtonBase {
-        layout::{ padding.x::@button-padding, padding.y::10 }
+        layout::{ display::flex, align::center, justify::center, padding.x::@button-padding, padding.y::10 }
+        text-align::center
         paint::{ radius::full }
         motion::{
             spring::{ stiffness::420, damping::16, props::"transform" },
@@ -94,7 +95,9 @@ ui fn Landing() {
     }
 
     style PongButtonBase {
-        layout::{ align::center, padding.x::120, padding.y::26 }
+        layout::{ display::flex, align::center, justify::center, padding.x::120, padding.y::26 }
+        text-align::center
+        mobile::{ padding.x::40, padding.y::20, size::20 }
         paint::{ radius::full, background::@button-bg, color::@button-text }
         size::24
         font-weight::bold
@@ -114,7 +117,7 @@ ui fn Landing() {
     component ActionButton {
         use::ButtonBase
         variant::solid {
-            paint::{ background::@button-bg, color::@button-text }
+            paint::{ background::@button-bg, color::@button-text, border::{1, transparent} }
             animation::"ring-pulse 2.4s ease-out infinite"
         }
         variant::outline {

@@ -2,7 +2,7 @@ Compare {
     use::CompareBase
 
     CompareTitle {
-        Text { text::{44, bold, @text-main} "Same app. Less scaffolding." }
+        Text { use::CenteredOnSmall text::{44, bold, @text-main} "Same app. Less scaffolding." }
     }
     Sub { use::CenteredOnSmall text::{17, @text-muted} "One Tint file, or four files in Vite + React." }
 
@@ -28,7 +28,7 @@ Compare {
             }
         }
 
-        Vs { text::{16, bold, @text-main} "VS" }
+        Vs { text::{16, bold, @text-main} text-align::center justify-self::center "VS" }
 
         Side {
             use::SideBase
