@@ -4,6 +4,12 @@ All notable changes to Tint are documented here.
 
 ## [Unreleased]
 
+- `tint build` now compiles the program to WebAssembly by default: typed IR -> wasm backend (`tint-wasmgen`) -> `app.wasm`, run by the small `tint-wasmrt` runtime (no parser, checker or interpreter in the page). `--engine interpreter` keeps the previous page. Constructs the compiler does not support are a build error; there is no silent fallback. `tint dev` and `tint run` are unchanged (interpreter / Cranelift).
+- Compiled apps support host functions (`storage_*`, `now_ms`, `http_get`), JS and `rs::` natives, `async`/`await`, `Host {}` components, events with values, and `props||`/attribute expressions. Results of host calls need a type: `|r: Result<number, string>|`, `let r: number = await f()` or `f() as T` (see `docs/guide/async.md`).
+- Fixed: `key::{r.id}` dropped the field and keyed the row by the whole item, so keyed diffing did not work; `key::{r}` did not reach the renderer when compiled.
+- New crates: `tint-wasmgen` (backend), `tint-wasmrt` (wasm32 runtime), `tint-wasmabi` (contract between them). The browser runtimes embedded in the CLI are built by `scripts/build-cli-runtimes.sh`.
+- Size and speed (bench/ui, tint-render): load to first content 45 -> 26 ms, page 1106 -> 538 KiB raw (389 -> 302 KiB gzip); list operations are within ~10-35% of the interpreter, Pong frame 0.33 ms.
+
 ## [0.2.0] - 2026-10-01
 
 - JS and CSS from Tint: `app { js::"./utils.js" css::"./theme.css" }`. Every function a JS module exports is callable from `.tn` as `name(...)` (sync; numbers, strings, bools, lists, maps); stylesheets are loaded and nodes take `class||"a b"`. Works in `tint build`/`tint dev` (files are embedded) and in `mount()` (`natives` and `baseUrl` options, `import()` loading). `DomSession`/`from_bytecode` take an optional `natives` object; new `app_assets(source)`. See `docs/guide/escape-hatches.md`.

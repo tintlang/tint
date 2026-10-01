@@ -1,0 +1,15 @@
+{
+  "name": "bench-compiled",
+  "version": "1.0.0",
+  "description": "",
+  "main": "b6.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "playwright": "^1.63.0"
+  }
+}

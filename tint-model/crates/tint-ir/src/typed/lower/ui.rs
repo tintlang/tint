@@ -161,7 +161,9 @@ impl<'a> Lowerer<'a> {
             states.extend(f.state.iter());
         }
         for state in &states {
-            let global = self.globals[&state.name];
+            let Some(&global) = self.globals.get(&state.name) else {
+                return self.err(None, format!("state `{}` has no known type", state.name));
+            };
             let ty = self.module.globals[global.0 as usize].ty;
             let value = self.expr_as(&state.init, ty)?;
             self.emit(Instr::GlobalSet { global, src: value });
@@ -184,6 +186,53 @@ impl<'a> Lowerer<'a> {
                 let v = self.const_reg(ty, Const::Str("dark".into()));
                 self.emit(Instr::GlobalSet { global: theme, src: v });
             }
+        }
+        Ok(())
+    }
+
+    /// Functions a host calls: `tint:set_<name>(value)` for the variables the
+    /// host provides, and `tint:enter:<ui fn>()`, which resets that ui fn's
+    /// `state` (what showing a page does).
+    pub(super) fn lower_ui_support(&mut self, ui_fns: &[&'a UiFnDecl]) -> LResult<()> {
+        if ui_fns.is_empty() {
+            return Ok(());
+        }
+        let unit = self.module.types.unit();
+        for name in ["theme", "viewport_width", "route_path"] {
+            let Some(&global) = self.globals.get(name) else { continue };
+            let ty = self.module.globals[global.0 as usize].ty;
+            let fname = format!("tint:set_{name}");
+            let id = self.reserve_func(&fname, FuncKind::Fn, unit);
+            self.module.functions.insert(fname.clone(), id);
+            self.stack.push(FnB::new(fname, FuncKind::Fn, unit));
+            let param = self.new_reg(ty);
+            self.f().params.push(param);
+            self.emit(Instr::GlobalSet { global, src: param });
+            let done = self.unit_reg();
+            self.terminate(Term::Return(done));
+            let fb = self.stack.pop().unwrap();
+            self.module.funcs[id.0 as usize] = fb.finish(unit);
+        }
+        for f in ui_fns {
+            let fname = format!("tint:enter:{}", f.name);
+            let id = self.reserve_func(&fname, FuncKind::Fn, unit);
+            self.module.functions.insert(fname.clone(), id);
+            self.stack.push(FnB::new(fname, FuncKind::Fn, unit));
+            for state in &f.state {
+                if state.name == "theme" {
+                    continue;
+                }
+                let Some(&global) = self.globals.get(&state.name) else {
+                    return self.err(None, format!("state `{}` has no known type", state.name));
+                };
+                let ty = self.module.globals[global.0 as usize].ty;
+                let value = self.expr_as(&state.init, ty)?;
+                self.emit(Instr::GlobalSet { global, src: value });
+            }
+            let done = self.unit_reg();
+            self.terminate(Term::Return(done));
+            let fb = self.stack.pop().unwrap();
+            self.module.funcs[id.0 as usize] = fb.finish(unit);
         }
         Ok(())
     }
@@ -565,7 +614,18 @@ impl<'a> Lowerer<'a> {
     ) -> LResult<()> {
         let mut slots = Vec::new();
         let mut values = Vec::new();
-        for e in modifier_exprs_of(expanded.iter().copied()) {
+        // `key::{r}` / `key::{r.id}` parse as a one-name tuple; make them expressions.
+        let owned: Vec<UiModifier> = expanded.iter().map(|m| key_as_expr(m)).collect();
+        let mut exprs: Vec<&Expr> = Vec::new();
+        for (orig, new) in expanded.iter().zip(&owned) {
+            // Unchanged modifiers keep their own expressions (the checker typed those).
+            if matches!(orig.value, UiModifierValue::Tuple(_)) && matches!(new.value, UiModifierValue::Expr(_)) {
+                exprs.extend(modifier_exprs_of(std::iter::once(new)));
+            } else {
+                exprs.extend(modifier_exprs_of(std::iter::once(*orig)));
+            }
+        }
+        for e in exprs {
             let reg = match pre.iter().find(|(p, _)| std::ptr::eq(*p, e)) {
                 Some((_, r)) => *r,
                 None => self.expr(e, None)?,
@@ -581,14 +641,67 @@ impl<'a> Lowerer<'a> {
             }
             slots.push(slot);
         }
+        // A variable as an attribute value (`placeholder||hint`) is an expression like any other.
+        let attributes: Vec<UiAttribute> = attributes
+            .iter()
+            .map(|a| {
+                let mut a = a.clone();
+                if let UiAttrValue::Ident(name) = &a.value {
+                    if crate::typed::ui::VALUE_ATTRS.contains(&a.name.as_str()) && name != "true" && name != "false" {
+                        a.value = UiAttrValue::Expr(Expr::Ident(name.clone(), tint_ast::Span::dummy()));
+                    }
+                }
+                a
+            })
+            .collect();
+        for e in crate::typed::ui::attr_exprs(&attributes) {
+            // The checker does not visit attribute expressions: a struct literal names its own type.
+            let hint = match e {
+                Expr::StructInit { name, .. } => Some(self.ast_ty(&tint_ast::Type::Simple(name.clone()))?),
+                _ => None,
+            };
+            let mut reg = self.expr(e, hint)?;
+            let is_props = attributes.iter().any(|a| a.name == "props" && matches!(&a.value, UiAttrValue::Expr(x) if std::ptr::eq(x, e)));
+            if is_props {
+                let text = self.str_ty();
+                reg = self.rt(RtFn::PropsJson, vec![reg], text);
+            }
+            let slot = match self.tk(self.reg_ty(reg)) {
+                TyKind::Num(_) => UiSlot::Number,
+                TyKind::Str => UiSlot::Str,
+                TyKind::Bool => UiSlot::Bool,
+                _ => UiSlot::Unused,
+            };
+            if slot != UiSlot::Unused {
+                values.push(reg);
+            }
+            slots.push(slot);
+        }
         let template = self.module.ui_templates.len() as u32;
         self.module.ui_templates.push(UiTemplate::Element(UiElementTemplate {
             tag: tag.to_string(),
-            modifiers: expanded.iter().map(|m| (*m).clone()).collect(),
-            attributes: attributes.to_vec(),
+            modifiers: owned.clone(),
+            attributes,
             slots,
         }));
         self.emit(Instr::UiOpen { template, values });
         Ok(())
     }
+}
+
+fn key_as_expr(m: &UiModifier) -> UiModifier {
+    if m.path.len() == 1 && m.path[0] == "key" {
+        if let UiModifierValue::Tuple(items) = &m.value {
+            if let [UiModifierValue::Ident(name)] = items.as_slice() {
+                let mut parts = name.split('.');
+                let span = m.span;
+                let mut e = Expr::Ident(parts.next().unwrap_or("").to_string(), span);
+                for f in parts {
+                    e = Expr::Field { target: Box::new(e), field: f.to_string(), span };
+                }
+                return UiModifier { path: m.path.clone(), value: UiModifierValue::Expr(e), span };
+            }
+        }
+    }
+    m.clone()
 }

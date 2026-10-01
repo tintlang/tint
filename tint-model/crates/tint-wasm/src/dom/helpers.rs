@@ -46,27 +46,14 @@ fn dom_tree_shape() {
     tint_runtime::ui::render::FOLD_TEXT.store(true, std::sync::atomic::Ordering::Relaxed);
 }
 
-fn active_breakpoints(tree: &[Rc<UiRenderNode>]) -> String {
-    fn thresholds(nodes: &[Rc<UiRenderNode>], out: &mut Vec<String>) {
-        for node in nodes {
-            for (name, _) in node.breakpoints.iter() {
-                if breakpoint_threshold(name).is_some() && !out.contains(name) {
-                    out.push(name.clone());
-                }
-            }
-            thresholds(&node.children, out);
-        }
-    }
-
+fn active_breakpoints(used: &[String]) -> String {
     let width = current_viewport_width();
-    let mut used = Vec::new();
-    thresholds(tree, &mut used);
     let mut active = vec![breakpoint_for_width(width).to_string()];
-    active.extend(used.into_iter().filter(|name| match breakpoint_threshold(name) {
+    active.extend(used.iter().filter(|name| match breakpoint_threshold(name) {
         Some((true, at)) => width >= f64::from(at),
         Some((false, at)) => width <= f64::from(at),
         None => false,
-    }));
+    }).cloned());
     active.join(" ")
 }
 
@@ -363,7 +350,8 @@ fn mount_tree(tree: Vec<Rc<UiRenderNode>>, shared: &Rc<Shared>) -> Result<(), Js
     // to make free.
     let prof = profiling();
     let q0 = if prof { now() } else { 0.0 };
-    let breakpoint = active_breakpoints(&tree);
+    let scan = scan_tree(&tree);
+    let breakpoint = active_breakpoints(&scan.breakpoints);
 
     // Build the whole new subtree off-DOM first, into a fragment nothing
     // renders, instead of clearing the live container and then building
@@ -401,7 +389,6 @@ fn mount_tree(tree: Vec<Rc<UiRenderNode>>, shared: &Rc<Shared>) -> Result<(), Js
     let q3 = if prof { now() } else { 0.0 };
     // One walk over the tree (it used to be six) for every "first node that
     // declares ..." lookup and the timers.
-    let scan = scan_tree(&tree);
     *shared.key_down_handler.borrow_mut() = scan.key_down;
     *shared.key_up_handler.borrow_mut() = scan.key_up;
     *shared.pointer_move_handler.borrow_mut() = scan.pointer_move;
@@ -439,7 +426,7 @@ fn mount_tree(tree: Vec<Rc<UiRenderNode>>, shared: &Rc<Shared>) -> Result<(), Js
 /// What a mounted tree asks the host for, found in a single depth-first walk:
 /// the first handler of each kind (document order) and the distinct
 /// `(handler, interval_ms)` timers.
-#[derive(Default)]
+#[derive(Default, Clone)]
 struct TreeScan {
     key_down: Option<String>,
     key_up: Option<String>,
@@ -447,39 +434,107 @@ struct TreeScan {
     pointer_up: Option<String>,
     frame: Option<String>,
     ticks: Vec<(String, i32)>,
+    /// Distinct breakpoint names with a known threshold, first use first.
+    breakpoints: Vec<String>,
+}
+
+impl TreeScan {
+    fn is_empty(&self) -> bool {
+        self.key_down.is_none()
+            && self.key_up.is_none()
+            && self.pointer_move.is_none()
+            && self.pointer_up.is_none()
+            && self.frame.is_none()
+            && self.ticks.is_empty()
+            && self.breakpoints.is_empty()
+    }
+
+    /// `other` comes later in document order: first-found wins.
+    fn merge(&mut self, other: &TreeScan) {
+        fn first(a: &mut Option<String>, b: &Option<String>) {
+            if a.is_none() {
+                a.clone_from(b);
+            }
+        }
+        first(&mut self.key_down, &other.key_down);
+        first(&mut self.key_up, &other.key_up);
+        first(&mut self.pointer_move, &other.pointer_move);
+        first(&mut self.pointer_up, &other.pointer_up);
+        first(&mut self.frame, &other.frame);
+        for t in &other.ticks {
+            if !self.ticks.contains(t) {
+                self.ticks.push(t.clone());
+            }
+        }
+        for b in &other.breakpoints {
+            if !self.breakpoints.contains(b) {
+                self.breakpoints.push(b.clone());
+            }
+        }
+    }
+}
+
+type ScanCache = std::collections::HashMap<usize, (Rc<UiRenderNode>, Rc<TreeScan>), tint_runtime::scope::BuildFx>;
+
+thread_local! {
+    /// Summaries of subtrees by node address. Render nodes are shared between
+    /// renders, so an unchanged row costs one lookup instead of a walk.
+    static SCAN_CACHE: std::cell::RefCell<ScanCache> = std::cell::RefCell::new(ScanCache::default());
+}
+
+fn scan_node(node: &Rc<UiRenderNode>, old: &ScanCache, new: &mut ScanCache) -> Rc<TreeScan> {
+    let addr = Rc::as_ptr(node) as usize;
+    if let Some((_, s)) = new.get(&addr) {
+        return Rc::clone(s);
+    }
+    if let Some((_, s)) = old.get(&addr) {
+        let s = Rc::clone(s);
+        new.insert(addr, (Rc::clone(node), Rc::clone(&s)));
+        return s;
+    }
+    let mut out = TreeScan {
+        key_down: node.on_key_down.clone(),
+        key_up: node.on_key_up.clone(),
+        pointer_move: node.on_pointer_move.clone(),
+        pointer_up: node.on_pointer_up.clone(),
+        frame: node.on_frame.clone(),
+        ..TreeScan::default()
+    };
+    if let Some(handler) = &node.on_tick {
+        let ms = node.every_ms.unwrap_or(1000.0).clamp(10.0, 86_400_000.0) as i32;
+        out.ticks.push((handler.clone(), ms));
+    }
+    for (name, _) in node.breakpoints.iter() {
+        if breakpoint_threshold(name).is_some() && !out.breakpoints.contains(name) {
+            out.breakpoints.push(name.clone());
+        }
+    }
+    for child in &node.children {
+        let c = scan_node(child, old, new);
+        if !c.is_empty() {
+            out.merge(&c);
+        }
+    }
+    let out = Rc::new(out);
+    new.insert(addr, (Rc::clone(node), Rc::clone(&out)));
+    out
 }
 
 fn scan_tree(nodes: &[Rc<UiRenderNode>]) -> TreeScan {
-    fn walk(nodes: &[Rc<UiRenderNode>], out: &mut TreeScan) {
+    SCAN_CACHE.with(|cache| {
+        let old = std::mem::take(&mut *cache.borrow_mut());
+        let mut new = ScanCache::default();
+        new.reserve(old.len());
+        let mut out = TreeScan::default();
         for node in nodes {
-            if out.key_down.is_none() {
-                out.key_down = node.on_key_down.clone();
+            let s = scan_node(node, &old, &mut new);
+            if !s.is_empty() {
+                out.merge(&s);
             }
-            if out.key_up.is_none() {
-                out.key_up = node.on_key_up.clone();
-            }
-            if out.pointer_move.is_none() {
-                out.pointer_move = node.on_pointer_move.clone();
-            }
-            if out.pointer_up.is_none() {
-                out.pointer_up = node.on_pointer_up.clone();
-            }
-            if out.frame.is_none() {
-                out.frame = node.on_frame.clone();
-            }
-            if let Some(handler) = &node.on_tick {
-                let ms = node.every_ms.unwrap_or(1000.0).clamp(10.0, 86_400_000.0) as i32;
-                let key = (handler.clone(), ms);
-                if !out.ticks.contains(&key) {
-                    out.ticks.push(key);
-                }
-            }
-            walk(&node.children, out);
         }
-    }
-    let mut out = TreeScan::default();
-    walk(nodes, &mut out);
-    out
+        *cache.borrow_mut() = new;
+        out
+    })
 }
 
 /// Collects the distinct `(handler, interval_ms)` pairs the tree asks for.
@@ -734,6 +789,11 @@ fn show_preview_error(el: &Element, message: &str) {
 
 /// Starts, reloads or stops the nested sessions of every `Preview` in the
 /// container so each shows exactly its current source.
+/// `Preview` runs its source in a nested interpreter session; the compiled-only runtime has none.
+#[cfg(not(feature = "interpreter"))]
+fn sync_previews(_shared: &Rc<Shared>) {}
+
+#[cfg(feature = "interpreter")]
 fn sync_previews(shared: &Rc<Shared>) {
     let Ok(document) = document() else { return };
     let Some(container) = document.get_element_by_id(&shared.container_id) else { return };
@@ -1217,6 +1277,7 @@ const BUTTON_RESET: &[(&str, &str)] = &[
 
 /// Callbacks that fire after their host call returned (a settled Promise, a
 /// JS timer) run against the live session and re-render it.
+#[cfg(feature = "interpreter")]
 fn install_deferred_runner(shared: &Rc<Shared>) {
     let weak = Rc::downgrade(shared);
     tint_runtime::vm::set_deferred_runner(Some(Rc::new(move |function, args| {

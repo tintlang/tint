@@ -14,7 +14,7 @@
 use tint_ast::{Expr, UiAttribute, UiModifier, UiModifierValue};
 
 /// Which kind of value fills one expression of an element's modifiers.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum UiSlot {
     Number,
     Str,
@@ -26,7 +26,7 @@ pub enum UiSlot {
 }
 
 /// The static part of an element.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct UiElementTemplate {
     pub tag: String,
     /// Modifiers after `use::Style` expansion and component merging, exactly
@@ -37,7 +37,7 @@ pub struct UiElementTemplate {
     pub slots: Vec<UiSlot>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum UiTemplate {
     Element(UiElementTemplate),
     /// The `tokens { .. }` blocks of a theme that turned out to be active.
@@ -101,6 +101,21 @@ pub fn replay(templates: &[UiTemplate], events: &[UiEvent], host: &mut dyn UiHos
     }
 }
 
+/// Attributes whose value is a run-time expression (`placeholder||{hint}`, `props||{..}`);
+/// their expressions follow the modifiers' in a template's slots.
+pub const VALUE_ATTRS: [&str; 7] = ["placeholder", "disabled", "readonly", "title", "alt", "tabindex", "props"];
+
+pub fn attr_exprs(attributes: &[UiAttribute]) -> Vec<&Expr> {
+    attributes
+        .iter()
+        .filter(|a| VALUE_ATTRS.contains(&a.name.as_str()))
+        .filter_map(|a| match &a.value {
+            tint_ast::UiAttrValue::Expr(e) => Some(e),
+            _ => None,
+        })
+        .collect()
+}
+
 /// `modifier_exprs` over modifiers held by reference.
 pub fn modifier_exprs_of<'a>(modifiers: impl IntoIterator<Item = &'a UiModifier>) -> Vec<&'a Expr> {
     fn value<'a>(v: &'a UiModifierValue, out: &mut Vec<&'a Expr>) {
@@ -123,6 +138,23 @@ pub fn modifier_exprs_of<'a>(modifiers: impl IntoIterator<Item = &'a UiModifier>
     let mut out = Vec::new();
     for m in modifiers {
         value(&m.value, &mut out);
+    }
+    out
+}
+
+/// Names of the functions the templates use as event handlers
+/// (`click||name`, `frame||name`, ...), in first-use order.
+pub fn ui_handlers(templates: &[UiTemplate], functions: &std::collections::HashMap<String, super::FuncId>) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for template in templates {
+        let UiTemplate::Element(e) = template else { continue };
+        for attr in &e.attributes {
+            if let tint_ast::UiAttrValue::Ident(name) = &attr.value {
+                if functions.contains_key(name) && !out.contains(name) {
+                    out.push(name.clone());
+                }
+            }
+        }
     }
     out
 }

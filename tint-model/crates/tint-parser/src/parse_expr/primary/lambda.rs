@@ -9,13 +9,15 @@ impl Parser {
         if opener.kind == TokenKind::OrOr {
             let body = self.parse_expr()?;
             let span = Span::merge(start, body.span());
-            return Ok(Expr::Lambda { params: Vec::new(), body: Box::new(body), span });
+            return Ok(Expr::Lambda { params: Vec::new(), param_types: Vec::new(), body: Box::new(body), span });
         }
 
         let mut params = Vec::new();
+        let mut param_types = Vec::new();
         loop {
             let name = self.parse_ident()?;
             params.push(name);
+            param_types.push(if self.stream.consume_if(TokenKind::Colon) { Some(self.parse_type()?) } else { None });
 
             if !self.stream.consume_if(TokenKind::Comma) {
                 break;
@@ -27,8 +29,12 @@ impl Parser {
         let body = self.parse_expr()?;
         let span = Span::merge(start, body.span());
 
+        if param_types.iter().all(Option::is_none) {
+            param_types.clear();
+        }
         Ok(Expr::Lambda {
             params,
+            param_types,
             body: Box::new(body),
             span,
         })

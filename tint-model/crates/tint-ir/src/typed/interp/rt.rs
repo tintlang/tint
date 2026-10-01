@@ -100,6 +100,16 @@ impl<'m> Interp<'m> {
                 };
                 Val::list(parts)
             }
+            RtFn::LineCount => Val::Float(super::super::text::line_count(str_of(arg(0))?)),
+            RtFn::MaxLineLen => Val::Float(super::super::text::max_line_len(str_of(arg(0))?)),
+            RtFn::LineNumbers => Val::str(super::super::text::line_numbers(str_of(arg(0))?)),
+            RtFn::PropsJson => Val::str(super::super::json::props_json(types, func.reg_ty(args[0]), arg(0))),
+            RtFn::Highlight => Val::list(
+                super::super::text::highlight(str_of(arg(0))?)
+                    .into_iter()
+                    .map(|(text, class)| Val::list(vec![Val::str(text), Val::str(class)]))
+                    .collect(),
+            ),
             RtFn::StrReplace => {
                 Val::str(str_of(arg(0))?.replace(str_of(arg(1))?, str_of(arg(2))?))
             }

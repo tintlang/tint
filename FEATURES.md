@@ -46,7 +46,7 @@ still missing. The short introduction is in the [README](README.md).
 - Control flow (if/else statements and expressions, for loops, comparison operators)
 - Function definitions, typed function values & calls
 - Persistent REPL sessions
-- Browser runtime (Tint is interpreted by a prebuilt WebAssembly runtime) & rendering
+- Browser runtime & rendering: `tint build` compiles the program to WebAssembly (typed IR -> `tint-wasmgen` -> `app.wasm`, linked with the `tint-wasmrt` runtime); `tint dev`, the sandbox and `Preview` run it on the interpreter in a prebuilt WebAssembly runtime
 - Real state + click/hover handlers (`state`, `click||`, `hover_in||`/`hover_out||`) via a persistent `UiSession`
 - Responsive layouts (`mobile::{}`/`tablet::{}`/`laptop::{}`/`desktop::{}` breakpoints + structural `if{ viewport_width ... }`)
 - A second, direct-DOM rendering backend (`DomSession`, no JS framework)

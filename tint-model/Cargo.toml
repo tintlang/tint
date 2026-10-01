@@ -4,6 +4,9 @@ members = [
     "crates/tint-ast",
     "crates/tint-ir",
     "crates/tint-codegen",
+    "crates/tint-wasmgen",
+    "crates/tint-wasmabi",
+    "crates/tint-wasmrt",
     "crates/tint-parser",
     "crates/tint-runtime",
     "crates/tint-semantics",
@@ -35,3 +38,9 @@ lto = "fat"
 codegen-units = 1
 panic = "abort"
 strip = "symbols"
+
+# Runtime of apps compiled to WebAssembly (`tint build`): size over speed, the DOM layer
+# is the only hot code in it (scripts/build-cli-runtimes.sh).
+[profile.wasm-small]
+inherits = "wasm"
+opt-level = "z"

@@ -8,6 +8,7 @@ mod native_runner;
 mod repl;
 mod run;
 mod support;
+mod wasm_app;
 mod wasm_build;
 
 use std::cell::RefCell;

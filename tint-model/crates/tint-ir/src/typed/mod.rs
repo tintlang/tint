@@ -9,9 +9,11 @@
 
 pub mod display;
 pub mod interp;
+pub mod json;
 pub mod ir;
 pub mod layout;
 pub mod lower;
+pub mod text;
 pub mod ty;
 pub mod ui;
 pub mod verify;

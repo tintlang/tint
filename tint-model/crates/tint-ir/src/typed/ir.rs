@@ -122,6 +122,14 @@ pub enum RtFn {
     // Vec2 (a struct of two numbers)
     Vec2Length,
     Vec2Normalized,
+    // text helpers (`line_count`, `max_line_len`, `line_numbers`, `tint_highlight`)
+    LineCount,
+    MaxLineLen,
+    LineNumbers,
+    /// `[[text, class], ..]`: a list of lists of strings.
+    Highlight,
+    /// The canonical JSON text of a value, for `props||{..}` of a host component.
+    PropsJson,
 }
 
 impl RtFn {
@@ -173,6 +181,11 @@ impl RtFn {
             RtFn::ParseNumber => "parse_number",
             RtFn::Vec2Length => "vec2.length",
             RtFn::Vec2Normalized => "vec2.normalized",
+            RtFn::LineCount => "text.line_count",
+            RtFn::MaxLineLen => "text.max_line_len",
+            RtFn::LineNumbers => "text.line_numbers",
+            RtFn::Highlight => "text.highlight",
+            RtFn::PropsJson => "ui.props_json",
         }
     }
 }
@@ -189,6 +202,20 @@ pub enum HostFn {
     Error,
     ReadLine,
     ReadKey,
+    /// `storage_get_or(key, default)`: string.
+    StorageGetOr,
+    /// `storage_set(key, value)`.
+    StorageSet,
+    /// `storage_remove(key)`.
+    StorageRemove,
+    /// `now_ms()`: milliseconds since the epoch, as a number.
+    NowMs,
+    /// `http_get(url)`: queues a request and returns its id (a number).
+    HttpGet,
+    /// A host function by index into `Module::natives` (a JS or Rust function
+    /// of the page). Arguments and result cross as JSON (`json`); a trailing
+    /// closure argument is the callback the host calls with `Result`.
+    Native(u32),
 }
 
 impl HostFn {
@@ -200,6 +227,12 @@ impl HostFn {
             HostFn::Error => "error",
             HostFn::ReadLine => "read_line",
             HostFn::ReadKey => "read_key",
+            HostFn::StorageGetOr => "storage_get_or",
+            HostFn::StorageSet => "storage_set",
+            HostFn::StorageRemove => "storage_remove",
+            HostFn::NowMs => "now_ms",
+            HostFn::HttpGet => "http_get",
+            HostFn::Native(_) => "native",
         }
     }
 }
@@ -548,6 +581,11 @@ pub struct Module {
     pub methods: HashMap<(String, String), FuncId>,
     /// Static parts of the UI elements the `Ui` functions emit.
     pub ui_templates: Vec<UiTemplate>,
+    /// Names of the host functions the program calls (`HostFn::Native`).
+    pub natives: Vec<String>,
+    /// Exports of a compiled app and their parameter kinds (`f` float, `i` integer, `p` anything else);
+    /// only filled in by the descriptor decoder.
+    pub export_sigs: Vec<(String, String)>,
 }
 
 impl Module {

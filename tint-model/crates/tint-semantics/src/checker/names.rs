@@ -165,6 +165,8 @@ impl SemanticChecker {
             "storage_get",
             "storage_set",
             "storage_remove",
+            "now_ms",
+            "http_get",
         ] {
             self.known_fns.insert(builtin.to_string());
         }
@@ -426,6 +428,10 @@ impl SemanticChecker {
             }
             tint_ast::Type::Generic(name, args) if name == "Vec" || name == "Array" => {
                 Type::Array(Box::new(self.ast_type(args.first())))
+            }
+            // `Map<string, V>`: keys are always strings.
+            tint_ast::Type::Generic(name, args) if name == "Map" && args.len() == 2 => {
+                Type::Map(Box::new(self.ast_type(args.get(1))))
             }
             tint_ast::Type::Generic(name, args) if name == "Option" || name == "Result" => {
                 Type::Generic(

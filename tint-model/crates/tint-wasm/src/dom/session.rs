@@ -1,5 +1,6 @@
 #[wasm_bindgen]
 impl DomSession {
+    #[cfg(feature = "interpreter")]
     #[wasm_bindgen(constructor)]
     pub fn new(
         source: &str,
@@ -16,7 +17,8 @@ impl DomSession {
                 // Saved values only matter to a program that reads them.
                 if source.contains("storage_") { load_browser_storage() } else { Default::default() },
                 &natives,
-            ),
+            )
+            .map(boxed),
             container_id,
             false,
             natives,
@@ -26,6 +28,7 @@ impl DomSession {
     /// Creates a session from a versioned Tint bytecode blob. The browser
     /// host can choose source mode for development and this mode for release
     /// artifacts without changing the DOM/session API.
+    #[cfg(feature = "interpreter")]
     #[cfg(feature = "bytecode")]
     pub fn from_bytecode(
         bytes: &[u8],
@@ -36,7 +39,7 @@ impl DomSession {
         dom_tree_shape();
         let natives = natives_from_js(natives);
         Self::from_inner(
-            InnerSession::from_bytecode_with_natives(bytes, ui_fn_name, &natives),
+            InnerSession::from_bytecode_with_natives(bytes, ui_fn_name, &natives).map(boxed),
             container_id,
             false,
             natives,
@@ -187,13 +190,14 @@ impl DomSession {
     /// a fresh `DomSession` per keystroke would leak one more `window`
     /// resize listener per edit, `reload` keeps it at the documented
     /// one-per-session baseline no matter how many edits happen.
+    #[cfg(feature = "interpreter")]
     pub fn reload(&mut self, source: &str, ui_fn_name: &str) -> Option<String> {
         let shared = match &self.shared {
             Some(s) => s.clone(),
             None => return self.init_error.clone(),
         };
         match InnerSession::new_with_natives(source, ui_fn_name, Default::default(), &shared.natives) {
-            Ok(session) => *shared.session.borrow_mut() = session,
+            Ok(session) => *shared.session.borrow_mut() = boxed(session),
             Err(e) => return Some(e),
         }
         if shared.nested {
@@ -210,6 +214,7 @@ impl DomSession {
     }
 
     /// Replaces the current program with a serialized Tint bytecode blob.
+    #[cfg(feature = "interpreter")]
     #[cfg(feature = "bytecode")]
     pub fn reload_bytecode(&mut self, bytes: &[u8], ui_fn_name: &str) -> Option<String> {
         let shared = match &self.shared {
@@ -217,7 +222,7 @@ impl DomSession {
             None => return self.init_error.clone(),
         };
         match InnerSession::from_bytecode_with_natives(bytes, ui_fn_name, &shared.natives) {
-            Ok(session) => *shared.session.borrow_mut() = session,
+            Ok(session) => *shared.session.borrow_mut() = boxed(session),
             Err(e) => return Some(e),
         }
         if shared.nested {
@@ -245,7 +250,7 @@ impl DomSession {
     /// Shared constructor tail. A `nested` session (inside a `Preview`) never
     /// touches the host page: no title/body/history, no keyboard capture.
     fn from_inner(
-        session: Result<InnerSession, String>,
+        session: Result<Box<dyn SessionBackend>, String>,
         container_id: &str,
         nested: bool,
         natives: Vec<(String, tint_runtime::ui_session::NativeFn)>,
@@ -279,6 +284,7 @@ impl DomSession {
                     apply_app_css(&shared, "tint-preview-css");
                 }
                 if !nested {
+                    #[cfg(feature = "interpreter")]
                     install_deferred_runner(&shared);
                     apply_app_meta(&shared);
                     bind_navigation(&shared);
@@ -295,8 +301,14 @@ impl DomSession {
         }
     }
 
+    #[cfg(feature = "interpreter")]
     pub(crate) fn new_nested(source: &str, ui_fn_name: &str, container_id: &str) -> DomSession {
         dom_tree_shape();
-        Self::from_inner(InnerSession::new(source, ui_fn_name), container_id, true, Vec::new())
+        Self::from_inner(InnerSession::new(source, ui_fn_name).map(boxed), container_id, true, Vec::new())
     }
+}
+
+#[cfg(feature = "interpreter")]
+fn boxed(session: InnerSession) -> Box<dyn SessionBackend> {
+    Box::new(session)
 }

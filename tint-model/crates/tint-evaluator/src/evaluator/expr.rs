@@ -48,6 +48,12 @@ pub fn eval_expr<H: EvalHost>(host: &mut H, expr: &Expr) -> Value {
         }
         Expr::Cast { expr, ty, .. } => {
             let value = eval_expr(host, expr);
+            // `host_fn(..) as Stats` only states the type a host function returns.
+            let numeric = matches!(ty, tint_ast::Type::Simple(name)
+                if name == "number" || matches!(name.as_str(), "i32" | "i64" | "u8" | "u32" | "u64" | "f32" | "f64"));
+            if !numeric {
+                return value;
+            }
             value
                 .cast_numeric(ty)
                 .unwrap_or_else(|message| panic!("numeric cast failed: {message}"))

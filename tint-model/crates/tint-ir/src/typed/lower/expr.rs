@@ -49,6 +49,10 @@ impl<'a> Lowerer<'a> {
     /// The type an expression is built with: the context's, when it only
     /// differs in number kinds from the checker's.
     pub fn pick(&mut self, e: &Expr, hint: Option<TyId>) -> LResult<TyId> {
+        // Expressions the checker does not visit (attribute values) rely on the caller's hint.
+        if let (None, Some(h)) = (self.model.type_of(e), hint) {
+            return Ok(h);
+        }
         let nat = self.nat(e)?;
         Ok(match hint {
             Some(h) if self.compat(nat, h) => h,
@@ -168,6 +172,14 @@ impl<'a> Lowerer<'a> {
             Expr::Binary { left, op, right, span } => self.binary(op, left, right, e, hint, *span),
             Expr::Cast { expr: inner, ty, span } => {
                 let target = self.ast_ty(ty)?;
+                if let Expr::Call { target: callee, .. } = &**inner {
+                    if let Expr::Ident(name, _) = &**callee {
+                        if self.is_host_fn(name) {
+                            // `f(..) as T` states what the host function returns.
+                            return self.expr(inner, Some(target));
+                        }
+                    }
+                }
                 if !matches!(self.tk(target), TyKind::Num(_)) {
                     return self.err(Some(*span), "`as` needs a numeric type");
                 }
@@ -201,12 +213,24 @@ impl<'a> Lowerer<'a> {
                 self.match_expr(scrutinee, arms, ty, e.span())
             }
             Expr::Block(block, _) => self.block(block, hint),
-            Expr::Lambda { params, body, span } => self.lambda(e, params, body, hint, *span),
+            Expr::Lambda { params, body, span, .. } => self.lambda(e, params, body, hint, *span),
             Expr::Array { items, .. } => {
                 let ty = self.pick(e, hint)?;
                 let TyKind::List(item) = self.tk(ty) else {
                     return self.err(Some(e.span()), "array literal without a list type");
                 };
+                if items.len() > 32 {
+                    // A long literal is built by pushes: with every item live at once the
+                    // function would need one local per item, which engines compile slowly.
+                    let dst = self.new_reg(ty);
+                    self.emit(Instr::List { dst, items: Vec::new() });
+                    let unit = self.unit_ty();
+                    for i in items {
+                        let r = self.expr_as(i, item)?;
+                        self.rt(RtFn::ListPush, vec![dst, r], unit);
+                    }
+                    return Ok(dst);
+                }
                 let mut regs = Vec::new();
                 for i in items {
                     regs.push(self.expr_as(i, item)?);
@@ -655,6 +679,11 @@ impl<'a> Lowerer<'a> {
 
     fn lambda(&mut self, e: &Expr, params: &[String], body: &Expr, hint: Option<TyId>, span: Span) -> LResult<Reg> {
         let ty = self.pick(e, hint)?;
+        self.lambda_of_type(ty, params, body, span)
+    }
+
+    /// A lambda of the function type `ty` (the caller knows it better than the checker).
+    pub fn lambda_of_type(&mut self, ty: TyId, params: &[String], body: &Expr, span: Span) -> LResult<Reg> {
         let TyKind::Fn(param_tys, ret) = self.tk(ty) else {
             return self.err(Some(span), "lambda without a function type");
         };

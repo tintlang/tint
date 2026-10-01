@@ -10,8 +10,8 @@ fn bump() {
 
 ui fn App() {
     state n = 1
-    state pt = make_point(3, 4)
-    state greeting = shout("hello")
+    state pt = make_point(3, 4) as Map<string, number>
+    state greeting = shout("hello") as string
 
     Column {
         direction::column
@@ -22,8 +22,8 @@ ui fn App() {
         Card {
             class||"card"
             Text { class||"accent" text::{18, bold, white} "{greeting}" }
-            Text { text::{14, white} "sum: {sum_all([1, 2, n])}" }
-            Text { text::{14, white} "point: {describe(pt)}" }
+            Text { text::{14, white} "sum: {sum_all([1, 2, n]) as number}" }
+            Text { text::{14, white} "point: {describe(pt) as string}" }
         }
 
         Button { click||bump "bump" }

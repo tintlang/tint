@@ -1,0 +1,36 @@
+<!doctype html><html><body><div id="root"></div>
+<script type="module">
+import init, { DomSession, compiled_prepare } from './pkg/tint_wasm.js';
+window.__log = [];
+try {
+  const wasm = await init();
+  const q0 = new URLSearchParams(location.search);
+  let natives; if (q0.get('js')) natives = await import('./' + q0.get('js'));
+  const q = new URLSearchParams(location.search);
+  if (q.get('bc')) {
+    const bytes = new Uint8Array(await (await fetch('./' + q.get('bc'))).arrayBuffer());
+    const s = DomSession.from_bytecode(bytes, q.get('entry') || 'App', 'root', natives);
+    window.session = s;
+    window.__log.push('rerender: ' + s.rerender());
+    window.__done = true;
+    throw 'interp';
+  }
+  if (q.get('src')) {
+    const text = await (await fetch('./' + q.get('src'))).text();
+    const s = new DomSession(text, q.get('entry') || 'App', 'root', natives);
+    window.session = s;
+    window.__log.push('rerender: ' + s.rerender());
+    window.__done = true;
+    throw 'interp';
+  }
+  compiled_prepare(natives);
+  const bytes = await (await fetch('./' + (new URLSearchParams(location.search).get('app') || 'ui_app.wasm'))).arrayBuffer();
+  const { instance } = await WebAssembly.instantiate(bytes, { rt: wasm });
+  const entry = new URLSearchParams(location.search).get('entry') || 'App';
+  window.exp = instance.exports; const s = DomSession.from_compiled(instance.exports, entry, 'root');
+  window.session = s;
+  const err = s.rerender();
+  window.__log.push('rerender: ' + err);
+} catch (e) { if (e !== 'interp') window.__log.push('ERR ' + (e && e.stack || e)); }
+window.__done = true;
+</script></body></html>

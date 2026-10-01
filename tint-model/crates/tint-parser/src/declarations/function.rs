@@ -264,8 +264,28 @@ impl Parser {
         let mut last_span = start;
         while !self.stream.consume_if(TokenKind::RBrace) {
             // `await call(..)` or `let name = await call(..)`
+            let mut annotated = None;
             let binding = if self.stream.peek_kind() == TokenKind::Await {
                 Some("_".to_string())
+            } else if self.stream.peek_kind() == TokenKind::Let
+                && self.stream.peek_n_kind(1) == TokenKind::Ident
+                && self.stream.peek_n_kind(2) == TokenKind::Colon
+            {
+                // `let name: T = await call(..)`: the callback receives a `Result<T, string>`.
+                let name = self.stream.peek_n(1).lexeme.clone();
+                for _ in 0..3 {
+                    self.stream.next();
+                }
+                let ty = self.parse_type()?;
+                self.stream.expect(TokenKind::Eq)?;
+                if self.stream.peek_kind() != TokenKind::Await {
+                    return Err(ParserError::Message {
+                        msg: "a typed `let` in an `async fn` must be `let name: T = await call(..)`".into(),
+                        span: self.stream.peek().span,
+                    });
+                }
+                annotated = Some(tint_ast::Type::Generic("Result".into(), vec![ty, tint_ast::Type::Simple("string".into())]));
+                Some(name)
             } else if self.stream.peek_kind() == TokenKind::Let
                 && self.stream.peek_n_kind(1) == TokenKind::Ident
                 && self.stream.peek_n_kind(2) == TokenKind::Eq
@@ -299,6 +319,7 @@ impl Parser {
             let rest_span = rest.span;
             args.push(Expr::Lambda {
                 params: vec![binding],
+                param_types: annotated.into_iter().map(Some).collect(),
                 body: Box::new(Expr::Block(rest, rest_span)),
                 span: rest_span,
             });

@@ -1,0 +1,10 @@
+[package]
+name = "tint-wasmabi"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Contract between Tint's WebAssembly code generator and its runtime: object layout and the module descriptor"
+
+[dependencies]
+tint-ir = { path = "../tint-ir" }
+serde_json = "1.0"

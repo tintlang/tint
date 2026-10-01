@@ -70,7 +70,17 @@ impl Parser {
                 let mut items = Vec::new();
 
                 loop {
-                    let val = self.parse_single_mod_value()?;
+                    let val = match self.parse_single_mod_value() {
+                        Ok(v) => v,
+                        Err(_) => {
+                            // Not tuple grammar (`{r.id}`): a single expression.
+                            self.stream.restore(checkpoint);
+                            self.stream.expect(TokenKind::LBrace)?;
+                            let expr = self.parse_expr()?;
+                            self.stream.expect(TokenKind::RBrace)?;
+                            return Ok(UiModifierValue::Expr(expr));
+                        }
+                    };
                     items.push(val);
 
                     if self.stream.consume_if(TokenKind::Comma) {
@@ -147,6 +157,9 @@ impl Parser {
                     });
                 }
 
+                if key.len() > 1 {
+                    return self.stream.error_here("A dotted name is only a mini-modifier key (`a.b::value`)");
+                }
                 return Ok(UiModifierValue::Ident(key.remove(0)));
             }
 

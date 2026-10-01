@@ -49,6 +49,14 @@ Without a trailing callback a Promise-returning function is an error (Tint has n
 `async fn` called natively (`tint run`) is run to completion on the calling thread: futures that need a
 reactor (tokio timers, sockets) do not work there; in the browser it is a Promise.
 
+### Types of what the host returns
+
+`tint build` compiles the program to WebAssembly, so the type of a host function's result must be
+known when the program is compiled. Write it where the value is used: `let x: number = f(..)` for a
+call, `|r: Result<number, string>|` for a callback's parameter, `f(..) as number` (also `as string`, `as Stats`, `as Vec<number>`, `as Map<string, number>`) for a call inside an expression, `let r: number = await f(..)` in an
+`async fn` (the callback then receives `Result<number, string>`). A callback that does not read its
+parameter needs nothing. Without the type the build stops with an error that names the call.
+
 ## `await`
 
 Inside an `async fn`, `await call(args)` rewrites the rest of the body into the callback of the call:

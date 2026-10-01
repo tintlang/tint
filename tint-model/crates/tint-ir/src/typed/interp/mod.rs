@@ -93,7 +93,30 @@ pub struct Interp<'m> {
     pub steps_left: Option<u64>,
     /// What `Ui` functions emitted, in order.
     pub ui_events: Vec<UiEvent>,
+    /// The host's key/value storage (`storage_*`).
+    pub storage: BTreeMap<String, String>,
+    /// `http_get` requests not taken by the host yet: `(id, url)`.
+    pub http_requests: Vec<(u64, String)>,
+    next_request: u64,
+    /// What `now_ms` returns; `None` reads the system clock.
+    pub clock: Option<f64>,
+    /// Runs the host functions of the page (`HostFn::Native`) by name.
+    pub natives: Option<Box<NativeImpl>>,
+    /// Callbacks a host function kept for later: `(function name, closure)`.
+    pub pending: Vec<(String, Val)>,
 }
+
+/// What a host function does with its (JSON) arguments.
+pub enum NativeOutcome {
+    /// Returned this value.
+    Value(serde_json::Value),
+    /// Failed with this message.
+    Error(String),
+    /// Will answer its callback later (a Promise).
+    Pending,
+}
+
+pub type NativeImpl = dyn FnMut(&str, Vec<serde_json::Value>) -> NativeOutcome;
 
 impl<'m> Interp<'m> {
     pub fn new(module: &'m Module) -> Self {
@@ -107,6 +130,12 @@ impl<'m> Interp<'m> {
             max_depth: 1500,
             steps_left: None,
             ui_events: Vec::new(),
+            storage: BTreeMap::new(),
+            http_requests: Vec::new(),
+            next_request: 1,
+            clock: None,
+            natives: None,
+            pending: Vec::new(),
         }
     }
 
@@ -418,7 +447,7 @@ impl<'m> Interp<'m> {
             }
             Instr::Rt { dst, f, args } => self.call_rt(func, regs, *dst, *f, args)?,
             Instr::Host { dst, f, args } => {
-                let v = self.call_host(func, regs, *f, args);
+                let v = self.call_host(func, regs, *dst, *f, args)?;
                 regs[dst.0 as usize] = v;
             }
             Instr::Call {
@@ -516,8 +545,8 @@ impl<'m> Interp<'m> {
         }
     }
 
-    fn call_host(&mut self, func: &Func, regs: &[Val], f: HostFn, args: &[Reg]) -> Val {
-        match f {
+    fn call_host(&mut self, func: &Func, regs: &[Val], dst: Reg, f: HostFn, args: &[Reg]) -> Res<Val> {
+        Ok(match f {
             HostFn::Println => {
                 for arg in args {
                     let line = display(self.module, func.reg_ty(*arg), &regs[arg.0 as usize]);
@@ -548,8 +577,120 @@ impl<'m> Interp<'m> {
                 Val::Unit
             }
             HostFn::ReadLine | HostFn::ReadKey => Val::str(""),
+            HostFn::StorageGetOr => {
+                let (key, default) = (str_arg(&regs[args[0].0 as usize]), str_arg(&regs[args[1].0 as usize]));
+                Val::str(self.storage.get(&key).cloned().unwrap_or(default))
+            }
+            HostFn::StorageSet => {
+                let (key, value) = (str_arg(&regs[args[0].0 as usize]), str_arg(&regs[args[1].0 as usize]));
+                self.storage.insert(key, value);
+                Val::Unit
+            }
+            HostFn::StorageRemove => {
+                self.storage.remove(&str_arg(&regs[args[0].0 as usize]));
+                Val::Unit
+            }
+            HostFn::NowMs => Val::Float(self.clock.unwrap_or_else(system_ms)),
+            HostFn::HttpGet => {
+                let id = self.next_request;
+                self.next_request += 1;
+                self.http_requests.push((id, str_arg(&regs[args[0].0 as usize])));
+                Val::Float(id as f64)
+            }
+            HostFn::Native(index) => self.call_native(func, regs, dst, index, args)?,
+        })
+    }
+
+    /// A host function of the page: arguments to JSON, result from JSON. With a
+    /// trailing closure the host answers through it with `Ok(())` or `Err(message)`.
+    fn call_native(&mut self, func: &Func, regs: &[Val], dst: Reg, index: u32, args: &[Reg]) -> Res<Val> {
+        let types = &self.module.types;
+        let name = self.module.natives[index as usize].clone();
+        let (closure, plain) = match args.last() {
+            Some(last) if matches!(types.kind(func.reg_ty(*last)), TyKind::Fn(..)) => (Some(*last), &args[..args.len() - 1]),
+            _ => (None, args),
+        };
+        let mut json_args = Vec::new();
+        for a in plain {
+            json_args.push(super::json::val_to_json(types, func.reg_ty(*a), &regs[a.0 as usize]).map_err(Trap::new)?);
+        }
+        let Some(native) = self.natives.as_mut() else {
+            return Err(Trap::new(format!("no host function `{name}`")));
+        };
+        let outcome = native(&name, json_args);
+        let ret = func.reg_ty(dst);
+        match closure {
+            None => match outcome {
+                NativeOutcome::Value(j) => super::json::json_to_val(types, ret, &j).map_err(Trap::new),
+                NativeOutcome::Error(e) => Err(Trap::new(format!("{name}: {e}"))),
+                NativeOutcome::Pending => Err(Trap::new(format!("{name}: returns a Promise; pass a callback"))),
+            },
+            Some(cb) => {
+                let callback = regs[cb.0 as usize].clone();
+                match outcome {
+                    NativeOutcome::Pending => {
+                        self.pending.push((name, callback));
+                        Ok(Val::Unit)
+                    }
+                    NativeOutcome::Value(j) => {
+                        let result = self.callback_result(func.reg_ty(cb), Ok(&j));
+                        self.call_closure_val(callback, result)?;
+                        Ok(Val::Unit)
+                    }
+                    NativeOutcome::Error(e) => {
+                        let result = self.callback_result(func.reg_ty(cb), Err(&e));
+                        self.call_closure_val(callback, result)?;
+                        Ok(Val::Unit)
+                    }
+                }
+            }
         }
     }
+
+    /// `Ok(value)` / `Err(message)` for a callback of type `Fn(Result<T, string>)`.
+    fn callback_result(&self, closure_ty: TyId, outcome: Result<&serde_json::Value, &str>) -> Val {
+        let types = &self.module.types;
+        let TyKind::Fn(params, _) = types.kind(closure_ty) else { return Val::Unit };
+        super::json::callback_result(types, params[0], outcome)
+    }
+
+    fn call_closure_val(&mut self, closure: Val, arg: Val) -> Res<()> {
+        let Val::Closure(c) = closure else { return Err(Trap::new("callback is not a function")) };
+        let mut all = c.captures.clone();
+        all.push(arg);
+        self.call(c.func, all)?;
+        Ok(())
+    }
+
+    /// Delivers the answer of a pending host function (a settled Promise).
+    pub fn resolve_pending(&mut self, index: usize, outcome: Result<serde_json::Value, String>) -> Res<()> {
+        let (_, callback) = self.pending.remove(index);
+        let Val::Closure(c) = &callback else { return Err(Trap::new("callback is not a function")) };
+        let ty = self.module.func(c.func).params.last().map(|r| self.module.func(c.func).reg_ty(*r));
+        let Some(param_ty) = ty else { return Err(Trap::new("callback without a parameter")) };
+        let result = super::json::callback_result(&self.module.types, param_ty, outcome.as_ref().map_err(|e| e.as_str()));
+        self.call_closure_val(callback, result)
+    }
+}
+
+fn str_arg(v: &Val) -> String {
+    match v {
+        Val::Str(s) => s.to_string(),
+        _ => String::new(),
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn system_ms() -> f64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as f64)
+        .unwrap_or(0.0)
+}
+
+#[cfg(target_arch = "wasm32")]
+fn system_ms() -> f64 {
+    0.0
 }
 
 pub(crate) fn bad(what: &str, found: &Val) -> Trap {

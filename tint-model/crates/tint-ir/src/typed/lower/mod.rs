@@ -110,6 +110,8 @@ pub(crate) struct Lowerer<'a> {
     /// Generic parameter bindings while an ADT instance is being built.
     pub subst: Vec<HashMap<String, TyId>>,
     pub item: String,
+    /// The expression being lowered is a statement whose value is dropped.
+    pub discard: bool,
 }
 
 /// Lowers every logic item of `program`. `model` must come from checking this
@@ -130,6 +132,7 @@ pub fn lower_program<'a>(program: &'a Program, model: &'a SemanticModel) -> Lowe
         lambdas: 0,
         subst: Vec::new(),
         item: String::new(),
+        discard: false,
     };
     let mut errors = Vec::new();
     let mut skipped = Vec::new();
@@ -304,6 +307,11 @@ impl<'a> Lowerer<'a> {
         if !self.module.globals.is_empty() {
             self.item = "<globals>".into();
             if let Err(e) = self.lower_init(&global_inits, &ui_jobs.iter().map(|(f, _)| *f).collect::<Vec<_>>()) {
+                self.stack.clear();
+                errors.push(e);
+            }
+            self.item = "<ui support>".into();
+            if let Err(e) = self.lower_ui_support(&ui_jobs.iter().map(|(f, _)| *f).collect::<Vec<_>>()) {
                 self.stack.clear();
                 errors.push(e);
             }
@@ -532,8 +540,14 @@ impl<'a> Lowerer<'a> {
             Some(sig) => sig.clone(),
             None => return self.err(Some(f.span), "no signature recorded"),
         };
+        if let Some(i) = params.iter().position(|t| matches!(t, Type::Unknown)) {
+            return self.err(
+                Some(f.span),
+                format!("the type of parameter `{}` of `{}` is not known; write it (`{}: number`)", f.params[i].name().unwrap_or("_"), f.name, f.params[i].name().unwrap_or("_")),
+            );
+        }
         let params = params.iter().map(|t| self.conv(t)).collect::<LResult<Vec<_>>>()?;
-        let ret = self.conv(&ret)?;
+        let ret = if f.async_ || matches!(ret, Type::Unknown) { self.module.types.unit() } else { self.conv(&ret)? };
         let id = self.reserve_func(&f.name, FuncKind::Fn, ret);
         self.module.functions.insert(f.name.clone(), id);
         let sigs = f.params.iter().map(|p| p.sig()).collect();
@@ -753,6 +767,10 @@ impl<'a> Lowerer<'a> {
                 let item = args.first().ok_or_else(|| self.error(None, "Vec needs an element type"))?;
                 let item = self.ast_ty(item)?;
                 return Ok(self.module.types.list(item));
+            }
+            tint_ast::Type::Generic(name, args) if name == "Map" && args.len() == 2 => {
+                let item = self.ast_ty(&args[1])?;
+                return Ok(self.module.types.map(item));
             }
             tint_ast::Type::Generic(name, args) => {
                 let args = args.iter().map(|a| self.ast_ty(a)).collect::<LResult<Vec<_>>>()?;

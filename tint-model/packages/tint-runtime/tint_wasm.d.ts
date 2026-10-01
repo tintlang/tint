@@ -36,9 +36,9 @@ export class DomSession {
      * host can choose source mode for development and this mode for release
      * artifacts without changing the DOM/session API.
      */
-    static from_bytecode(bytes: Uint8Array, ui_fn_name: string, container_id: string, natives?: object | null): DomSession;
+    static from_bytecode(bytes: Uint8Array, ui_fn_name: string, container_id: string): DomSession;
     hydrate_storage(values: any): void;
-    constructor(source: string, ui_fn_name: string, container_id: string, natives?: object | null);
+    constructor(source: string, ui_fn_name: string, container_id: string);
     /**
      * Points this SAME `DomSession` at different source -- re-parsing
      * `source` as `ui_fn_name` into a brand-new inner session and
@@ -168,14 +168,6 @@ export class UiSession {
 }
 
 /**
- * `{ js: [...], css: [...] }` declared by `app { ... }` in `source`, so the
- * host can load those files before constructing the session.
- */
-export function app_assets(source: string): any;
-
-export function app_assets_bytecode(bytes: Uint8Array): any;
-
-/**
  * Lex + parse `source` only. Mirrors `tint check`.
  */
 export function check(source: string): any;
@@ -219,16 +211,14 @@ export interface InitOutput {
     readonly __wbg_domsession_free: (a: number, b: number) => void;
     readonly __wbg_tintrepl_free: (a: number, b: number) => void;
     readonly __wbg_uisession_free: (a: number, b: number) => void;
-    readonly app_assets: (a: number, b: number) => any;
-    readonly app_assets_bytecode: (a: number, b: number) => any;
     readonly check: (a: number, b: number) => any;
     readonly compile_bytecode: (a: number, b: number) => [number, number, number, number];
     readonly domsession_dispatch: (a: number, b: number, c: number) => [number, number];
     readonly domsession_dispatch_frame: (a: number, b: number, c: number, d: number) => [number, number];
     readonly domsession_dispatch_http: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
-    readonly domsession_from_bytecode: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => number;
+    readonly domsession_from_bytecode: (a: number, b: number, c: number, d: number, e: number, f: number) => number;
     readonly domsession_hydrate_storage: (a: number, b: any) => [number, number];
-    readonly domsession_new: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => number;
+    readonly domsession_new: (a: number, b: number, c: number, d: number, e: number, f: number) => number;
     readonly domsession_reload: (a: number, b: number, c: number, d: number, e: number) => [number, number];
     readonly domsession_reload_bytecode: (a: number, b: number, c: number, d: number, e: number) => [number, number];
     readonly domsession_rerender: (a: number) => [number, number];
@@ -250,11 +240,8 @@ export interface InitOutput {
     readonly uisession_take_http_requests: (a: number) => any;
     readonly uisession_tree: (a: number) => any;
     readonly wasm_bindgen_27a16a9810de17ac___convert__closures_____invoke___f64______true_: (a: number, b: number, c: number) => void;
-    readonly wasm_bindgen_27a16a9810de17ac___convert__closures_____invoke___wasm_bindgen_27a16a9810de17ac___JsValue__core_ed718c3d60ebd546___result__Result_wasm_bindgen_27a16a9810de17ac___JsValue__wasm_bindgen_27a16a9810de17ac___JsValue___true_: (a: number, b: number, c: any) => [number, number, number];
-    readonly wasm_bindgen_27a16a9810de17ac___convert__closures_____invoke___wasm_bindgen_27a16a9810de17ac___JsValue______true_: (a: number, b: number, c: any) => void;
-    readonly wasm_bindgen_27a16a9810de17ac___convert__closures_____invoke___wasm_bindgen_27a16a9810de17ac___JsValue______true__33: (a: number, b: number, c: any) => void;
-    readonly wasm_bindgen_27a16a9810de17ac___convert__closures_____invoke___wasm_bindgen_27a16a9810de17ac___JsValue______true__34: (a: number, b: number, c: any) => void;
-    readonly wasm_bindgen_27a16a9810de17ac___convert__closures_____invoke___wasm_bindgen_27a16a9810de17ac___JsValue______true__35: (a: number, b: number, c: any) => void;
+    readonly wasm_bindgen_27a16a9810de17ac___convert__closures_____invoke___web_sys_2fd947709365e817___features__gen_KeyboardEvent__KeyboardEvent______true_: (a: number, b: number, c: any) => void;
+    readonly wasm_bindgen_27a16a9810de17ac___convert__closures_____invoke___web_sys_2fd947709365e817___features__gen_KeyboardEvent__KeyboardEvent______true__30: (a: number, b: number, c: any) => void;
     readonly wasm_bindgen_27a16a9810de17ac___convert__closures_____invoke_______true_: (a: number, b: number) => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;

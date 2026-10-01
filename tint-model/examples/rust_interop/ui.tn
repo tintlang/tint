@@ -3,21 +3,23 @@ app {
     rs::"./native.rs"
 }
 
+struct Stats { count: number, mean: number }
+
 fn bump() { n = n + 1 }
 
 ui fn App() {
     state n = 3
     state text = "a b a"
-    state s = stats([2, 4, 6, 8])
+    state s = stats([2, 4, 6, 8]) as Stats
 
     Column {
         direction::column
         padding::24
         gap::8
         Text { text::{16, white} "mean {s.mean} of {s.count}" }
-        Text { text::{16, white} "to_num: {to_num("41")}" }
-        Text { text::{16, white} "a x {word_count(text).get("a")}" }
-        Text { text::{16, white} "bad: {to_num("x")}" }
+        Text { text::{16, white} "to_num: {to_num("41") as Result<number, string>}" }
+        Text { text::{16, white} "a x {(word_count(text) as Map<string, number>).get("a")}" }
+        Text { text::{16, white} "bad: {to_num("x") as Result<number, string>}" }
         Button { click||bump "bump {n}" }
     }
 }

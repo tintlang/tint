@@ -228,6 +228,10 @@ impl SemanticChecker {
                 let source = self.infer_expr(expr);
                 let target = self.ast_type(Some(ty));
                 let source_now = self.shallow(&source);
+                // `f(..) as T`: the type a host function (JS, Rust) returns.
+                if matches!(source_now, Type::Unknown) && matches!(&**expr, Expr::Call { .. }) {
+                    return target;
+                }
                 if let Type::Var(_) = source_now {
                     self.unify(&Type::Number, &source_now);
                 }
@@ -273,7 +277,7 @@ impl SemanticChecker {
                 self.require_compatible(&then_ty, &else_ty, else_.span);
                 then_ty
             }
-            Expr::Lambda { params, body, span } => {
+            Expr::Lambda { params, body, span, .. } => {
                 let (hint_ret, hint_params) = match expected.map(|t| self.shallow(t)) {
                     Some(Type::Fn(ret, hint)) if hint.len() == params.len() => (Some(*ret), Some(hint)),
                     _ => (None, None),
@@ -874,6 +878,17 @@ impl SemanticChecker {
                 Type::Generic("Result".into(), vec![Type::Number, Type::String]),
             ),
             "read_line" | "read_key" => (Some(vec![]), Type::String),
+            "storage_get_or" => (Some(vec![Type::String, Type::String]), Type::String),
+            "storage_set" => (Some(vec![Type::String, Type::String]), Type::Unit),
+            "storage_remove" => (Some(vec![Type::String]), Type::Unit),
+            "now_ms" => (Some(vec![]), Type::Number),
+            "line_count" | "max_line_len" => (Some(vec![Type::String]), Type::Number),
+            "line_numbers" => (Some(vec![Type::String]), Type::String),
+            "tint_highlight" => (
+                Some(vec![Type::String]),
+                Type::Array(Box::new(Type::Array(Box::new(Type::String)))),
+            ),
+            "http_get" => (Some(vec![Type::String]), Type::Number),
             "print" | "println" | "log" | "dbg" | "debug" | "error" => (None, Type::Unit),
             _ => return None,
         };

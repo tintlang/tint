@@ -358,3 +358,71 @@ fn panic_message(panic: Box<dyn std::any::Any + Send>) -> String {
         .unwrap_or_else(|| "unknown panic".to_string());
     format!("runtime panic: {}", msg)
 }
+
+/// What a DOM host needs from a running UI program. `UiSession` (the
+/// interpreter) is one; a compiled WebAssembly app is another.
+pub trait SessionBackend {
+    fn render(&mut self) -> Result<Vec<Rc<UiRenderNode>>, String>;
+    fn dispatch_with_args(&mut self, handler: &str, args: &[EvalValue]) -> Result<Vec<Rc<UiRenderNode>>, String>;
+    fn call_value(&mut self, function: EvalValue, args: &[EvalValue]) -> Result<Vec<Rc<UiRenderNode>>, String>;
+    /// A host function answered a callback it kept (compiled apps).
+    fn answer_callback(&mut self, _id: u32, _ok: bool, _message: &str) -> Result<Vec<Rc<UiRenderNode>>, String> {
+        Err("this session has no callbacks".to_string())
+    }
+    fn set_viewport_width(&mut self, width: f64);
+    fn set_route_path(&mut self, path: &str);
+    fn app_meta(&self) -> &tint_ast::AppMeta;
+    fn page_style(&self) -> Vec<(String, String)>;
+    fn app_css(&self) -> String;
+    fn switch_ui_fn(&mut self, name: &str) -> Result<(), String>;
+    fn storage_snapshot(&self) -> HashMap<String, String>;
+    fn hydrate_storage(&mut self, values: HashMap<String, String>);
+    fn take_http_requests(&mut self) -> Vec<HttpRequest>;
+
+    fn dispatch(&mut self, handler: &str) -> Result<Vec<Rc<UiRenderNode>>, String> {
+        self.dispatch_with_args(handler, &[])
+    }
+
+    fn route_for_path(&self, path: &str) -> Option<tint_ast::RouteDecl> {
+        self.app_meta().routes.iter().find(|route| route.path == path).cloned()
+    }
+}
+
+impl SessionBackend for UiSession {
+    fn render(&mut self) -> Result<Vec<Rc<UiRenderNode>>, String> {
+        UiSession::render(self)
+    }
+    fn dispatch_with_args(&mut self, handler: &str, args: &[EvalValue]) -> Result<Vec<Rc<UiRenderNode>>, String> {
+        UiSession::dispatch_with_args(self, handler, args)
+    }
+    fn call_value(&mut self, function: EvalValue, args: &[EvalValue]) -> Result<Vec<Rc<UiRenderNode>>, String> {
+        UiSession::call_value(self, function, args)
+    }
+    fn set_viewport_width(&mut self, width: f64) {
+        UiSession::set_viewport_width(self, width)
+    }
+    fn set_route_path(&mut self, path: &str) {
+        UiSession::set_route_path(self, path)
+    }
+    fn app_meta(&self) -> &tint_ast::AppMeta {
+        UiSession::app_meta(self)
+    }
+    fn page_style(&self) -> Vec<(String, String)> {
+        UiSession::page_style(self)
+    }
+    fn app_css(&self) -> String {
+        UiSession::app_css(self)
+    }
+    fn switch_ui_fn(&mut self, name: &str) -> Result<(), String> {
+        UiSession::switch_ui_fn(self, name)
+    }
+    fn storage_snapshot(&self) -> HashMap<String, String> {
+        UiSession::storage_snapshot(self)
+    }
+    fn hydrate_storage(&mut self, values: HashMap<String, String>) {
+        UiSession::hydrate_storage(self, values)
+    }
+    fn take_http_requests(&mut self) -> Vec<HttpRequest> {
+        UiSession::take_http_requests(self)
+    }
+}

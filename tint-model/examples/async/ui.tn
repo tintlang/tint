@@ -8,15 +8,15 @@ app {
 async fn run() {
     status = "waiting..."
     await wait(400)
-    let squared = await slow_square(7)
+    let squared: number = await slow_square(7)
     status = "squared: {squared}"
-    let bad = await slow_square(-1)
+    let bad: number = await slow_square(-1)
     status = "{status}, then: {bad}"
 }
 
 // Without `await`: pass the callback yourself.
 fn run_plain() {
-    wait(200, |r| { status = "plain callback got {r}" })
+    wait(200, |r: Result<number, string>| { status = "plain callback got {r}" })
 }
 
 ui fn App() {

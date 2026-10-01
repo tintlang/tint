@@ -19,6 +19,8 @@
 // so the sandbox UI can always render *something* -- a value, an error
 // with a span to highlight, or both.
 
+#![cfg_attr(not(feature = "interpreter"), allow(dead_code))]
+
 #[cfg(feature = "sandbox-api")]
 use serde::Serialize;
 #[cfg(feature = "sandbox-api")]

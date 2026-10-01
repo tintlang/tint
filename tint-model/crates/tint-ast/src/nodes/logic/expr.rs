@@ -114,6 +114,8 @@ pub enum Expr {
 
     Lambda {
         params: Vec<String>,
+        /// Written types of the parameters (`|r: Result<number, string>|`); empty when none is written.
+        param_types: Vec<Option<Type>>,
         body: Box<Expr>,
         span: Span,
     },

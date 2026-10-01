@@ -5,6 +5,10 @@ use super::analysis::builtin_mutator;
 use super::*;
 use tint_ast::Expr;
 
+fn tint_ir_json_ok(l: &Lowerer, reg: Reg) -> bool {
+    crate::typed::json::marshalable(&l.module.types, l.reg_ty(reg))
+}
+
 const BUILTIN_ENUMS: [(&str, [&str; 2]); 2] =
     [("Option", ["None", "Some"]), ("Result", ["Ok", "Err"])];
 
@@ -47,6 +51,7 @@ impl<'a> Lowerer<'a> {
         span: Span,
     ) -> LResult<Reg> {
         // Enum constructors: `Enum::Variant(..)` and a bare `Some(..)`.
+        let discard = std::mem::take(&mut self.discard);
         let variant = match target {
             Expr::Namespace { base, item, .. } => match base.as_ref() {
                 Expr::Ident(enum_name, _) if self.has_variant(enum_name, item) => {
@@ -149,6 +154,9 @@ impl<'a> Lowerer<'a> {
             }
             if let Some(result) = self.builtin_call(name, args, span)? {
                 return Ok(result);
+            }
+            if self.is_host_fn(name) {
+                return self.native_call(name, args, hint, discard, span);
             }
             return self.err(
                 Some(span),
@@ -275,6 +283,116 @@ impl<'a> Lowerer<'a> {
         Ok(dst)
     }
 
+    /// A name that is neither declared in the program nor built in: a function
+    /// the page provides (`app { js::".." }`, `rs::".."`).
+    pub(super) fn is_host_fn(&mut self, name: &str) -> bool {
+        self.resolve_local(name).is_none() && !self.globals.contains_key(name) && !self.fns.contains_key(name)
+    }
+
+    /// A call of a host function. Arguments and result cross as JSON, so their
+    /// types must be known: the result has the type the context asks for (a
+    /// declared `let x: T`, a typed parameter), `()` when the value is dropped,
+    /// and is an error otherwise. A trailing closure is the callback the host
+    /// calls with a `Result` (this is what `await` turns into).
+    fn native_call(&mut self, name: &str, args: &[Expr], hint: Option<TyId>, discard: bool, span: Span) -> LResult<Reg> {
+        let index = match self.module.natives.iter().position(|n| n == name) {
+            Some(i) => i as u32,
+            None => {
+                self.module.natives.push(name.to_string());
+                (self.module.natives.len() - 1) as u32
+            }
+        };
+        let mut regs = Vec::new();
+        let mut callback = false;
+        for (i, arg) in args.iter().enumerate() {
+            let value = tint_ast::arg_value(arg);
+            if i + 1 == args.len() {
+                if let Expr::Lambda { params, param_types, body, span: lspan } = value {
+                    let unit = self.unit_ty();
+                    let text = self.str_ty();
+                    // The callback receives `Result<T, string>`; `T` is what the host function returns.
+                    let result_ty = match param_types.first() {
+                        Some(Some(written)) => {
+                            let ty = self.ast_ty(written)?;
+                            let ok = matches!(self.tk(ty), TyKind::Adt(a)
+                                if self.module.types.adt(a).base == "Result"
+                                    && self.module.types.adt(a).args.len() == 2
+                                    && self.module.types.adt(a).args[1] == text);
+                            if !ok || params.len() != 1 {
+                                return self.err(
+                                    Some(*lspan),
+                                    format!("the callback of the host function `{name}` takes one parameter of the type `Result<T, string>`"),
+                                );
+                            }
+                            ty
+                        }
+                        _ => {
+                            if params.len() != 1 || !self.lambda_ignores(params.first(), body) {
+                                return self.err(
+                                    Some(*lspan),
+                                    format!(
+                                        "the type of the value the host function `{name}` returns is not known: write the callback's parameter \
+                                         as `|r: Result<number, string>|` (or `let r: number = await {name}(..)`)"
+                                    ),
+                                );
+                            }
+                            let result = self.adt_instance("Result", vec![unit, text])?;
+                            self.module.types.adt_ty(result)
+                        }
+                    };
+                    if !crate::typed::json::marshalable(&self.module.types, result_ty) {
+                        return self.err(Some(*lspan), format!("the callback of `{name}` has a type that cannot cross to the host"));
+                    }
+                    let cb_ty = self.module.types.func(vec![result_ty], unit);
+                    regs.push(self.lambda_of_type(cb_ty, params, body, *lspan)?);
+                    callback = true;
+                    continue;
+                }
+            }
+            let reg = self.expr(value, None)?;
+            if !tint_ir_json_ok(self, reg) {
+                return self.err(
+                    Some(span),
+                    format!("argument {} of the host function `{name}` ({}) cannot be passed to the host", i + 1, self.show(self.reg_ty(reg))),
+                );
+            }
+            regs.push(reg);
+        }
+        let ret = if callback {
+            self.unit_ty()
+        } else if let Some(h) = hint {
+            if !crate::typed::json::marshalable(&self.module.types, h) {
+                return self.err(Some(span), format!("the result of the host function `{name}` cannot have the type {}", self.show(h)));
+            }
+            h
+        } else if discard {
+            self.unit_ty()
+        } else {
+            return self.err(
+                Some(span),
+                format!(
+                    "the result of the host function `{name}` has no known type: the host functions of a page have no declared types yet; \
+                     write the type where the value is used (`let x: number = {name}(..)`, `{name}(..) as number`) or drop the result"
+                ),
+            );
+        };
+        let dst = self.new_reg(ret);
+        self.emit(Instr::Host { dst, f: HostFn::Native(index), args: regs });
+        Ok(dst)
+    }
+
+    /// The callback does not read its parameter (`_`, or no use of the name).
+    fn lambda_ignores(&self, param: Option<&String>, body: &Expr) -> bool {
+        let Some(param) = param else { return true };
+        if param == "_" {
+            return true;
+        }
+        !super::analysis::walk_expr(body, &mut |n| match n {
+            super::analysis::Node::Expr(Expr::Ident(name, _)) => name == param,
+            _ => false,
+        })
+    }
+
     fn builtin_call(&mut self, name: &str, args: &[Expr], span: Span) -> LResult<Option<Reg>> {
         let num = self.num_ty(NumKind::Num);
         let arity = |this: &Self, n: usize| -> LResult<()> {
@@ -329,6 +447,39 @@ impl<'a> Lowerer<'a> {
                 }
                 let ty = self.unit_ty();
                 let dst = self.new_reg(ty);
+                self.emit(Instr::Host { dst, f, args: regs });
+                return Ok(Some(dst));
+            }
+            "line_count" | "max_line_len" | "line_numbers" | "tint_highlight" => {
+                arity(self, 1)?;
+                let text = self.str_ty();
+                let src = self.expr_as(&args[0], text)?;
+                let (f, ret) = match name {
+                    "line_count" => (RtFn::LineCount, num),
+                    "max_line_len" => (RtFn::MaxLineLen, num),
+                    "line_numbers" => (RtFn::LineNumbers, text),
+                    _ => {
+                        let row = self.module.types.list(text);
+                        (RtFn::Highlight, self.module.types.list(row))
+                    }
+                };
+                return Ok(Some(self.rt(f, vec![src], ret)));
+            }
+            "storage_get_or" | "storage_set" | "storage_remove" | "now_ms" | "http_get" => {
+                let (f, n, ret) = match name {
+                    "storage_get_or" => (HostFn::StorageGetOr, 2, self.str_ty()),
+                    "storage_set" => (HostFn::StorageSet, 2, self.unit_ty()),
+                    "storage_remove" => (HostFn::StorageRemove, 1, self.unit_ty()),
+                    "now_ms" => (HostFn::NowMs, 0, num),
+                    _ => (HostFn::HttpGet, 1, num),
+                };
+                arity(self, n)?;
+                let text = self.str_ty();
+                let mut regs = Vec::new();
+                for arg in args {
+                    regs.push(self.expr_as(arg, text)?);
+                }
+                let dst = self.new_reg(ret);
                 self.emit(Instr::Host { dst, f, args: regs });
                 return Ok(Some(dst));
             }

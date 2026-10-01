@@ -41,10 +41,15 @@ TintVM executes TintIR and owns the current runtime behavior: logic evaluation,
 UI state, layout/style resolution, and event dispatch. It runs natively or
 through WASM in the browser.
 
+`tint build` goes further: it compiles TintIR to a WebAssembly module (`tint-wasmgen`)
+that the page loads next to a small runtime (`tint-wasmrt`: heap, strings, lists, UI
+event buffer; contract in `tint-wasmabi`). That page contains no parser, checker or
+interpreter. `tint dev`, the sandbox and `Preview` still run TintVM through the
+prebuilt runtime described next.
+
 The browser package ships one prebuilt `tint-runtime.wasm`. Application authors
 provide Tint source or a serialized Tint program; they do not compile WASM
-themselves, and a Tint program is not turned into its own `.wasm` module: the
-runtime (TintVM) is what is compiled to WASM, and it executes the program. Development can load source directly, while production tooling can
+themselves. Development can load source directly, while production tooling can
 load the versioned program format through the same VM and session API.
 
 **TintUI** lays out and renders the declarative tree: named nodes, text, layout,
@@ -78,7 +83,7 @@ resolved `layout`/`paint`/`motion` styles, and binds named event attributes.
 The browser package uses WASM for Tint execution, JavaScript only for the
 CodeMirror host and DOM integration, and CSS for the surrounding workbench.
 The current public runtime does not promise GPU isolation, FFI permissions,
-WebGPU rendering, or a standalone embedded-WASM HTML artifact.
+WebGPU rendering.
 
 Native Rust integration is available through the runtime's registered native
 functions. The exact API is implemented in the Rust crates and is covered by
@@ -87,5 +92,5 @@ the native function tests.
 ## Summary
 
 Tint currently provides a Rust-implemented parser/runtime, a declarative UI
-model, persistent UI sessions, direct DOM rendering, native tooling, and a WASM
-browser sandbox. GPU/WebGPU, async, and resource features remain future work.
+model, persistent UI sessions, direct DOM rendering, native tooling, a WASM
+browser sandbox, and a compiler from Tint to WebAssembly (`tint build`). GPU/WebGPU, async, and resource features remain future work.

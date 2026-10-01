@@ -22,11 +22,21 @@ impl Hasher for FxHasher {
     fn write_u8(&mut self, i: u8) {
         self.0 = (self.0.rotate_left(5) ^ i as u64).wrapping_mul(0x517c_c1b7_2722_0a95);
     }
+    fn write_u32(&mut self, i: u32) {
+        self.write_u64(i as u64);
+    }
+    fn write_u64(&mut self, i: u64) {
+        self.0 = (self.0.rotate_left(5) ^ i).wrapping_mul(0x517c_c1b7_2722_0a95);
+    }
+    fn write_usize(&mut self, i: usize) {
+        self.write_u64(i as u64);
+    }
     fn finish(&self) -> u64 {
         self.0
     }
 }
 
+pub type BuildFx = BuildHasherDefault<FxHasher>;
 pub type HashMap<K, V> = StdHashMap<K, V, BuildHasherDefault<FxHasher>>;
 
 #[derive(Debug, Default)]

@@ -104,7 +104,10 @@ impl<'a> Lowerer<'a> {
                 Ok(())
             }
             Stmt::Expr(e) => {
-                self.expr(e, None)?;
+                self.discard = true;
+                let r = self.expr(e, None);
+                self.discard = false;
+                r?;
                 Ok(())
             }
             Stmt::If {

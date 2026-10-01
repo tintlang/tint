@@ -16,13 +16,15 @@ use web_sys::{Document, Element};
 
 use tint_runtime::ui::render::UiRenderNode;
 use tint_runtime::ui::style::breakpoint_threshold;
+use tint_runtime::ui_session::SessionBackend;
+#[cfg(feature = "interpreter")]
 use tint_runtime::ui_session::UiSession as InnerSession;
 
 /// Shared state a click/hover closure needs: the live session (`state`
 /// lives inside it) and where in the DOM to rebuild. Cheap to clone
 /// (it's an `Rc`) so every closure can hold its own copy.
 struct Shared {
-    session: RefCell<InnerSession>,
+    session: RefCell<Box<dyn SessionBackend>>,
     container_id: String,
     /// Handle from `window.setTimeout`, used to debounce the `resize`
     /// listener bound in `bind_resize_listener` -- a resize storm
@@ -104,7 +106,10 @@ pub struct DomSession {
     init_error: Option<String>,
 }
 
+#[cfg(feature = "interpreter")]
 include!("interop.rs");
 include!("session.rs");
 include!("helpers.rs");
 include!("render.rs");
+#[cfg(all(feature = "compiled", target_arch = "wasm32"))]
+include!("compiled.rs");

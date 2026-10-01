@@ -1,0 +1,57 @@
+struct Row { id: number, label: string }
+
+fn build(n: number, from: number) {
+    let mut out: Vec<Row> = []
+    for i in 0..n { out.push(Row { id: from + i, label: "row {from + i} label" }) }
+    out
+}
+fn row_bg(id: number, sel: number) -> string { if id == sel { "#334" } else { "#111" } }
+fn create1k() { rows = build(1000, 0); selected = -1 }
+fn create10k() { rows = build(10000, 0); selected = -1 }
+fn select5() { selected = 5 }
+fn select9() { selected = 9 }
+fn update10th() {
+    let mut i = 0
+    while i < rows.len() {
+        rows[i].label = "{rows[i].label} !!!"
+        i = i + 10
+    }
+}
+fn swap() {
+    let a = rows[1]
+    rows[1] = rows[rows.len() - 2]
+    rows[rows.len() - 2] = a
+}
+fn remove5() { rows.remove(5) }
+fn append1k() {
+    let more = build(1000, rows.len())
+    for r in more { rows.push(r) }
+}
+fn clear() { rows = [] }
+
+ui fn App() {
+    state rows = build(0, 0)
+    state selected = -1
+    Column {
+        Button { click||create1k "create1k" }
+        Button { click||create10k "create10k" }
+        Button { click||select5 "select5" }
+        Button { click||select9 "select9" }
+        Button { click||update10th "update" }
+        Button { click||swap "swap" }
+        Button { click||remove5 "remove" }
+        Button { click||append1k "append" }
+        Button { click||clear "clear" }
+        Table {
+            for{r in rows}
+            Row {
+                key::{r.id}
+                direction::row
+                padding::4
+                background::{row_bg(r.id, selected)}
+                Text { "{r.id}" }
+                Text { "{r.label}" }
+            }
+        }
+    }
+}

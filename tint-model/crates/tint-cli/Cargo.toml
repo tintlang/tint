@@ -30,3 +30,5 @@ tint-ir = { path = "../tint-ir" }
 base64 = "0.22"
 crossterm = "0.28"
 flate2 = "1"
+tint-wasmgen = { path = "../tint-wasmgen" }
+serde_json = "1"

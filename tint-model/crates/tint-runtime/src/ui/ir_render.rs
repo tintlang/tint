@@ -11,7 +11,8 @@
 use super::builder::helpers::*;
 use super::render::{to_render_tree, UiRenderNode};
 use super::tree::UiTree;
-use std::collections::HashMap;
+use crate::scope::HashMap;
+use std::collections::HashMap as StdMap;
 use std::rc::Rc;
 use tint_ast::{UiModifier, UiModifierValue};
 use tint_evaluator::Value as EvalValue;
@@ -57,7 +58,7 @@ pub struct IrRenderer {
     /// Elements whose look does not depend on run-time values, resolved once
     /// per (template, tokens): only their children differ between uses.
     protos: HashMap<(u32, u64), UiRenderNode>,
-    tokens: HashMap<String, UiModifierValue>,
+    tokens: StdMap<String, UiModifierValue>,
     tokens_hash: u64,
 }
 
@@ -73,6 +74,7 @@ impl IrRenderer {
         events: &[UiEvent],
     ) -> Vec<Rc<UiRenderNode>> {
         self.prev = std::mem::take(&mut self.cur);
+        self.cur.reserve(self.prev.len());
         self.tokens.clear();
         self.tokens_hash = 0;
         let mut stack: Vec<Frame> = vec![Frame {
@@ -214,7 +216,8 @@ impl IrRenderer {
         let mut tree = self.scratch.take().unwrap_or_else(UiTree::empty);
         tree.nodes.clear();
         let mut by_expr: Vec<(usize, EvalValue)> = Vec::new();
-        let exprs = modifier_exprs(&template.modifiers);
+        let mut exprs = modifier_exprs(&template.modifiers);
+        exprs.extend(tint_ir::typed::ui::attr_exprs(&template.attributes));
         let mut next = frame.values.iter();
         for (expr, slot) in exprs.iter().zip(&template.slots) {
             if *slot == UiSlot::Unused {
@@ -240,6 +243,8 @@ impl IrRenderer {
             &self.tokens,
         );
         let attributes = &template.attributes;
+        apply_slot_attrs(&mut tree, id, attributes, &lookup);
+        apply_slot_component(&mut tree, id, attributes, &lookup);
         apply_events(&mut tree, id, attributes);
         apply_svg(&mut tree, id, attributes);
         apply_route(&mut tree, id, attributes);
@@ -280,7 +285,7 @@ impl IrRenderer {
     }
 }
 
-fn hash_tokens(tokens: &HashMap<String, UiModifierValue>) -> u64 {
+fn hash_tokens(tokens: &StdMap<String, UiModifierValue>) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut keys: Vec<&String> = tokens.keys().collect();
     keys.sort();
@@ -294,3 +299,58 @@ fn hash_tokens(tokens: &HashMap<String, UiModifierValue>) -> u64 {
 
 #[allow(dead_code)]
 fn _unused(_: &[UiModifier]) {}
+
+/// `placeholder||"text"`, `disabled||{busy}` ...: plain HTML attributes (see `apply_html_attrs`); an
+/// expression's value is the slot's. A bool is present (empty) when true and left out when false.
+fn apply_slot_attrs(
+    tree: &mut UiTree,
+    id: crate::ui::tree::UiNodeId,
+    attributes: &[tint_ast::UiAttribute],
+    lookup: &dyn Fn(&tint_ast::Expr) -> EvalValue,
+) {
+    use tint_ast::UiAttrValue;
+    let mut out: Vec<(String, String)> = Vec::new();
+    for attr in attributes {
+        if attr.name == "props" || !tint_ir::typed::ui::VALUE_ATTRS.contains(&attr.name.as_str()) {
+            continue;
+        }
+        let value = match &attr.value {
+            UiAttrValue::Literal(s) => Some(EvalValue::String(s.clone())),
+            UiAttrValue::Expr(expr) => Some(lookup(expr)),
+            UiAttrValue::Ident(name) if name == "true" => Some(EvalValue::Bool(true)),
+            UiAttrValue::Ident(name) if name == "false" => Some(EvalValue::Bool(false)),
+            _ => None,
+        };
+        match value {
+            Some(EvalValue::Bool(true)) => out.push((attr.name.clone(), String::new())),
+            Some(EvalValue::Bool(false)) | None => {}
+            Some(EvalValue::String(s)) => out.push((attr.name.clone(), s)),
+            Some(other) => out.push((attr.name.clone(), other.to_string())),
+        }
+    }
+    out.sort();
+    tree.set_attrs(id, out);
+}
+
+/// `component||"Name"` with `props||{..}`: the props arrive as JSON text already.
+fn apply_slot_component(
+    tree: &mut UiTree,
+    id: crate::ui::tree::UiNodeId,
+    attributes: &[tint_ast::UiAttribute],
+    lookup: &dyn Fn(&tint_ast::Expr) -> EvalValue,
+) {
+    use tint_ast::UiAttrValue;
+    let name = attributes.iter().find_map(|a| match (&*a.name, &a.value) {
+        ("component", UiAttrValue::Literal(s)) => Some(s.clone()),
+        _ => None,
+    });
+    let Some(name) = name else { return };
+    let props = attributes.iter().find_map(|a| match (&*a.name, &a.value) {
+        ("props", UiAttrValue::Expr(e)) => match lookup(e) {
+            EvalValue::String(json) => Some(json),
+            _ => None,
+        },
+        _ => None,
+    });
+    tree.set_component(id, Some(name), props);
+}

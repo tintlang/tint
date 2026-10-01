@@ -8,15 +8,23 @@ license.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [features]
-default = ["bytecode", "sandbox-api"]
+default = ["interpreter", "bytecode", "sandbox-api"]
 # check/run/REPL/tree-as-data entry points for the sandbox. The standalone page
 # is built without them.
-sandbox-api = []
+sandbox-api = ["interpreter"]
+# The tree-walking interpreter: `new DomSession(source, ..)`, `Preview`, the sandbox. A page
+# of an app compiled to WebAssembly that needs none of it is built without (`compiled` only).
+interpreter = []
+# Drives apps compiled to WebAssembly (`tint build`): the runtime of `tint-wasmrt` is
+# linked into this module.
+compiled = ["dep:tint-wasmrt", "dep:tint-ir"]
 # `compile_bytecode` / `from_bytecode`. The standalone page embeds a runtime built
 # with --no-default-features (see sandbox/build-wasm.sh): ~25% smaller.
-bytecode = ["sandbox-api", "tint-runtime/bytecode", "tint-runtime/semantic-check", "dep:tint-semantics"]
+bytecode = ["interpreter", "sandbox-api", "tint-runtime/bytecode", "tint-runtime/semantic-check", "dep:tint-semantics"]
 
 [dependencies]
+tint-wasmrt = { path = "../tint-wasmrt", features = ["dom"], optional = true }
+tint-ir = { path = "../tint-ir", optional = true }
 tint-lexer = { path = "../tint-lexer" }
 tint-ast = { path = "../tint-ast" }
 tint-parser = { path = "../tint-parser" }
@@ -27,6 +35,7 @@ wasm-bindgen = "0.2"
 js-sys = "0.3"
 serde = { version = "1.0", features = ["derive"] }
 serde-wasm-bindgen = "0.6"
+serde_json = "1.0"
 web-sys = { version = "0.3", features = [
     "Performance",
     "Window",

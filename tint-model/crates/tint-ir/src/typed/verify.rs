@@ -362,8 +362,15 @@ impl<'m> Verifier<'m> {
                     HostFn::Print | HostFn::Println | HostFn::Dbg | HostFn::Error => {
                         matches!(self.kind(self.ty(*dst)), TyKind::Unit)
                     }
-                    HostFn::ReadLine | HostFn::ReadKey => {
+                    HostFn::ReadLine | HostFn::ReadKey | HostFn::StorageGetOr => {
                         matches!(self.kind(self.ty(*dst)), TyKind::Str)
+                    }
+                    HostFn::StorageSet | HostFn::StorageRemove => {
+                        matches!(self.kind(self.ty(*dst)), TyKind::Unit)
+                    }
+                    HostFn::Native(_) => true,
+                    HostFn::NowMs | HostFn::HttpGet => {
+                        matches!(self.kind(self.ty(*dst)), TyKind::Num(_))
                     }
                 };
                 if want {
@@ -631,6 +638,28 @@ impl<'m> Verifier<'m> {
                 ret(
                     &|k| matches!(k, TyKind::List(t) if matches!(types.kind(*t), TyKind::Str)),
                     "[string]",
+                )
+            }
+            RtFn::LineCount | RtFn::MaxLineLen => {
+                count(&[1])?;
+                need(strs(args[0]), "string expected")?;
+                ret(&|k| matches!(k, TyKind::Num(NumKind::Num)), "number")
+            }
+            RtFn::LineNumbers => {
+                count(&[1])?;
+                need(strs(args[0]), "string expected")?;
+                ret(&|k| matches!(k, TyKind::Str), "a string")
+            }
+            RtFn::PropsJson => {
+                count(&[1])?;
+                ret(&|k| matches!(k, TyKind::Str), "a string")
+            }
+            RtFn::Highlight => {
+                count(&[1])?;
+                need(strs(args[0]), "string expected")?;
+                ret(
+                    &|k| matches!(k, TyKind::List(t) if matches!(types.kind(*t), TyKind::List(u) if matches!(types.kind(*u), TyKind::Str))),
+                    "[[string]]",
                 )
             }
             RtFn::StrReplace => {

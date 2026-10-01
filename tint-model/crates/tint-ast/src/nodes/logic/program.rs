@@ -8,7 +8,7 @@ pub struct Program {
 }
 
 /// Page metadata from `app { title::"...", lang::"..." }`.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct AppMeta {
     pub title: Option<String>,
     pub lang: Option<String>,
@@ -38,7 +38,7 @@ pub struct AppMeta {
     pub rs: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct RouteDecl {
     pub ui_fn: String,
     pub path: String,

@@ -6,21 +6,48 @@ use crate::support::{require_arg, semantic_check};
 
 const TINT_WASM_JS: &str = include_str!("../embedded/tint_wasm.js");
 const TINT_WASM_BG: &[u8] = include_bytes!("../embedded/tint_wasm_bg.wasm.gz");
+// Runtimes of compiled apps (scripts/build-cli-runtimes.sh).
+const RT_DOM_JS: &str = include_str!("../embedded/rt_dom.js");
+const RT_DOM_WASM: &[u8] = include_bytes!("../embedded/rt_dom_bg.wasm.gz");
+const RT_DOM_FULL_JS: &str = include_str!("../embedded/rt_dom_full.js");
+const RT_DOM_FULL_WASM: &[u8] = include_bytes!("../embedded/rt_dom_full_bg.wasm.gz");
 
-pub(crate) fn command(args: &[String]) {
-    let path = require_arg(args.get(2), "tint build <file.tn> [ui_fn] -o <output.html>");
-    let (entry, output) = parse_options(args);
-    build_file(path, entry.as_deref(), output.as_deref());
+const USAGE: &str = "tint build <file.tn> [ui_fn] [-o <output.html>] [--engine wasm|interpreter]";
+
+/// How the page runs the program.
+#[derive(Clone, Copy, PartialEq)]
+enum Engine {
+    /// The program compiled to WebAssembly (default).
+    Wasm,
+    /// The source embedded and run by the interpreter in the page.
+    Interpreter,
 }
 
-fn parse_options(args: &[String]) -> (Option<String>, Option<String>) {
+pub(crate) fn command(args: &[String]) {
+    let path = require_arg(args.get(2), USAGE);
+    let (entry, output, engine) = parse_options(args);
+    build_file(path, entry.as_deref(), output.as_deref(), engine);
+}
+
+fn parse_options(args: &[String]) -> (Option<String>, Option<String>, Engine) {
     let mut entry = None;
     let mut output = None;
+    let mut engine = Engine::Wasm;
     let mut index = 3;
 
     while index < args.len() {
         if args[index] == "-o" {
             output = args.get(index + 1).cloned();
+            index += 2;
+        } else if args[index] == "--engine" {
+            engine = match args.get(index + 1).map(String::as_str) {
+                Some("wasm") => Engine::Wasm,
+                Some("interpreter") => Engine::Interpreter,
+                _ => {
+                    eprintln!("usage: {USAGE}");
+                    std::process::exit(1);
+                }
+            };
             index += 2;
         } else {
             entry = Some(args[index].clone());
@@ -28,7 +55,7 @@ fn parse_options(args: &[String]) -> (Option<String>, Option<String>) {
         }
     }
 
-    (entry, output)
+    (entry, output, engine)
 }
 
 /// The `ui fn` to mount when the user didn't name one: `App` if the entry
@@ -50,7 +77,7 @@ pub(crate) fn infer_entry(entry_source: &str) -> String {
     }
 }
 
-fn build_file(path: &str, entry: Option<&str>, output: Option<&str>) {
+fn build_file(path: &str, entry: Option<&str>, output: Option<&str>, engine: Engine) {
     // Loading (not just parsing) validates `mod`/`use` the same way `run`/
     // `check` do, and gives us every reachable file's raw source to embed
     // -- see `standalone_html`'s doc comment on why plain concatenation of
@@ -84,15 +111,27 @@ fn build_file(path: &str, entry: Option<&str>, output: Option<&str>) {
         eprintln!("{}", error);
         std::process::exit(1);
     });
-    if let Err(error) = fs::write(
-        &output,
-        standalone_html(&combined_source, entry, &meta, &inline),
-    ) {
+    let html = match engine {
+        Engine::Interpreter => standalone_html(&combined_source, entry, &meta, &inline),
+        Engine::Wasm => match crate::wasm_app::compile(&loaded) {
+            Ok(app) => {
+                // A page may start from a `ui fn` the entry file does not declare (routes).
+                let start = if app.ui_fns.iter().any(|name| name == entry) { entry } else { app.ui_fns[0].as_str() };
+                println!("compiled: {} KB of WebAssembly", app.wasm.len() / 1024);
+                compiled_html(&app, start, &meta, &inline)
+            }
+            Err(message) => {
+                eprintln!("error: {message}");
+                std::process::exit(1);
+            }
+        },
+    };
+    if let Err(error) = fs::write(&output, html) {
         eprintln!("error writing '{}': {}", output, error);
         std::process::exit(1);
     }
 
-    println!("built: {} (entry: `ui fn {}`)", output, entry);
+    println!("built: {}", output);
 }
 
 /// File contents named by `app { js::"..." css::"..." }`, embedded into the page.
@@ -162,6 +201,135 @@ pub(crate) fn standalone_html(
     meta: &tint_ast::AppMeta,
     inline: &InlineAssets,
 ) -> String {
+    let source = source
+        .replace('\\', "\\\\")
+        .replace('`', "\\`")
+        .replace("${", "\\${")
+        // A `</script>` inside the source (say, an embedded HTML sample) must
+        // not end the page's own script element.
+        .replace("</", "<\\/");
+    let wasm = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, TINT_WASM_BG);
+    let script = format!(
+        r#"{TINT_WASM_JS}
+        const SOURCE = `{source}`;
+        const ENTRY = "{entry}";
+        {PAGE_HELPERS}
+        const WASM_BASE64 = "{wasm}";
+        const app = document.getElementById('app');
+        try {{
+            initSync({{ module: await gunzip(WASM_BASE64) }});
+            app.className = '';
+            app.textContent = '';
+            const natives = await loadNatives();
+            const session = new DomSession(SOURCE, ENTRY, 'app', natives);
+            const error = session.rerender();
+            if (error) {{
+                app.innerHTML = '<div class="error"></div>';
+                app.firstChild.textContent = 'Error rendering `ui fn {entry}`: ' + error;
+            }}
+        }} catch (error) {{
+            app.innerHTML = '<div class="error"></div>';
+            app.firstChild.textContent = 'Error loading Tint runtime: ' + error.message;
+        }}"#
+    );
+    page(meta, inline, &script)
+}
+
+/// The page of a program compiled to WebAssembly: the runtime (`tint-wasmrt` with the DOM layer),
+/// the app module, and the glue that connects them.
+pub(crate) fn compiled_html(
+    app: &crate::wasm_app::CompiledApp,
+    entry: &str,
+    meta: &tint_ast::AppMeta,
+    inline: &InlineAssets,
+) -> String {
+    let (glue, runtime) = if app.needs_interpreter {
+        (RT_DOM_FULL_JS, RT_DOM_FULL_WASM)
+    } else {
+        (RT_DOM_JS, RT_DOM_WASM)
+    };
+    let b64 = |bytes: &[u8]| base64::Engine::encode(&base64::engine::general_purpose::STANDARD, bytes);
+    let runtime = b64(runtime);
+    let app_wasm = b64(&gzip(&app.wasm));
+    let script = format!(
+        r#"{glue}
+        const ENTRY = "{entry}";
+        {PAGE_HELPERS}
+        const RUNTIME_BASE64 = "{runtime}";
+        const APP_BASE64 = "{app_wasm}";
+        const app = document.getElementById('app');
+        try {{
+            // The runtime exports its memory and functions; the app module imports them.
+            const rt = initSync({{ module: await gunzip(RUNTIME_BASE64) }});
+            compiled_prepare(await loadNatives());
+            const {{ instance }} = await WebAssembly.instantiate(await gunzip(APP_BASE64), {{ rt }});
+            app.className = '';
+            app.textContent = '';
+            const session = DomSession.from_compiled(instance.exports, ENTRY, 'app');
+            const error = session.rerender();
+            if (error) {{
+                app.innerHTML = '<div class="error"></div>';
+                app.firstChild.textContent = 'Error rendering `ui fn {entry}`: ' + error;
+            }}
+        }} catch (error) {{
+            app.innerHTML = '<div class="error"></div>';
+            app.firstChild.textContent = 'Error loading Tint app: ' + error.message;
+        }}"#
+    );
+    page(meta, inline, &script)
+}
+
+fn gzip(bytes: &[u8]) -> Vec<u8> {
+    use std::io::Write;
+    let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::best());
+    encoder.write_all(bytes).expect("gzip to memory");
+    encoder.finish().expect("gzip to memory")
+}
+
+/// Shared by both pages: decoding embedded bytes and loading the natives
+/// (`app { js::".." rs::".." }`, available as `USER_JS` / `USER_WASM`).
+const PAGE_HELPERS: &str = r#"
+        function base64ToBytes(b64) {
+            if (Uint8Array.fromBase64) return Uint8Array.fromBase64(b64);
+            const bin = atob(b64);
+            const bytes = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+            return bytes;
+        }
+        async function gunzip(b64) {
+            return new Uint8Array(await new Response(
+                new Blob([base64ToBytes(b64)]).stream().pipeThrough(new DecompressionStream('gzip'))
+            ).arrayBuffer());
+        }
+        // Exported functions of `app { js::"..." }` modules, callable from .tn.
+        async function loadNatives() {
+            const natives = {};
+            if (USER_WASM) {
+                // `rs::` files, compiled to wasm: `__tint_<name>(args)` per export.
+                const url = URL.createObjectURL(new Blob([USER_WASM.glue], { type: 'text/javascript' }));
+                const mod = await import(url);
+                URL.revokeObjectURL(url);
+                mod.initSync({ module: await gunzip(USER_WASM.data) });
+                for (const [name, value] of Object.entries(mod)) {
+                    if (name.startsWith('__tint_') && typeof value === 'function') {
+                        natives[name.slice(7)] = (...args) => value(args);
+                    }
+                }
+            }
+            for (const code of USER_JS) {
+                const url = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
+                const mod = await import(url);
+                URL.revokeObjectURL(url);
+                for (const [name, value] of Object.entries(mod)) {
+                    if (typeof value === 'function') natives[name] = value;
+                }
+            }
+            return natives;
+        }"#;
+
+/// The HTML around a page's script: title, page styles, the user's CSS and the
+/// `USER_JS` / `USER_WASM` data `PAGE_HELPERS` reads.
+fn page(meta: &tint_ast::AppMeta, inline: &InlineAssets, script: &str) -> String {
     let title = meta.title.as_deref().unwrap_or("Tint UI");
     let title = title.replace('&', "&amp;").replace('<', "&lt;");
     let lang = meta.lang.as_deref().unwrap_or("en");
@@ -178,13 +346,6 @@ pub(crate) fn standalone_html(
         " margin: 0;"
     };
     let at_rules = tint_runtime::ui::style::app_at_rules(meta);
-    let source = source
-        .replace('\\', "\\\\")
-        .replace('`', "\\`")
-        .replace("${", "\\${")
-        // A `</script>` inside the source (say, an embedded HTML sample) must
-        // not end the page's own script element.
-        .replace("</", "<\\/");
     let user_css: String = inline
         .css
         .iter()
@@ -199,8 +360,6 @@ pub(crate) fn standalone_html(
         ),
         None => "null".to_string(),
     };
-    let wasm = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, TINT_WASM_BG);
-
 
     format!(
         r#"<!DOCTYPE html>
@@ -221,63 +380,9 @@ pub(crate) fn standalone_html(
 <body>
     <div id="app" class="loading">Loading Tint UI...</div>
     <script type="module">
-{TINT_WASM_JS}
-        const SOURCE = `{source}`;
-        const ENTRY = "{entry}";
         const USER_JS = [{user_js}];
         const USER_WASM = {user_wasm};
-        const WASM_BASE64 = "{wasm}";
-        function base64ToBytes(b64) {{
-            if (Uint8Array.fromBase64) return Uint8Array.fromBase64(b64);
-            const bin = atob(b64);
-            const bytes = new Uint8Array(bin.length);
-            for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-            return bytes;
-        }}
-        const app = document.getElementById('app');
-        try {{
-            // The runtime is embedded gzipped; inflate it before instantiating.
-            const wasmBytes = new Uint8Array(await new Response(
-                new Blob([base64ToBytes(WASM_BASE64)]).stream().pipeThrough(new DecompressionStream('gzip'))
-            ).arrayBuffer());
-            initSync({{ module: wasmBytes }});
-            app.className = '';
-            app.textContent = '';
-            // Exported functions of `app {{ js::"..." }}` modules, callable from .tn.
-            const natives = {{}};
-            if (USER_WASM) {{
-                // `rs::` files, compiled to wasm: `__tint_<name>(args)` per export.
-                const bytes = new Uint8Array(await new Response(
-                    new Blob([base64ToBytes(USER_WASM.data)]).stream().pipeThrough(new DecompressionStream('gzip'))
-                ).arrayBuffer());
-                const url = URL.createObjectURL(new Blob([USER_WASM.glue], {{ type: 'text/javascript' }}));
-                const mod = await import(url);
-                URL.revokeObjectURL(url);
-                mod.initSync({{ module: bytes }});
-                for (const [name, value] of Object.entries(mod)) {{
-                    if (name.startsWith('__tint_') && typeof value === 'function') {{
-                        natives[name.slice(7)] = (...args) => value(args);
-                    }}
-                }}
-            }}
-            for (const code of USER_JS) {{
-                const url = URL.createObjectURL(new Blob([code], {{ type: 'text/javascript' }}));
-                const mod = await import(url);
-                URL.revokeObjectURL(url);
-                for (const [name, value] of Object.entries(mod)) {{
-                    if (typeof value === 'function') natives[name] = value;
-                }}
-            }}
-            const session = new DomSession(SOURCE, ENTRY, 'app', natives);
-            const error = session.rerender();
-            if (error) {{
-                app.innerHTML = '<div class="error"></div>';
-                app.firstChild.textContent = 'Error rendering `ui fn {entry}`: ' + error;
-            }}
-        }} catch (error) {{
-            app.innerHTML = '<div class="error"></div>';
-            app.firstChild.textContent = 'Error loading Tint runtime: ' + error.message;
-        }}
+{script}
     </script>
 </body>
 </html>
@@ -287,7 +392,45 @@ pub(crate) fn standalone_html(
 
 #[cfg(test)]
 mod tests {
-    use super::{standalone_html, InlineAssets};
+    use super::{compiled_html, standalone_html, InlineAssets};
+
+    fn load(name: &str, source: &str) -> crate::module_loader::Loaded {
+        let path = std::env::temp_dir().join(format!("tint_build_test_{}_{name}.tn", std::process::id()));
+        std::fs::write(&path, source).unwrap();
+        let loaded = crate::module_loader::try_load(path.to_str().unwrap()).expect("loads");
+        std::fs::remove_file(&path).ok();
+        loaded
+    }
+
+    #[test]
+    fn default_page_runs_a_compiled_module() {
+        let loaded = load("ok", "fn inc() { n = n + 1 }\nui fn App() { state n = 0\n Button { click||inc \"{n}\" } }");
+        let app = crate::wasm_app::compile(&loaded).expect("compiles");
+        assert!(app.wasm.starts_with(b"\0asm"));
+        assert!(!app.needs_interpreter);
+        let html = compiled_html(&app, "App", &tint_ast::AppMeta::default(), &InlineAssets::default());
+        assert!(html.contains("DomSession.from_compiled") && html.contains("const APP_BASE64"));
+        assert!(!html.contains("new DomSession(SOURCE"));
+    }
+
+    #[test]
+    fn preview_pages_carry_the_interpreter() {
+        let loaded = load("preview", r#"ui fn App() {
+    state s = "x"
+    Column { Preview { entry||"App" "{s}" } }
+}"#);
+        let app = crate::wasm_app::compile(&loaded).expect("compiles");
+        assert!(app.needs_interpreter);
+    }
+
+    #[test]
+    fn unsupported_programs_are_build_errors() {
+        let loaded = load("host", "ui fn App() { state s = fetch_it(1)\n Text { \"{s}\" } }");
+        let message = crate::wasm_app::compile(&loaded).err().expect("must not compile");
+        assert!(message.starts_with("cannot compile to WebAssembly"), "{message}");
+        let no_ui = load("noui", "fn main() { 1 }");
+        assert!(crate::wasm_app::compile(&no_ui).err().unwrap().contains("no `ui fn`"));
+    }
 
     #[test]
     fn embedded_source_cannot_close_the_script_element() {
