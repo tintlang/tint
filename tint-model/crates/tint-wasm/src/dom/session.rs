@@ -196,6 +196,9 @@ impl DomSession {
             Ok(session) => *shared.session.borrow_mut() = session,
             Err(e) => return Some(e),
         }
+        if shared.nested {
+            apply_app_css(&shared, "tint-preview-css");
+        }
         sync_viewport_width(&shared);
         let tree = match shared.session.borrow_mut().render() {
             Ok(tree) => tree,
@@ -216,6 +219,9 @@ impl DomSession {
         match InnerSession::from_bytecode_with_natives(bytes, ui_fn_name, &shared.natives) {
             Ok(session) => *shared.session.borrow_mut() = session,
             Err(e) => return Some(e),
+        }
+        if shared.nested {
+            apply_app_css(&shared, "tint-preview-css");
         }
         sync_viewport_width(&shared);
         let tree = match shared.session.borrow_mut().render() {
@@ -269,6 +275,9 @@ impl DomSession {
                     retained: RefCell::new(None),
                 });
                 bind_resize_listener(&shared);
+                if nested {
+                    apply_app_css(&shared, "tint-preview-css");
+                }
                 if !nested {
                     install_deferred_runner(&shared);
                     apply_app_meta(&shared);

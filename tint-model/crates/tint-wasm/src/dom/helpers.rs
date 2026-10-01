@@ -151,6 +151,29 @@ fn rerender_now(shared: &Rc<Shared>) {
     }
 }
 
+/// `@font-face` / `@keyframes` from `app { ... }`, into one `<style id=..>`
+/// (rewritten if it exists). A `Preview` writes its own, so its animations run.
+fn apply_app_css(shared: &Rc<Shared>, id: &str) {
+    let Ok(document) = document() else { return };
+    let css = shared.session.borrow().app_css();
+    if css.is_empty() {
+        return;
+    }
+    let existing = document.get_element_by_id(id);
+    let element = match existing {
+        Some(element) => Some(element),
+        None => document.create_element("style").ok().inspect(|element| {
+            element.set_id(id);
+            if let Ok(Some(head)) = document.query_selector("head") {
+                let _ = head.append_child(element);
+            }
+        }),
+    };
+    if let Some(element) = element {
+        element.set_text_content(Some(&css));
+    }
+}
+
 /// Applies the program's `app { title, lang }` to the host page.
 fn apply_app_meta(shared: &Rc<Shared>) {
     let Ok(document) = document() else { return };
@@ -161,23 +184,7 @@ fn apply_app_meta(shared: &Rc<Shared>) {
     if let (Some(lang), Some(root)) = (&meta.lang, document.document_element()) {
         let _ = root.set_attribute("lang", lang);
     }
-    let css = shared.session.borrow().app_css();
-    if !css.is_empty() {
-        // One `<style>` for `@font-face`/`@keyframes`; rewritten if it exists.
-        let existing = document.get_element_by_id("tint-app-css");
-        let element = match existing {
-            Some(element) => Some(element),
-            None => document.create_element("style").ok().inspect(|element| {
-                element.set_id("tint-app-css");
-                if let Ok(Some(head)) = document.query_selector("head") {
-                    let _ = head.append_child(element);
-                }
-            }),
-        };
-        if let Some(element) = element {
-            element.set_text_content(Some(&css));
-        }
-    }
+    apply_app_css(shared, "tint-app-css");
     if let Some(body) = document.body() {
         let style = body.style();
         for (property, value) in shared.session.borrow().page_style() {

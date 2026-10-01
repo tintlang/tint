@@ -26,7 +26,12 @@ ui fn Landing() {
     style ButtonBase {
         layout::{ padding.x::@button-padding, padding.y::10 }
         paint::{ radius::full }
-        motion::{ transition::"transform .2s ease", hover::{ scale::1.06 } }
+        motion::{
+            spring::{ stiffness::420, damping::16, props::"transform" },
+            hover::{ scale::1.06 },
+            tap::{ scale::0.94 },
+            focus-visible::{ ring::{3, #8b7cf0} }
+        }
     }
 
     style DemoBase {
@@ -110,6 +115,7 @@ ui fn Landing() {
         use::ButtonBase
         variant::solid {
             paint::{ background::@button-bg, color::@button-text }
+            animation::"ring-pulse 2.4s ease-out infinite"
         }
         variant::outline {
             paint::{ background::transparent, color::@button-outline-text, border::{1, @button-border} }
