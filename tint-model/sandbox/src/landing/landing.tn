@@ -14,8 +14,7 @@ ui fn Landing() {
     import "./chrome.tn";
 
     style HeroLayout {
-        layout::{ direction::column, align::center, gap::22, padding.x::40, padding.t::100, padding.b::16 }
-        mobile::{ padding.y::40, gap::18 }
+        layout::{ direction::column, align::center, gap::18..22, padding.x::18..40, padding.t::40..100, padding.b::40..16 }
     }
 
     style CenteredOnSmall {
@@ -36,8 +35,7 @@ ui fn Landing() {
     }
 
     style DemoBase {
-        layout::{ direction::column, gap::20, padding::64 }
-        mobile::{ padding::28 }
+        layout::{ direction::column, gap::20, padding::28..64 }
     }
 
     style SourceRenderBase {
@@ -95,9 +93,8 @@ ui fn Landing() {
     }
 
     style PongButtonBase {
-        layout::{ display::flex, align::center, justify::center, padding.x::120, padding.y::26 }
+        layout::{ display::flex, align::center, justify::center, padding.x::40..120, padding.y::20..26 }
         text-align::center
-        mobile::{ padding.x::40, padding.y::20 }
         paint::{ radius::full, background::@button-bg, color::@button-text }
         size::18..24
         font-weight::bold

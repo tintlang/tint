@@ -27,14 +27,14 @@ fn push_color(out: &mut StyleList, prop: &str, value: &UiModifierValue) {
 }
 
 fn push_px(out: &mut StyleList, prop: &str, value: &UiModifierValue) {
-    if let UiModifierValue::Number(n) = value {
-        out.push((prop.to_string(), px(*n)));
+    if let Some(v) = length_value(value) {
+        out.push((prop.to_string(), v));
     }
 }
 
 fn push_length_or_raw(out: &mut StyleList, prop: &str, value: &UiModifierValue) {
     match value {
-        UiModifierValue::Number(n) => out.push((prop.to_string(), px(*n))),
+        UiModifierValue::Number(_) | UiModifierValue::Range(..) => push_px(out, prop, value),
         UiModifierValue::String(v) | UiModifierValue::Ident(v) => {
             out.push((prop.to_string(), v.clone()))
         }
@@ -68,7 +68,7 @@ fn push_raw(out: &mut StyleList, prop: &str, value: &UiModifierValue) {
 // trick as `999`, just named for what it means instead of why it works.
 fn resolve_radius(value: &UiModifierValue) -> Option<String> {
     match value {
-        UiModifierValue::Number(n) => Some(px(*n)),
+        UiModifierValue::Number(_) | UiModifierValue::Range(..) => length_value(value),
         UiModifierValue::Ident(s) if s == "full" => Some("9999px".to_string()),
         _ => None,
     }

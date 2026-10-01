@@ -125,3 +125,25 @@ ui fn App() {
     assert_eq!(size("Column").unwrap(), "20px");
     assert!(node(&tree, "Text").style.contains(&("font-weight".to_string(), "bold".to_string())));
 }
+
+#[test]
+fn fluid_lengths_in_spacing_and_sizes() {
+    let tree = build(
+        r#"
+ui fn App() {
+    Column { layout::{ padding::{16..48}, gap::8..24, margin::{x::0..32, top::12} } paint::{ radius::8..20 } }
+    Row { layout::{ padding::{x::10..30, y::6}, width::100..200, margin::"calc(1px + 1vw)" } }
+}
+"#,
+    );
+    let get = |tag: &str, k: &str| node(&tree, tag).style.iter().find(|(p, _)| p == k).map(|(_, v)| v.clone());
+    assert_eq!(get("Column", "padding").unwrap(), "clamp(16px, calc(3.478px + 3.478vw), 48px)");
+    assert!(get("Column", "gap").unwrap().starts_with("clamp(8px,"));
+    assert!(get("Column", "margin-left").unwrap().starts_with("clamp(0px,"));
+    assert_eq!(get("Column", "margin-top").unwrap(), "12px");
+    assert!(get("Column", "border-radius").unwrap().starts_with("clamp(8px,"));
+    assert!(get("Row", "padding-left").unwrap().starts_with("clamp(10px,"));
+    assert_eq!(get("Row", "padding-top").unwrap(), "6px");
+    assert!(get("Row", "width").unwrap().starts_with("clamp(100px,"));
+    assert_eq!(get("Row", "margin").unwrap(), "calc(1px + 1vw)");
+}

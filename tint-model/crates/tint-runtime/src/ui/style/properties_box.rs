@@ -1,26 +1,29 @@
 fn apply_padding(value: &UiModifierValue, out: &mut StyleList) {
     match value {
-        UiModifierValue::Number(_) => push_px(out, "padding", value),
+        UiModifierValue::Number(_) | UiModifierValue::Range(..) => push_px(out, "padding", value),
+        UiModifierValue::String(s) if is_css_math(s) => push_px(out, "padding", value),
         UiModifierValue::Tuple(items) => {
             for item in items {
-                if let UiModifierValue::MiniMod { key, value } = item {
-                    if let (Some(side), UiModifierValue::Number(n)) = (key.first(), value.as_ref())
-                    {
+                if matches!(item, UiModifierValue::Number(_) | UiModifierValue::Range(..)) {
+                    push_px(out, "padding", item);
+                } else if let UiModifierValue::MiniMod { key, value } = item {
+                    if let (Some(side), Some(n)) = (key.first(), length_value(value)) {
+                        let n = &n;
                         match side.as_str() {
                             "left" | "right" | "top" | "bottom" => {
-                                out.push((format!("padding-{}", side), px(*n)));
+                                out.push((format!("padding-{}", side), n.clone()));
                             }
-                            "l" => out.push(("padding-left".to_string(), px(*n))),
-                            "r" => out.push(("padding-right".to_string(), px(*n))),
-                            "t" => out.push(("padding-top".to_string(), px(*n))),
-                            "b" => out.push(("padding-bottom".to_string(), px(*n))),
+                            "l" => out.push(("padding-left".to_string(), n.clone())),
+                            "r" => out.push(("padding-right".to_string(), n.clone())),
+                            "t" => out.push(("padding-top".to_string(), n.clone())),
+                            "b" => out.push(("padding-bottom".to_string(), n.clone())),
                             "x" => {
-                                out.push(("padding-left".to_string(), px(*n)));
-                                out.push(("padding-right".to_string(), px(*n)));
+                                out.push(("padding-left".to_string(), n.clone()));
+                                out.push(("padding-right".to_string(), n.clone()));
                             }
                             "y" => {
-                                out.push(("padding-top".to_string(), px(*n)));
-                                out.push(("padding-bottom".to_string(), px(*n)));
+                                out.push(("padding-top".to_string(), n.clone()));
+                                out.push(("padding-bottom".to_string(), n.clone()));
                             }
                             _ => {}
                         }
@@ -40,12 +43,14 @@ fn apply_padding(value: &UiModifierValue, out: &mut StyleList) {
 // with a different gap after each one.
 fn apply_margin(value: &UiModifierValue, out: &mut StyleList) {
     match value {
-        UiModifierValue::Number(_) => push_px(out, "margin", value),
+        UiModifierValue::Number(_) | UiModifierValue::Range(..) => push_px(out, "margin", value),
+        UiModifierValue::String(s) if is_css_math(s) => push_px(out, "margin", value),
         UiModifierValue::Tuple(items) => {
             for item in items {
-                if let UiModifierValue::MiniMod { key, value } = item {
-                    if let (Some(side), UiModifierValue::Number(n)) = (key.first(), value.as_ref())
-                    {
+                if matches!(item, UiModifierValue::Number(_) | UiModifierValue::Range(..)) {
+                    push_px(out, "margin", item);
+                } else if let UiModifierValue::MiniMod { key, value } = item {
+                    if let (Some(side), Some(n)) = (key.first(), length_value(value)) {
                         let sides: &[&str] = match side.as_str() {
                             "left" | "l" => &["left"],
                             "right" | "r" => &["right"],
@@ -56,7 +61,7 @@ fn apply_margin(value: &UiModifierValue, out: &mut StyleList) {
                             _ => &[],
                         };
                         for edge in sides {
-                            out.push((format!("margin-{}", edge), px(*n)));
+                            out.push((format!("margin-{}", edge), n.clone()));
                         }
                     }
                 }
@@ -159,6 +164,16 @@ fn fluid_size(min: f64, max: f64) -> String {
         trim_num((slope * 100.0 * 1000.0).round() / 1000.0),
         trim_num(hi)
     )
+}
+
+// A length: `16` -> `16px`, `16..48` -> fluid `clamp(..)`, CSS math passes through.
+fn length_value(value: &UiModifierValue) -> Option<String> {
+    match value {
+        UiModifierValue::Number(n) => Some(px(*n)),
+        UiModifierValue::Range(a, b) => Some(fluid_size(*a, *b)),
+        UiModifierValue::String(s) if is_css_math(s) => Some(s.clone()),
+        _ => None,
+    }
 }
 
 fn push_font_size(out: &mut StyleList, value: &UiModifierValue) {

@@ -169,9 +169,17 @@ Button {
 
 `scale::1.06` is the typed shorthand for a CSS `transform: scale(1.06)`.
 
-## Fluid text
+## Fluid text and spacing
 
 `text::{16..44, bold}` (or `size::16..44`) is a font size that grows smoothly with the screen: 16px at a 360px-wide viewport, 44px at 1280px, held at both ends (CSS `clamp` with `vw`, no breakpoints). Any CSS math function also works: `size::"clamp(1rem, 3vw, 2rem)"` or `text::{"calc(1rem + 1vw)", white}`.
+
+The same `a..b` range works for every px length: `padding`, `margin` (and their `.x`/`.y`/`.t`/`.b`/`.l`/`.r` forms), `gap`, `width`, `height`, `min-*`/`max-*`, `top`/`left`, `inset` and `radius`. It can run downwards too (`padding.b::40..16`), and a CSS math string passes through as well.
+
+```tn
+Column { layout::{ padding::{16..48}, gap::8..24, margin::{x::0..32, top::12} } paint::{ radius::8..20 } }
+```
+
+The range is fixed to the 360-1280px viewport width; `%` and `rem` values are not ranges.
 
 ## States and pseudo-elements
 
