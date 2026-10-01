@@ -5,7 +5,7 @@ Hero {
         use::CenteredOnSmall
         animation::"rise .7s cubic-bezier(.2,.7,.2,1) both"
         Text {
-            text::{34..54, bold, @text-main}
+            text::{52..64, bold, @text-main}
             "This page is written in "
             Inline {
                 white-space::"nowrap"
@@ -14,7 +14,7 @@ Hero {
             }
         }
     }
-    Sub { use::CenteredOnSmall animation::"rise .7s .12s cubic-bezier(.2,.7,.2,1) both" text::{15..18, @text-muted} "A declarative UI language that compiles to WebAssembly. Write your interface once in Tint, no HTML, CSS or JavaScript." }
+    Sub { use::CenteredOnSmall animation::"rise .7s .12s cubic-bezier(.2,.7,.2,1) both" text::{15..18, @text-muted} "A declarative UI language that runs in the browser on WebAssembly. Write your interface once in Tint, no HTML, CSS or JavaScript." }
 
     CtaRow {
         layout::{ direction::row, gap::12 }

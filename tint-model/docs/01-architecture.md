@@ -43,7 +43,8 @@ through WASM in the browser.
 
 The browser package ships one prebuilt `tint-runtime.wasm`. Application authors
 provide Tint source or a serialized Tint program; they do not compile WASM
-themselves. Development can load source directly, while production tooling can
+themselves, and a Tint program is not turned into its own `.wasm` module: the
+runtime (TintVM) is what is compiled to WASM, and it executes the program. Development can load source directly, while production tooling can
 load the versioned program format through the same VM and session API.
 
 **TintUI** lays out and renders the declarative tree: named nodes, text, layout,

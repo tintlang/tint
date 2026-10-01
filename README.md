@@ -1,8 +1,9 @@
 # Tint
 
-**One language for UI structure, style, state and logic.** Tint compiles to
-Rust/WASM and renders into the real DOM, so you write small UIs in a single
-`.tn` file instead of juggling HTML, CSS and JavaScript.
+**One language for UI structure, style, state and logic.** Tint runs in the
+browser on a small WebAssembly runtime and renders into the real DOM, so you
+write small UIs in a single `.tn` file instead of juggling HTML, CSS and
+JavaScript.
 
 > **Status: experimental.** Tint is a personal project and the language is
 > still changing. It is not production-ready, and feedback on where it fits
@@ -48,7 +49,7 @@ one statically typed language:
 - **State and logic next to the UI.** `state`, event handlers, `if`/`for`/`match`
   and typed functions are ordinary language features, checked together with the UI.
 - **No HTML, CSS or JS to write.** `tint dev` / `tint build` generate the page,
-  and the DOM runtime is generated Rust/WASM. No Node, bundler or framework.
+  and the page runs on a prebuilt Rust/WASM runtime that interprets your program. No Node, bundler or framework.
   The Tint site itself is one `.tn` program.
 - **No virtual DOM.** `DomSession` creates real DOM elements and updates them
   directly through `web-sys`. There is no canvas.

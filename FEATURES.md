@@ -46,7 +46,7 @@ still missing. The short introduction is in the [README](README.md).
 - Control flow (if/else statements and expressions, for loops, comparison operators)
 - Function definitions, typed function values & calls
 - Persistent REPL sessions
-- WASM compilation & rendering
+- Browser runtime (Tint is interpreted by a prebuilt WebAssembly runtime) & rendering
 - Real state + click/hover handlers (`state`, `click||`, `hover_in||`/`hover_out||`) via a persistent `UiSession`
 - Responsive layouts (`mobile::{}`/`tablet::{}`/`laptop::{}`/`desktop::{}` breakpoints + structural `if{ viewport_width ... }`)
 - A second, direct-DOM rendering backend (`DomSession`, no JS framework)
