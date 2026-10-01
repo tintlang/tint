@@ -82,13 +82,53 @@ fn push_radius(out: &mut StyleList, props: &[&str], value: &UiModifierValue) {
     }
 }
 
-// `scale::1.04` -> `transform: scale(1.04)`.
+// `scale::1.04` -> `transform: scale(1.04)`. Typed transforms (`scale`,
+// `rotate`, `translate.x`, `skew.x`, ...) combine into one `transform` value
+// instead of overriding each other.
 fn push_transform_fn(out: &mut StyleList, func: &str, value: &UiModifierValue) {
+    push_transform_unit(out, func, "", value);
+}
+
+fn push_transform_unit(out: &mut StyleList, func: &str, unit: &str, value: &UiModifierValue) {
     if let UiModifierValue::Number(n) = value {
-        out.push((
-            "transform".to_string(),
-            format!("{}({})", func, trim_num(*n)),
-        ));
+        let part = format!("{}({}{})", func, trim_num(*n), unit);
+        match out.iter_mut().rev().find(|(property, _)| property == "transform") {
+            Some((_, existing)) => {
+                existing.push(' ');
+                existing.push_str(&part);
+            }
+            None => out.push(("transform".to_string(), part)),
+        }
+    }
+}
+
+// `ring::{2, #6c5ce7}` -> `box-shadow: 0 0 0 2px #6c5ce7`, added to any
+// shadow already on the node (a focus ring next to a drop shadow).
+fn apply_ring(value: &UiModifierValue, out: &mut StyleList) {
+    let ring = match value {
+        UiModifierValue::String(s) => Some(s.clone()),
+        other => border_value(other).map(|border| {
+            let (width, rest) = border.split_once(" solid ").unwrap_or(("0px", "currentColor"));
+            format!("0 0 0 {} {}", width, rest)
+        }),
+    };
+    let Some(ring) = ring else { return };
+    match out.iter_mut().rev().find(|(property, _)| property == "box-shadow") {
+        Some((_, existing)) => {
+            existing.push_str(", ");
+            existing.push_str(&ring);
+        }
+        None => out.push(("box-shadow".to_string(), ring)),
+    }
+}
+
+// `line-clamp::3` -- cut text after 3 lines with an ellipsis.
+fn apply_line_clamp(value: &UiModifierValue, out: &mut StyleList) {
+    if let UiModifierValue::Number(n) = value {
+        out.push(("display".to_string(), "-webkit-box".to_string()));
+        out.push(("-webkit-box-orient".to_string(), "vertical".to_string()));
+        out.push(("-webkit-line-clamp".to_string(), trim_num(*n)));
+        out.push(("overflow".to_string(), "hidden".to_string()));
     }
 }
 

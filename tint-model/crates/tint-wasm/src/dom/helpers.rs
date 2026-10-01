@@ -1014,6 +1014,9 @@ fn patch_node(
             None => el.remove_attribute("data-tint-ref")?,
         }
     }
+    if old.attrs != new.attrs {
+        apply_html_attrs(&el, &old.attrs, &new.attrs);
+    }
     if old.class != new.class {
         match &new.class {
             Some(c) => el.set_attribute("class", c)?,
@@ -1096,7 +1099,7 @@ fn patch_node(
             props.extend(styles.iter().cloned());
         }
         if !hoverable {
-            el.set_attribute("style", &style_to_css_text(&props))?;
+            apply_style_props(&el, &props)?;
         } else {
             // Keep the hover closures bound in `build_node` current: they
             // read these attributes at event time.
@@ -1132,6 +1135,10 @@ fn patch_node(
         }
     }
 
+    if style_changed {
+        apply_state_styles(&el, new);
+        apply_gestures(&el, new);
+    }
     m.has_hover = !new.hover_style.is_empty() || m.children.iter().any(|c| c.has_hover);
     Ok(m)
 }
@@ -1141,7 +1148,12 @@ fn apply_style_props(el: &Element, props: &[(String, String)]) -> Result<(), JsV
     // avoiding base->hover transitions during a patch, this removes hover
     // properties (for example box-shadow) that do not exist in the base
     // style when a stale mouseleave was missed.
-    let css = style_to_css_text(props);
+    let mut css = style_to_css_text(props);
+    if el.has_attribute("data-tint-drag") {
+        // Keep a dragged node where it was dropped.
+        let (x, y) = read_drag_offset(el);
+        css.push_str(&format!(" translate: {}px {}px;", x, y));
+    }
     // Skipped when nothing changed -- see patch_node's comment on the same
     // pattern for data-tint-source/data-tint-key/src above; `style` is the
     // highest-traffic attribute here since every render rewrites it.
@@ -1215,4 +1227,146 @@ fn install_deferred_runner(shared: &Rc<Shared>) {
             Err(e) => web_sys::console::error_1(&JsValue::from_str(&format!("tint: async callback failed: {e}"))),
         }
     })));
+}
+
+
+thread_local! {
+    static STATE_RULES: RefCell<std::collections::HashSet<u64>> = RefCell::new(std::collections::HashSet::new());
+}
+
+/// `focus::{..}`, `active::{..}`, `disabled::{..}`, `before::{..}` ...: written
+/// once as `[data-tint-st="<hash>"]:focus { .. !important }` rules into a shared
+/// `<style>`; identical state styles on many nodes share one rule set. Inline
+/// styles outrank sheet rules, hence `!important`.
+fn apply_state_styles(el: &Element, node: &UiRenderNode) {
+    let states: Vec<&(String, Vec<(String, String)>)> =
+        node.breakpoints.iter().filter(|(name, _)| name.starts_with(':')).collect();
+    if states.is_empty() {
+        if el.has_attribute("data-tint-st") {
+            let _ = el.remove_attribute("data-tint-st");
+        }
+        return;
+    }
+    let body = |style: &Vec<(String, String)>| {
+        merge_style_props(style)
+            .iter()
+            .map(|(k, v)| format!("{}:{} !important;", k, v))
+            .collect::<String>()
+    };
+    let bodies: Vec<(String, String)> = states.iter().map(|(n, s)| (n.clone(), body(s))).collect();
+    let mut hash: u64 = 0xcbf29ce484222325;
+    for (name, css) in &bodies {
+        for byte in name.bytes().chain(css.bytes()).chain([0u8]) {
+            hash ^= u64::from(byte);
+            hash = hash.wrapping_mul(0x100000001b3);
+        }
+    }
+    let id = format!("{:x}", hash);
+    if el.get_attribute("data-tint-st").as_deref() != Some(id.as_str()) {
+        let _ = el.set_attribute("data-tint-st", &id);
+    }
+    let fresh = STATE_RULES.with(|rules| rules.borrow_mut().insert(hash));
+    if !fresh {
+        return;
+    }
+    let Ok(doc) = document() else { return };
+    let sheet = match doc.get_element_by_id("tint-states") {
+        Some(sheet) => sheet,
+        None => {
+            let Ok(sheet) = doc.create_element("style") else { return };
+            let _ = sheet.set_attribute("id", "tint-states");
+            if let Ok(Some(head)) = doc.query_selector("head") {
+                let _ = head.append_child(&sheet);
+            }
+            sheet
+        }
+    };
+    let mut css = sheet.text_content().unwrap_or_default();
+    for (name, body) in &bodies {
+        css.push_str(&format!("[data-tint-st=\"{}\"]{}{{{}}}\n", id, name, body));
+    }
+    sheet.set_text_content(Some(&css));
+}
+
+/// Plain HTML attributes (`placeholder`, `disabled`, ...).
+fn apply_html_attrs(el: &Element, old: &[(String, String)], new: &[(String, String)]) {
+    for (name, _) in old {
+        if !new.iter().any(|(n, _)| n == name) {
+            let _ = el.remove_attribute(name);
+        }
+    }
+    for (name, value) in new {
+        if el.get_attribute(name).as_deref() != Some(value.as_str()) {
+            let _ = el.set_attribute(name, value);
+        }
+    }
+}
+
+/// `drag::...` (see tint-runtime style/spring.rs): binds pointer listeners once
+/// per element. The offset is applied as the CSS `translate` property and
+/// remembered in `data-tint-drag` so a re-render keeps the node where it was
+/// dropped (see `apply_style_props`).
+fn apply_gestures(el: &Element, node: &UiRenderNode) {
+    let mode = node.style.iter().rev().find(|(k, _)| k == "--tint-drag").map(|(_, v)| v.clone());
+    let Some(mode) = mode else { return };
+    let back = node.style.iter().any(|(k, _)| k == "--tint-drag-return");
+    let _ = el.set_attribute("data-tint-drag-mode", &mode);
+    if back {
+        let _ = el.set_attribute("data-tint-drag-return", "1");
+    } else {
+        let _ = el.remove_attribute("data-tint-drag-return");
+    }
+    if el.has_attribute("data-tint-drag-bound") {
+        return;
+    }
+    let _ = el.set_attribute("data-tint-drag-bound", "1");
+    let start: Rc<Cell<Option<(f64, f64, f64, f64)>>> = Rc::new(Cell::new(None));
+
+    let (target, st) = (el.clone(), start.clone());
+    let down = Closure::wrap(Box::new(move |e: web_sys::PointerEvent| {
+        let (ox, oy) = read_drag_offset(&target);
+        st.set(Some((f64::from(e.client_x()), f64::from(e.client_y()), ox, oy)));
+        let _ = target.set_pointer_capture(e.pointer_id());
+        let _ = target.set_attribute("data-tint-dragging", "1");
+    }) as Box<dyn FnMut(_)>);
+    let _ = el.add_event_listener_with_callback("pointerdown", down.as_ref().unchecked_ref());
+    down.forget();
+
+    let (target, st) = (el.clone(), start.clone());
+    let moved = Closure::wrap(Box::new(move |e: web_sys::PointerEvent| {
+        let Some((sx, sy, ox, oy)) = st.get() else { return };
+        let mode = target.get_attribute("data-tint-drag-mode").unwrap_or_default();
+        let dx = if mode == "y" { 0.0 } else { f64::from(e.client_x()) - sx };
+        let dy = if mode == "x" { 0.0 } else { f64::from(e.client_y()) - sy };
+        write_drag_offset(&target, ox + dx, oy + dy);
+    }) as Box<dyn FnMut(_)>);
+    let _ = el.add_event_listener_with_callback("pointermove", moved.as_ref().unchecked_ref());
+    moved.forget();
+
+    let (target, st) = (el.clone(), start);
+    let up = Closure::wrap(Box::new(move |_e: web_sys::PointerEvent| {
+        if st.take().is_none() {
+            return;
+        }
+        let _ = target.remove_attribute("data-tint-dragging");
+        if target.has_attribute("data-tint-drag-return") {
+            write_drag_offset(&target, 0.0, 0.0);
+        }
+    }) as Box<dyn FnMut(_)>);
+    let _ = el.add_event_listener_with_callback("pointerup", up.as_ref().unchecked_ref());
+    let _ = el.add_event_listener_with_callback("pointercancel", up.as_ref().unchecked_ref());
+    up.forget();
+}
+
+fn read_drag_offset(el: &Element) -> (f64, f64) {
+    let text = el.get_attribute("data-tint-drag").unwrap_or_default();
+    let mut parts = text.split(',').map(|p| p.parse::<f64>().unwrap_or(0.0));
+    (parts.next().unwrap_or(0.0), parts.next().unwrap_or(0.0))
+}
+
+fn write_drag_offset(el: &Element, x: f64, y: f64) {
+    let _ = el.set_attribute("data-tint-drag", &format!("{},{}", x, y));
+    if let Some(html) = el.dyn_ref::<web_sys::HtmlElement>() {
+        let _ = html.style().set_property("translate", &format!("{}px {}px", x, y));
+    }
 }

@@ -1,0 +1,85 @@
+app {
+    title::"Motion"
+    keyframes.pulse::{
+        from::{ opacity::1 },
+        p50::{ opacity::0.4 },
+        to::{ opacity::1 }
+    }
+}
+
+fn save() { saved = saved + 1 }
+
+ui fn App() {
+    state saved = 0
+    state locked = false
+
+    Column {
+        direction::column
+        padding::24
+        gap::16
+        background::#12141a
+
+        Text { text::{16, white} "saved {saved}" }
+
+        // spring + tap: presses down, springs back
+        Button {
+            tap||save
+            layout::{ padding.x::20, padding.y::12 }
+            paint::{ radius::full, background::#6c5ce7, color::white }
+            motion::{
+                spring::{ stiffness::400, damping::14, props::"transform" },
+                hover::{ scale::1.08 },
+                tap::{ scale::0.9 }
+            }
+            "Tap me"
+        }
+
+        // states: focus ring, placeholder, disabled
+        TextArea {
+            placeholder||"Type here"
+            layout::{ padding::12, width::240, height::60 }
+            paint::{ background::#1d2030, color::white, radius::8 }
+            motion::{
+                focus::{ ring::{2, #6c5ce7} },
+                placeholder::{ color::#7a7f95 }
+            }
+        }
+
+        Button {
+            disabled||{locked}
+            layout::{ padding.x::16, padding.y::8 }
+            paint::{ background::#2a2f45, color::white, radius::8 }
+            motion::{ disabled::{ opacity::0.4 } }
+            "Maybe disabled"
+        }
+        Button {
+            click||unlock
+            "toggle disabled ({locked})"
+        }
+
+        // pseudo-element + clip-path + line-clamp
+        Box {
+            layout::{ padding::12, width::200 }
+            paint::{ background::#1d2030, color::white, clip-path::"inset(0 round 12px)" }
+            before::{ content::"NEW ", color::#ffd166 }
+            line-clamp::2
+            "A long text that should be cut after two lines with an ellipsis at the end of it"
+        }
+
+        // drag with spring return
+        Box {
+            drag::{ both, back }
+            layout::{ width::72, height::72 }
+            paint::{ background::#06d6a0, radius::16 }
+            motion::{ spring::{ stiffness::200, damping::16, props::"translate" } }
+        }
+
+        Box {
+            layout::{ width::40, height::40 }
+            paint::{ background::#ef476f, radius::full }
+            animation::"pulse 1.2s ease-in-out infinite"
+        }
+    }
+}
+
+fn unlock() { locked = !locked }

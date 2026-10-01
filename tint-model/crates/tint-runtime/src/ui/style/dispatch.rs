@@ -73,9 +73,33 @@ fn apply_property(path: &[String], value: &UiModifierValue, out: &mut StyleList)
         // ident (`cursor::pointer`) or a string (`outline::"2px solid red"`).
         "cursor" | "pointer-events" | "touch-action" | "user-select" | "outline"
         | "box-sizing" | "align-self" | "flex-wrap" | "text-align" | "appearance"
-        | "transform-origin" | "color-scheme" | "caret-color" | "letter-spacing" | "word-break" | "font-style" => {
+        | "transform-origin" | "color-scheme" | "caret-color" | "letter-spacing" | "word-break" | "font-style"
+        | "object-fit" | "object-position" | "clip-path" | "mix-blend-mode" | "text-overflow"
+        | "grid-area" | "grid-column" | "grid-row" | "scroll-snap-type" | "scroll-snap-align"
+        | "scroll-behavior" | "justify-self" | "place-items" | "place-content" | "text-transform"
+        | "text-wrap" | "vertical-align" | "visibility" | "resize" | "will-change"
+        | "backface-visibility" | "isolation" | "transform-style" | "perspective-origin" => {
             push_raw_string(out, &path.join("-"), value)
         }
+        "flex-basis" => push_length_or_raw(out, "flex-basis", value),
+        "perspective" => push_length_or_raw(out, "perspective", value),
+        "order" | "scroll-margin" => push_number_or_raw(out, &path.join("-"), value),
+        "content" => match value {
+            UiModifierValue::String(s) => {
+                out.push(("content".to_string(), format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))))
+            }
+            _ => {}
+        },
+        "line-clamp" => apply_line_clamp(value, out),
+        "ring" => apply_ring(value, out),
+        "spring" => apply_spring(value, out),
+        "drag" => apply_drag(value, out),
+        "rotate" => push_transform_unit(out, "rotate", "deg", value),
+        "skew" => push_transform_unit(out, "skew", "deg", value),
+        "skew.x" => push_transform_unit(out, "skewX", "deg", value),
+        "skew.y" => push_transform_unit(out, "skewY", "deg", value),
+        "translate.x" => push_transform_unit(out, "translateX", "px", value),
+        "translate.y" => push_transform_unit(out, "translateY", "px", value),
         "overflow" => push_raw_string(out, "overflow", value),
         "overflow-x" => push_raw_string(out, "overflow-x", value),
         "overflow-y" => push_raw_string(out, "overflow-y", value),

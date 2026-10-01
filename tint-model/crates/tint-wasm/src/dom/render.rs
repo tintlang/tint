@@ -38,6 +38,9 @@ fn build_node(
     if let Some(class) = &node.class {
         el.set_attribute("class", class)?;
     }
+    apply_html_attrs(&el, &[], &node.attrs);
+    apply_state_styles(&el, node);
+    apply_gestures(&el, node);
     if let Some(component) = &node.component {
         el.set_attribute("data-tint-component", component)?;
     }
@@ -205,6 +208,9 @@ fn bulk_size(node: &UiRenderNode, in_button: bool) -> Option<usize> {
         || node.asset.is_some()
         || node.reference.is_some()
         || node.class.is_some()
+        || !node.attrs.is_empty()
+        || node.style.iter().any(|(k, _)| k == "--tint-drag")
+        || node.breakpoints.iter().any(|(name, _)| name.starts_with(':'))
         || node.component.is_some()
         || node.on_js.is_some()
         || node.svg.is_some()

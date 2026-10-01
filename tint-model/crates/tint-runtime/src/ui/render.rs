@@ -50,6 +50,7 @@ pub struct UiRenderNode {
     pub target: Option<String>,
     pub reference: Option<String>,
     pub class: Option<String>,
+    pub attrs: Vec<(String, String)>,
     pub component: Option<String>,
     pub props: Option<String>,
     pub on_js: Option<String>,
@@ -89,6 +90,7 @@ impl PartialEq for UiRenderNode {
             && self.target == other.target
             && self.reference == other.reference
             && self.class == other.class
+            && self.attrs == other.attrs
             && self.component == other.component
             && self.props == other.props
             && self.on_js == other.on_js
@@ -213,6 +215,7 @@ pub fn to_render_tree(tree: &UiTree, id: UiNodeId) -> UiRenderNode {
         target: node.target.clone(),
         reference: node.reference.clone(),
         class: node.class.clone(),
+        attrs: node.attrs.clone(),
         component: node.component.clone(),
         props: node.props.clone(),
         on_js: node.on_js.clone(),

@@ -108,7 +108,9 @@ pub(crate) fn case_label_matches(label: &str, scrutinee: &EvalValue) -> bool {
 /// populated.
 pub(crate) fn apply_events(tree: &mut UiTree, id: UiNodeId, attributes: &[UiAttribute]) {
     let on_click =
-        find_handler(attributes, "click").or_else(|| find_handler(attributes, "pointer_down"));
+        find_handler(attributes, "click")
+            .or_else(|| find_handler(attributes, "tap"))
+            .or_else(|| find_handler(attributes, "pointer_down"));
     tree.set_events(
         id,
         on_click,
@@ -297,6 +299,41 @@ pub(crate) fn render_ui_text<H: EvalHost>(text: &UiText, host: &mut H) -> String
         }
     }
     out
+}
+
+/// HTML attributes a node can set: `placeholder||"text"`, `disabled||{busy}`.
+/// A bool attribute is present (empty value) when true and left out when false.
+const HTML_ATTRS: [&str; 6] = ["placeholder", "disabled", "readonly", "title", "alt", "tabindex"];
+
+pub(crate) fn apply_html_attrs<H: tint_evaluator::EvalHost>(
+    tree: &mut UiTree,
+    id: UiNodeId,
+    attributes: &[UiAttribute],
+    host: &mut H,
+) {
+    use tint_evaluator::Value as V;
+    let mut out: Vec<(String, String)> = Vec::new();
+    for attr in attributes {
+        if !HTML_ATTRS.contains(&attr.name.as_str()) {
+            continue;
+        }
+        let value = match &attr.value {
+            UiAttrValue::Literal(s) => Some(V::String(s.clone())),
+            UiAttrValue::Expr(expr) => Some(host.eval_expr(expr)),
+            UiAttrValue::Ident(name) if name == "true" => Some(V::Bool(true)),
+            UiAttrValue::Ident(name) if name == "false" => Some(V::Bool(false)),
+            UiAttrValue::Ident(name) => host.lookup_var(name),
+            _ => None,
+        };
+        match value {
+            Some(V::Bool(true)) => out.push((attr.name.clone(), String::new())),
+            Some(V::Bool(false)) | None => {}
+            Some(V::String(s)) => out.push((attr.name.clone(), s)),
+            Some(other) => out.push((attr.name.clone(), other.to_string())),
+        }
+    }
+    out.sort();
+    tree.set_attrs(id, out);
 }
 
 /// `component||"Name"` with optional `props||{expr}`: a JS component the host

@@ -91,6 +91,8 @@ pub struct UiElement {
     pub reference: Option<String>,
     /// CSS class names from class||"a b" (styled by `app { css::"..." }` files).
     pub class: Option<String>,
+    /// Plain HTML attributes (`placeholder||"..."`, `disabled||{busy}`), sorted by name.
+    pub attrs: Vec<(String, String)>,
     /// `component||"Name"`: a host-side (JS) component mounted into this element.
     pub component: Option<String>,
     /// `props||{expr}` for that component, as canonical JSON.
@@ -137,6 +139,7 @@ impl UiElement {
             target: None,
             reference: None,
             class: None,
+            attrs: Vec::new(),
             component: None,
             props: None,
             on_js: None,
@@ -358,6 +361,12 @@ impl UiTree {
         if let Some(node) = self.nodes.get_mut(id) {
             node.component = component;
             node.props = props;
+        }
+    }
+
+    pub fn set_attrs(&mut self, id: UiNodeId, attrs: Vec<(String, String)>) {
+        if let Some(node) = self.nodes.get_mut(id) {
+            node.attrs = attrs;
         }
     }
 

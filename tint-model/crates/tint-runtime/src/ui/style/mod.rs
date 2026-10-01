@@ -123,6 +123,31 @@ pub fn breakpoint_threshold(name: &str) -> Option<(bool, u32)> {
     digits.parse().ok().map(|width| (is_min, width))
 }
 
+/// Pseudo-class / pseudo-element blocks: `focus::{...}`, `active::{...}`,
+/// `disabled::{...}`, `placeholder::{...}`, `before::{...}`, `after::{...}`
+/// (`tap` is `active`). They are stored in the node's breakpoint list under
+/// the CSS selector suffix (`":focus"`, `"::before"`); a renderer that sees a
+/// name starting with `:` writes them as stylesheet rules instead of layering
+/// them by viewport width. `hover` keeps its own list.
+pub fn state_selector(name: &str) -> Option<String> {
+    Some(match name {
+        "focus" | "focus-visible" | "focus-within" | "active" | "disabled" | "checked"
+        | "read-only" | "invalid" => format!(":{name}"),
+        "tap" => ":active".to_string(),
+        "placeholder" | "before" | "after" | "selection" => format!("::{name}"),
+        _ => return None,
+    })
+}
+
+fn push_state(selector: &str, value: &UiModifierValue, out: &mut Vec<(String, StyleList)>) {
+    let mut list = Vec::new();
+    apply_nested_style(value, &mut list);
+    if (selector == "::before" || selector == "::after") && !list.iter().any(|(p, _)| p == "content") {
+        list.insert(0, ("content".to_string(), "\"\"".to_string()));
+    }
+    out.push((selector.to_string(), list));
+}
+
 /// Splits a node's modifiers into: its base style, its `hover::{...}`
 /// style (if any), and one resolved `StyleList` per breakpoint name that
 /// was actually used (`mobile::{...}` etc. -- see `BREAKPOINT_NAMES`).
@@ -143,6 +168,12 @@ pub fn resolve_style(modifiers: &[UiModifier]) -> (StyleList, StyleList, Vec<(St
                             apply_nested_style(value, &mut hover_style);
                             continue;
                         }
+                        if key.len() == 1 {
+                            if let Some(selector) = state_selector(&key[0]) {
+                                push_state(&selector, value, &mut breakpoints);
+                                continue;
+                            }
+                        }
                         let key = grouped_property(&m.path[0], key);
                         apply_property(&key, value, &mut style);
                     }
@@ -156,6 +187,13 @@ pub fn resolve_style(modifiers: &[UiModifier]) -> (StyleList, StyleList, Vec<(St
                 apply_group_items("motion", items, &mut hover_style);
             }
             continue;
+        }
+
+        if m.path.len() == 1 {
+            if let Some(selector) = state_selector(&m.path[0]) {
+                push_state(&selector, &m.value, &mut breakpoints);
+                continue;
+            }
         }
 
         if m.path.len() == 1 && is_breakpoint_name(&m.path[0]) {
@@ -381,4 +419,5 @@ fn grouped_property(group: &str, path: &[String]) -> Vec<String> {
 include!("properties_base.rs");
 include!("properties_box.rs");
 include!("layout.rs");
+include!("spring.rs");
 include!("dispatch.rs");

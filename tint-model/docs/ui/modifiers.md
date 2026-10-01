@@ -119,7 +119,13 @@ These CSS properties have no typed Tint form. They take a bare word
 
 `cursor`, `pointer-events`, `touch-action`, `user-select`, `outline`,
 `box-sizing`, `align-self`, `flex-wrap`, `text-align`, `appearance`,
-`transform-origin`, `color-scheme`, `caret-color`, `letter-spacing`, `word-break`, `font-style`, `animation` (and its `animation-*` longhands).
+`transform-origin`, `color-scheme`, `caret-color`, `letter-spacing`, `word-break`, `font-style`, `animation` (and its `animation-*` longhands), `object-fit`, `object-position`, `clip-path`, `mix-blend-mode`, `text-overflow`, `text-transform`, `text-wrap`, `vertical-align`, `visibility`, `resize`, `will-change`, `backface-visibility`, `isolation`, `justify-self`, `place-items`, `place-content`, `grid-area`, `grid-column`, `grid-row`, `scroll-snap-type`, `scroll-snap-align`, `scroll-behavior`, `transform-style`, `perspective-origin`.
+
+Also typed: `flex-basis` and `perspective` (number = px or string), `order` and `scroll-margin` (number), `line-clamp::3` (cut text after 3 lines with an ellipsis), `content::"x"` (for `before`/`after`).
+
+Transforms combine instead of overriding each other: `rotate::15` (deg), `scale::1.1`, `skew::10`, `skew.x::10`, `skew.y::10`, `translate.x::4` and `translate.y::4` (px) become one `transform` value, in the order written.
+
+`ring::{2, #6c5ce7}` is a `box-shadow` ring (`0 0 0 2px #6c5ce7`) that is added to any `shadow` on the node, the usual focus ring.
 
 Sizes accept numbers (pixels) or strings: `min-width`, `min-height`,
 `max-width`, `max-height`, `inset` (`min-height::"100dvh"`). `flex`,
@@ -162,6 +168,28 @@ Button {
 ```
 
 `scale::1.06` is the typed shorthand for a CSS `transform: scale(1.06)`.
+
+## States and pseudo-elements
+
+Besides `hover::{...}`, a node can style these states with the same block syntax (in `motion::{...}`, or flat on the node):
+
+`focus`, `focus-visible`, `focus-within`, `active` (`tap` is the same), `disabled`, `checked`, `read-only`, `invalid`, and the pseudo-elements `placeholder`, `before`, `after`, `selection`.
+
+```tn
+TextArea {
+    placeholder||"Name"
+    disabled||{locked}
+    paint::{ background::#1d2030, color::white }
+    motion::{
+        focus::{ ring::{2, #6c5ce7} },
+        disabled::{ opacity::0.5 },
+        placeholder::{ color::#7a7f95 }
+    }
+}
+Label { before::{ content::"* ", color::red } "Name" }
+```
+
+`placeholder||"text"`, `disabled||{expr}` (a bool: present when true), `readonly||{expr}`, `title||"..."`, `alt||"..."` and `tabindex||n` set plain HTML attributes. These states are written as rules in one shared `<style>` and win over the node's own style.
 
 ## Themes and imports
 
