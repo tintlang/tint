@@ -97,9 +97,9 @@ ui fn Landing() {
     style PongButtonBase {
         layout::{ display::flex, align::center, justify::center, padding.x::120, padding.y::26 }
         text-align::center
-        mobile::{ padding.x::40, padding.y::20, size::20 }
+        mobile::{ padding.x::40, padding.y::20 }
         paint::{ radius::full, background::@button-bg, color::@button-text }
-        size::24
+        size::18..24
         font-weight::bold
         motion::{ transition::"transform .2s ease, background .2s ease", hover::{ scale::1.04, background::@pong-hover } }
     }

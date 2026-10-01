@@ -169,6 +169,10 @@ Button {
 
 `scale::1.06` is the typed shorthand for a CSS `transform: scale(1.06)`.
 
+## Fluid text
+
+`text::{16..44, bold}` (or `size::16..44`) is a font size that grows smoothly with the screen: 16px at a 360px-wide viewport, 44px at 1280px, held at both ends (CSS `clamp` with `vw`, no breakpoints). Any CSS math function also works: `size::"clamp(1rem, 3vw, 2rem)"` or `text::{"calc(1rem + 1vw)", white}`.
+
 ## States and pseudo-elements
 
 Besides `hover::{...}`, a node can style these states with the same block syntax (in `motion::{...}`, or flat on the node):

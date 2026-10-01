@@ -3,9 +3,9 @@ Compare {
 
     CompareTitle {
         use::CenteredOnSmall
-        Text { text-align::center text::{44, bold, @text-main} "Same app. Less scaffolding." }
+        Text { text-align::center text::{28..44, bold, @text-main} "Same app. Less scaffolding." }
     }
-    Sub { use::CenteredOnSmall text::{17, @text-muted} "One Tint file, or four files in Vite + React." }
+    Sub { use::CenteredOnSmall text::{15..17, @text-muted} "One Tint file, or four files in Vite + React." }
 
     Versus {
         use::VersusBase

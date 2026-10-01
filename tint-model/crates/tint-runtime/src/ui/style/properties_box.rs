@@ -118,6 +118,14 @@ fn apply_text(value: &UiModifierValue, out: &mut StyleList) {
 
     for item in items {
         match item {
+            UiModifierValue::Range(..) if !size_set => {
+                push_font_size(out, item);
+                size_set = true;
+            }
+            UiModifierValue::String(s) if !size_set && is_css_math(s) => {
+                push_font_size(out, item);
+                size_set = true;
+            }
             UiModifierValue::Number(n) if !size_set => {
                 out.push(("font-size".to_string(), px(*n)));
                 size_set = true;
@@ -128,4 +136,37 @@ fn apply_text(value: &UiModifierValue, out: &mut StyleList) {
             _ => push_color(out, "color", item),
         }
     }
+}
+
+// `text::{16..44}`: fluid font size, `16px` at a 360px-wide screen growing
+// linearly to `44px` at 1280px and held at both ends (CSS `clamp`).
+// `size::"clamp(1rem, 3vw, 2rem)"` (any CSS math function) is passed through.
+const FLUID_FROM: f64 = 360.0;
+const FLUID_TO: f64 = 1280.0;
+
+fn is_css_math(s: &str) -> bool {
+    ["clamp(", "calc(", "min(", "max(", "var("].iter().any(|f| s.trim_start().starts_with(f))
+}
+
+fn fluid_size(min: f64, max: f64) -> String {
+    let slope = (max - min) / (FLUID_TO - FLUID_FROM); // px per px of screen width
+    let intercept = min - slope * FLUID_FROM;
+    let (lo, hi) = if min <= max { (min, max) } else { (max, min) };
+    format!(
+        "clamp({}px, calc({}px + {}vw), {}px)",
+        trim_num(lo),
+        trim_num((intercept * 1000.0).round() / 1000.0),
+        trim_num((slope * 100.0 * 1000.0).round() / 1000.0),
+        trim_num(hi)
+    )
+}
+
+fn push_font_size(out: &mut StyleList, value: &UiModifierValue) {
+    let size = match value {
+        UiModifierValue::Number(n) => px(*n),
+        UiModifierValue::Range(a, b) => fluid_size(*a, *b),
+        UiModifierValue::String(s) | UiModifierValue::Ident(s) => s.clone(),
+        _ => return,
+    };
+    out.push(("font-size".to_string(), size));
 }

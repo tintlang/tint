@@ -17,6 +17,16 @@ impl Parser {
         None
     }
 
+    /// `16..44` after a number: a range (fluid sizes, `text::{16..44}`).
+    fn number_or_range(&mut self, first: f64) -> UiModifierValue {
+        if self.stream.peek().kind == TokenKind::DotDot && self.stream.peek2_kind() == TokenKind::Number {
+            self.stream.next();
+            let second: f64 = self.stream.next().lexeme.parse().unwrap();
+            return UiModifierValue::Range(first, second);
+        }
+        UiModifierValue::Number(first)
+    }
+
     pub(crate) fn parse_modifier_value_rhs(&mut self) -> PResult<UiModifierValue> {
         if let Some(value) = self.parse_negative_number() {
             return Ok(value);
@@ -25,7 +35,7 @@ impl Parser {
             TokenKind::Number => {
                 let tok = self.stream.next();
                 let v: f64 = tok.lexeme.parse().unwrap();
-                Ok(UiModifierValue::Number(v))
+                Ok(self.number_or_range(v))
             }
 
             TokenKind::String => {
@@ -108,7 +118,8 @@ impl Parser {
         match self.stream.peek().kind {
             TokenKind::Number => {
                 let tok = self.stream.next();
-                return Ok(UiModifierValue::Number(tok.lexeme.parse().unwrap()));
+                let v: f64 = tok.lexeme.parse().unwrap();
+                return Ok(self.number_or_range(v));
             }
 
             TokenKind::String => {

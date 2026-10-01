@@ -117,7 +117,7 @@ fn apply_property(path: &[String], value: &UiModifierValue, out: &mut StyleList)
         "background" => push_color(out, "background-color", value),
         "gradient" => apply_gradient(value, out),
         "color" => push_color(out, "color", value),
-        "size" => push_px(out, "font-size", value),
+        "size" => push_font_size(out, value),
         "font-family" => push_raw_string(out, "font-family", value),
         "border" => apply_border(value, out),
         "border.x" => apply_border_edges(value, out, &["left", "right"]),

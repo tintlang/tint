@@ -102,3 +102,26 @@ ui fn App() {
     assert!(b.style.contains(&("--tint-drag".to_string(), "x".to_string())));
     assert!(b.style.contains(&("--tint-drag-return".to_string(), "1".to_string())));
 }
+
+#[test]
+fn fluid_font_size_ranges_and_css_math() {
+    let tree = build(
+        r#"
+ui fn App() {
+    Text { text::{16..44, bold} "a" }
+    Box { size::"clamp(1rem, 3vw, 2rem)" }
+    Row { size::18..30 }
+    Column { text::{20, white} }
+}
+"#,
+    );
+    let size = |tag: &str| {
+        node(&tree, tag).style.iter().find(|(k, _)| k == "font-size").map(|(_, v)| v.clone())
+    };
+    // 16px at 360 wide -> 44px at 1280: slope 28/920 = 3.043vw, intercept 16 - 360*28/920 = 5.043px
+    assert_eq!(size("Text").unwrap(), "clamp(16px, calc(5.043px + 3.043vw), 44px)");
+    assert_eq!(size("Box").unwrap(), "clamp(1rem, 3vw, 2rem)");
+    assert!(size("Row").unwrap().starts_with("clamp(18px,"));
+    assert_eq!(size("Column").unwrap(), "20px");
+    assert!(node(&tree, "Text").style.contains(&("font-weight".to_string(), "bold".to_string())));
+}

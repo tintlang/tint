@@ -17,7 +17,7 @@ Demo {
 
     PongBlock {
         layout::{ direction::column, align::center, gap::28, margin.t::72, padding.b::24 }
-        Text { use::CenteredOnSmall text::{44, bold, @text-main} "Mini app on Tint" }
+        Text { use::CenteredOnSmall text::{28..44, bold, @text-main} "Mini app on Tint" }
         PongButton { route||"/pong" "Pong game" }
     }
 }
