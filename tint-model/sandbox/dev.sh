@@ -12,7 +12,7 @@ while :; do
     last=$(sig)
     [ "$first" = 1 ] || echo "dev: Rust sources changed, rebuilding tint..."
     first=0
-    if cargo build -q -p tint-cli; then
+    if cargo build -q -p tint-cli -p tint-analyzer; then
         ./target/debug/tint dev sandbox/src/site.tn "$@" & pid=$!
         while kill -0 $pid 2>/dev/null && [ "$(sig)" = "$last" ]; do sleep 1; done
         kill $pid 2>/dev/null; wait $pid 2>/dev/null

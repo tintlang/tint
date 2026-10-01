@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{json, Value};
 use tint_compiler::resolver::resolve_path_with_overlays;
-use tint_compiler::{expand_source_imports, parse_source_for_analyzer};
+use tint_compiler::{expand_source_imports, expand_source_imports_origins, parse_source_for_analyzer};
 use tint_parser::error::ParserError;
 use tint_semantics::{SemanticError, SemanticModel, Type};
 
@@ -15,9 +15,52 @@ struct Analyzer {
 }
 
 struct CheckedDocument {
+    /// The text the model's offsets refer to: the open file, or -- for a file
+    /// that is part of a bigger project -- the whole expanded project.
     source: String,
     model: SemanticModel,
     errors: Vec<SemanticError>,
+    /// For a project check: the file each expanded line was written in, and
+    /// the open file, so results can be mapped back onto it.
+    view: Option<ProjectView>,
+}
+
+struct ProjectView {
+    origins: Vec<(PathBuf, usize)>,
+    target: PathBuf,
+}
+
+impl CheckedDocument {
+    /// An LSP position in the open file, as a position in `source`.
+    fn expanded_position(&self, position: &Value) -> Option<Value> {
+        let Some(view) = &self.view else {
+            return Some(position.clone());
+        };
+        let line = position.get("line")?.as_u64()? as usize;
+        Some(json!({
+            "line": view.to_expanded(line)?,
+            "character": position.get("character").cloned().unwrap_or(json!(0))
+        }))
+    }
+}
+
+impl ProjectView {
+    /// Expanded 0-based line -> line of the open file (`None` if it came from another file).
+    fn to_file(&self, line: usize) -> Option<usize> {
+        let (path, index) = self.origins.get(line)?;
+        (path == &self.target).then_some(*index)
+    }
+
+    fn to_expanded(&self, line: usize) -> Option<usize> {
+        self.origins.iter().position(|(path, index)| path == &self.target && *index == line)
+    }
+
+    fn span(&self, span: &tint_ast::Span) -> Option<tint_ast::Span> {
+        let mut span = *span;
+        span.start.line = self.to_file(span.start.line.checked_sub(1)?)? + 1;
+        span.end.line = self.to_file(span.end.line.checked_sub(1)?)? + 1;
+        Some(span)
+    }
 }
 
 impl Analyzer {
@@ -28,40 +71,14 @@ impl Analyzer {
         // modules participate in checking. Open documents are supplied as an
         // overlay, so diagnostics follow unsaved editor changes too.
         if let Some(path) = uri_to_path(uri) {
-            let overlays = self
-                .documents
-                .iter()
-                .filter_map(|(uri, text)| {
-                    let path = uri_to_path(uri)?;
-                    Some((path.canonicalize().unwrap_or(path), text.clone()))
-                })
-                .collect::<HashMap<_, _>>();
+            let overlays = self.overlays();
             if path.exists() {
+                if let Some(document) = self.check_in_project(&path, &source, &overlays) {
+                    return Some(document);
+                }
                 if let Ok(resolved) = resolve_path_with_overlays(&path, &overlays) {
                     let (errors, model) = resolved.check();
-                    return Some(CheckedDocument {
-                        source,
-                        model,
-                        errors,
-                    });
-                }
-
-                // An imported UI fragment (`topbar.tn`, `hero.tn`, …) is
-                // valid source but is not a standalone Tint program. Find
-                // its entry file and use that file's declarations as the
-                // semantic context for the fragment itself.
-                if let Some(entry) = find_project_entry(&path) {
-                    if let Ok(resolved) = resolve_path_with_overlays(&entry, &overlays) {
-                        let program = parse_source_for_analyzer(&source).ok()?;
-                        let context = resolved.context();
-                        let mut checker = tint_semantics::SemanticChecker::new(Default::default());
-                        let (errors, model) = checker.check_with_context(&program, &context);
-                        return Some(CheckedDocument {
-                            source,
-                            model,
-                            errors,
-                        });
-                    }
+                    return Some(CheckedDocument { source, model, errors, view: None });
                 }
             }
         }
@@ -69,33 +86,107 @@ impl Analyzer {
         let program = parse_source_for_analyzer(&source).ok()?;
         let (errors, model) =
             tint_semantics::SemanticChecker::new(Default::default()).check_with_model(&program);
-        Some(CheckedDocument {
-            source,
-            model,
-            errors,
-        })
+        Some(CheckedDocument { source, model, errors, view: None })
+    }
+
+    fn overlays(&self) -> HashMap<PathBuf, String> {
+        self.documents
+            .iter()
+            .filter_map(|(uri, text)| {
+                let path = uri_to_path(uri)?;
+                Some((path.canonicalize().unwrap_or(path), text.clone()))
+            })
+            .collect()
+    }
+
+    /// Checks the whole project the file belongs to (its entry file, which for
+    /// an imported fragment such as `topbar.tn` is the file that pulls it in),
+    /// then keeps only what concerns this file. A fragment sees every fn, style,
+    /// token and `state` of the `ui fn` it is spliced into, which a lone parse
+    /// of the fragment cannot know.
+    fn check_in_project(
+        &self,
+        path: &Path,
+        source: &str,
+        overlays: &HashMap<PathBuf, String>,
+    ) -> Option<CheckedDocument> {
+        let target = path.canonicalize().ok()?;
+        let entry = find_project_entry(path).unwrap_or_else(|| target.clone());
+        let resolved = resolve_path_with_overlays(&entry, overlays).ok()?;
+        let (expanded, origins) = expand_source_imports_origins(&entry, overlays).ok()?;
+        if expanded.lines().count() != origins.len()
+            || resolved.entry_source.lines().count() != origins.len()
+        {
+            return None;
+        }
+        let (errors, model) = resolved.check();
+        let view = ProjectView { origins, target };
+        let errors = errors
+            .into_iter()
+            .filter_map(|mut error| {
+                error.span = view.span(&error.span)?;
+                Some(error)
+            })
+            .collect();
+        let _ = source;
+        Some(CheckedDocument { source: expanded, model, errors, view: Some(view) })
     }
 
     fn diagnostics(&self, uri: &str) -> Value {
         let Some(source) = self.documents.get(uri) else {
             return json!([]);
         };
-        let parsed = self
-            .expanded_source(uri)
-            .as_deref()
-            .unwrap_or(source)
-            .to_string();
-        if let Err(error) = parse_source_for_analyzer(&parsed) {
-            return json!([parse_diagnostic(&error)]);
+        let document = self.check(uri);
+        // Inside a project the whole program was parsed already; a lone fragment
+        // (`demo.tn`) is not a program by itself, so only parse it alone otherwise.
+        if document.as_ref().map_or(true, |document| document.view.is_none()) {
+            if let Some(diagnostic) = self.project_parse_error(uri) {
+                return json!([diagnostic]);
+            }
+            let parsed = self
+                .expanded_source(uri)
+                .as_deref()
+                .unwrap_or(source)
+                .to_string();
+            if let Err(error) = parse_source_for_analyzer(&parsed) {
+                return json!([parse_diagnostic(&error)]);
+            }
         }
-        let Some(document) = self.check(uri) else {
+        let Some(document) = document else {
             return json!([]);
         };
+        let mut seen = std::collections::HashSet::new();
         document
             .errors
             .iter()
             .map(|error| diagnostic(error, &document.source))
+            .filter(|diagnostic| seen.insert(diagnostic.to_string()))
             .collect()
+    }
+
+    /// A syntax error anywhere in the project this file belongs to, placed on
+    /// the right line of this file, or noted on line 1 when it is in another file.
+    fn project_parse_error(&self, uri: &str) -> Option<Value> {
+        let path = uri_to_path(uri)?;
+        let target = path.canonicalize().ok()?;
+        let entry = find_project_entry(&path).unwrap_or_else(|| target.clone());
+        let (text, origins) = expand_source_imports_origins(&entry, &self.overlays()).ok()?;
+        let error = parse_source_for_analyzer(&text).err()?;
+        let (mut span, message) = parse_error_parts(&error);
+        let (file, line) = origins.get(span.start.line.checked_sub(1)?)?;
+        if file == &target {
+            span.start.line = line + 1;
+            span.end.line = origins.get(span.end.line.checked_sub(1)?).map_or(line + 1, |(_, l)| l + 1);
+            return Some(json!({
+                "range": span_range(&span), "severity": 1, "source": "tint parser", "message": message
+            }));
+        }
+        let name = file.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        Some(json!({
+            "range": { "start": { "line": 0, "character": 0 }, "end": { "line": 0, "character": 1 } },
+            "severity": 2, "source": "tint parser",
+            "message": format!("{} (in {}:{})", message, name, line + 1)
+        }))
     }
 
     fn expanded_source(&self, uri: &str) -> Option<String> {
@@ -118,7 +209,10 @@ impl Analyzer {
         let Some(document) = self.check(uri) else {
             return Value::Null;
         };
-        let offset = position_offset(&document.source, position);
+        let Some(position) = document.expanded_position(position) else {
+            return Value::Null;
+        };
+        let offset = position_offset(&document.source, &position);
         let Some(ty) = document.model.type_at(offset) else {
             return Value::Null;
         };
@@ -134,7 +228,10 @@ impl Analyzer {
         let Some(document) = self.check(uri) else {
             return Value::Null;
         };
-        let offset = position_offset(&document.source, position);
+        let Some(position) = document.expanded_position(position) else {
+            return Value::Null;
+        };
+        let offset = position_offset(&document.source, &position);
         let Some(reference) = document.model.references.iter().find(|reference| {
             reference.span.start.offset <= offset && offset <= reference.span.end.offset
         }) else {
@@ -143,67 +240,117 @@ impl Analyzer {
         let Some(symbol) = document.model.symbol_named(&reference.name) else {
             return Value::Null;
         };
+        let Some(view) = &document.view else {
+            return json!({ "uri": uri, "range": span_range(&symbol.span) });
+        };
+        // The symbol may live in another file of the project.
+        let (Some((file, start)), Some((_, end))) = (
+            symbol.span.start.line.checked_sub(1).and_then(|line| view.origins.get(line)),
+            symbol.span.end.line.checked_sub(1).and_then(|line| view.origins.get(line)),
+        ) else {
+            return Value::Null;
+        };
         json!({
-            "uri": uri,
-            "range": span_range(&symbol.span)
+            "uri": format!("file://{}", file.display()),
+            "range": {
+                "start": { "line": start, "character": symbol.span.start.column.saturating_sub(1) },
+                "end": { "line": end, "character": symbol.span.end.column.saturating_sub(1) }
+            }
         })
     }
 }
 
+/// The entry file whose `import`s (transitively) pull `fragment` in, or `None`
+/// when nothing imports it. Importers may sit in the same directory, a parent
+/// directory or a sibling one (`site.tn` -> `landing/landing.tn` ->
+/// `landing/topbar.tn`), so the whole project tree under the highest ancestor
+/// directory that still holds `.tn` files is scanned. With several candidate
+/// roots the one that reaches the most files wins.
 fn find_project_entry(fragment: &Path) -> Option<PathBuf> {
     let target = fragment.canonicalize().ok()?;
-    let mut candidate = target.clone();
-    let mut visited = std::collections::HashSet::new();
-    let mut found_importer = false;
-
-    while let Some(parent) = candidate.parent() {
-        let parent = parent.to_path_buf();
-        if !visited.insert(parent.clone()) {
-            break;
-        }
-        let mut importer = None;
-        for entry in fs::read_dir(&parent).ok()? {
-            let file = entry.ok()?.path();
-            if file.extension().and_then(|ext| ext.to_str()) != Some("tn") {
-                continue;
-            }
-            let text = fs::read_to_string(&file).ok()?;
-            if imports_file(&file, &text, &target) {
-                importer = Some(file);
-                break;
-            }
-        }
-        if let Some(file) = importer {
-            candidate = file;
-            found_importer = true;
-        } else {
-            return found_importer.then_some(candidate);
+    let mut top = target.parent()?.to_path_buf();
+    for _ in 0..3 {
+        match top.parent() {
+            Some(parent) if dir_has_tn(parent) => top = parent.to_path_buf(),
+            _ => break,
         }
     }
-    Some(candidate)
+    let mut files = Vec::new();
+    collect_tn_files(&top, 0, &mut files);
+    let graph: HashMap<PathBuf, Vec<PathBuf>> = files
+        .iter()
+        .map(|file| {
+            let text = fs::read_to_string(file).unwrap_or_default();
+            (file.clone(), imports_of(file, &text))
+        })
+        .collect();
+    let imported: std::collections::HashSet<&PathBuf> = graph.values().flatten().collect();
+    if !imported.contains(&target) {
+        return None;
+    }
+    let closure = |root: &PathBuf| {
+        let mut seen = std::collections::HashSet::new();
+        let mut stack = vec![root.clone()];
+        while let Some(file) = stack.pop() {
+            if seen.insert(file.clone()) {
+                stack.extend(graph.get(&file).cloned().unwrap_or_default());
+            }
+        }
+        seen
+    };
+    graph
+        .keys()
+        .filter(|file| !imported.contains(file))
+        .map(|root| (root, closure(root)))
+        .filter(|(_, reached)| reached.contains(&target))
+        .max_by(|(a, x), (b, y)| x.len().cmp(&y.len()).then_with(|| b.cmp(a)))
+        .map(|(root, _)| root.clone())
 }
 
-fn imports_file(importer: &Path, source: &str, target: &Path) -> bool {
-    source.lines().any(|line| {
-        let line = line.trim();
-        let Some(rest) = line.strip_prefix("import \"") else {
-            return false;
-        };
-        let Some(end) = rest.find('"') else {
-            return false;
-        };
-        let tail = rest[end + 1..].trim();
-        if !tail.is_empty() && tail != ";" {
-            return false;
+fn dir_has_tn(dir: &Path) -> bool {
+    fs::read_dir(dir)
+        .map(|entries| {
+            entries
+                .flatten()
+                .any(|e| e.path().extension().and_then(|x| x.to_str()) == Some("tn"))
+        })
+        .unwrap_or(false)
+}
+
+fn collect_tn_files(dir: &Path, depth: usize, out: &mut Vec<PathBuf>) {
+    if depth > 6 {
+        return;
+    }
+    let Ok(entries) = fs::read_dir(dir) else { return };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if path.is_dir() {
+            if !name.starts_with('.') && name != "node_modules" && name != "target" {
+                collect_tn_files(&path, depth + 1, out);
+            }
+        } else if path.extension().and_then(|x| x.to_str()) == Some("tn") {
+            if let Ok(canonical) = path.canonicalize() {
+                out.push(canonical);
+            }
         }
-        importer
-            .parent()
-            .unwrap_or_else(|| Path::new("."))
-            .join(&rest[..end])
-            .canonicalize()
-            .map(|path| path == target)
-            .unwrap_or(false)
-    })
+    }
+}
+
+/// Files named by `import "..."` lines of `source` (existing ones only).
+fn imports_of(importer: &Path, source: &str) -> Vec<PathBuf> {
+    source
+        .lines()
+        .filter_map(|line| {
+            let rest = line.trim().strip_prefix("import \"")?;
+            let end = rest.find('"')?;
+            let tail = rest[end + 1..].trim();
+            if !tail.is_empty() && tail != ";" {
+                return None;
+            }
+            importer.parent()?.join(&rest[..end]).canonicalize().ok()
+        })
+        .collect()
 }
 
 fn main() {
@@ -301,15 +448,19 @@ fn diagnostic(error: &SemanticError, source: &str) -> Value {
     })
 }
 
-fn parse_diagnostic(error: &ParserError) -> Value {
-    let (span, message) = match error {
+fn parse_error_parts(error: &ParserError) -> (tint_ast::Span, String) {
+    match error {
         ParserError::Message { msg, span } => (*span, friendly_message(msg)),
         ParserError::Unexpected {
             expected,
             found,
             span,
         } => (*span, friendly_unexpected(expected.clone(), found.clone())),
-    };
+    }
+}
+
+fn parse_diagnostic(error: &ParserError) -> Value {
+    let (span, message) = parse_error_parts(error);
     json!({
         "range": span_range(&span),
         "severity": 1,
@@ -415,4 +566,34 @@ fn write_message(output: &mut impl Write, message: &Value) {
     write!(output, "Content-Length: {}\r\n\r\n", body.len()).unwrap();
     output.write_all(&body).unwrap();
     output.flush().unwrap();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fragments_are_checked_inside_their_project() {
+        let root = std::env::temp_dir().join(format!("tint-analyzer-{}", std::process::id()));
+        fs::create_dir_all(root.join("parts")).unwrap();
+        fs::write(root.join("fns.tn"), "fn greet() { 1 }\n").unwrap();
+        fs::write(
+            root.join("main.tn"),
+            "import \"./fns.tn\";\nui fn App() {\n    Column {\n        import \"./parts/bar.tn\";\n    }\n}\n",
+        )
+        .unwrap();
+        let bar = root.join("parts/bar.tn");
+        fs::write(&bar, "Text { click||greet \"hi\" }\n").unwrap();
+
+        let uri = format!("file://{}", bar.display());
+        let mut analyzer = Analyzer::default();
+        analyzer.documents.insert(uri.clone(), fs::read_to_string(&bar).unwrap());
+        assert_eq!(analyzer.diagnostics(&uri), json!([]));
+
+        // A real error is still reported, on the fragment's own line.
+        analyzer.documents.insert(uri.clone(), "\nText { click||nope \"hi\" }\n".into());
+        let found = analyzer.diagnostics(&uri);
+        assert_eq!(found[0]["range"]["start"]["line"], 1);
+        fs::remove_dir_all(&root).ok();
+    }
 }

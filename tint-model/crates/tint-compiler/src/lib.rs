@@ -78,6 +78,59 @@ pub fn expand_source_imports<P: AsRef<Path>>(
     expand_source_file(entry_path.as_ref(), overlays, &mut active)
 }
 
+/// Like [`expand_source_imports`], plus the origin of every line of the
+/// expanded text: the file it was written in and its 0-based line there. Lets
+/// editor tooling attribute a semantic error found in the expanded project to
+/// the file (and line) the person is actually editing.
+pub fn expand_source_imports_origins<P: AsRef<Path>>(
+    entry_path: P,
+    overlays: &HashMap<PathBuf, String>,
+) -> Result<(String, Vec<(PathBuf, usize)>), String> {
+    let mut text = String::new();
+    let mut origins = Vec::new();
+    let mut active = Vec::new();
+    expand_with_origins(entry_path.as_ref(), overlays, &mut active, &mut text, &mut origins)?;
+    Ok((text, origins))
+}
+
+fn expand_with_origins(
+    path: &Path,
+    overlays: &HashMap<PathBuf, String>,
+    active: &mut Vec<PathBuf>,
+    text: &mut String,
+    origins: &mut Vec<(PathBuf, usize)>,
+) -> Result<(), String> {
+    let normalized = normalize_path(path);
+    if active.contains(&normalized) {
+        return Err(format!("Tint import cycle through {}", normalized.display()));
+    }
+    let source = if let Some(text) = overlays.get(&normalized) {
+        text.clone()
+    } else {
+        fs::read_to_string(&normalized)
+            .map_err(|error| format!("error reading '{}': {}", normalized.display(), error))?
+    };
+    let dir = normalized.parent().unwrap_or_else(|| Path::new(".")).to_path_buf();
+    active.push(normalized.clone());
+    for (index, line) in source.split_inclusive('\n').enumerate() {
+        if let Some(specifier) = source_import_specifier(line) {
+            expand_with_origins(&dir.join(specifier), overlays, active, text, origins)?;
+        } else {
+            if line.contains("include_str(\"") {
+                text.push_str(&expand_include_str(line, &dir)?);
+            } else {
+                text.push_str(line);
+            }
+            if !text.ends_with('\n') {
+                text.push('\n');
+            }
+            origins.push((normalized.clone(), index));
+        }
+    }
+    active.pop();
+    Ok(())
+}
+
 fn expand_source_file(
     path: &Path,
     overlays: &HashMap<PathBuf, String>,
