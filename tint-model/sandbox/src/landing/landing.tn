@@ -5,6 +5,8 @@ ui fn Landing() {
     state theme = storage_get_or("theme", "dark")
     state code = include_str("./demo-app.tn")
     state tint_src = include_str("./demo-counter.tn")
+    state install_cmd = "curl -fsSL https://raw.githubusercontent.com/tintlang/tint/main/scripts/install-tint.sh | bash"
+    state copy_label = "Copy"
     state compare_file = "index.html"
     state web_shown = include_str("./compare/index.html.txt")
     state web_index = include_str("./compare/index.html.txt")
@@ -101,6 +103,31 @@ ui fn Landing() {
         motion::{ transition::"transform .2s ease, background .2s ease", hover::{ scale::1.04, background::@pong-hover } }
     }
 
+    style InstallBase {
+        layout::{ direction::row, align::center, gap::10, padding.l::16, padding.r::8, padding.y::8, max-width::"100%", min-width::0 }
+        paint::{ radius::full, background::@panel-bg, border::{1, @panel-border} }
+    }
+
+    style InstallCmd {
+        text::{12..14, @text-main}
+        font-family::"ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+        white-space::"nowrap"
+        user-select::"all"
+        layout::{ min-width::0, overflow-x::auto }
+    }
+
+    style CopyButtonBase {
+        layout::{ padding.x::14, padding.y::6 }
+        paint::{ radius::full, background::@button-bg, color::@button-text }
+        text::{13, bold}
+        cursor::"pointer"
+        motion::{ hover::{ scale::1.05 }, tap::{ scale::0.94 } }
+    }
+
+    style InstallSection {
+        layout::{ direction::column, align::center, gap::14, padding.x::16, padding.y::48..80, width::"100%", min-width::0 }
+    }
+
     style FooterBase {
         layout::{ padding.y::26, align::center, justify::center, direction::row, gap::6 }
         paint::{ border::{1, @footer-border} }
@@ -144,6 +171,11 @@ ui fn Landing() {
                 layout::{ direction::column, width::"100%", max-width::1440 }
                 import "./hero.tn";
                 import "./demo.tn";
+                InstallSection {
+                    use::InstallSection
+                    Text { text::{22..30, bold, @text-main} "Try it in one command" }
+                    import "./install.tn";
+                }
             }
         }
         import "./footer.tn";

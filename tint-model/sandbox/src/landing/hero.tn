@@ -35,4 +35,10 @@ Hero {
             "GitHub"
         }
     }
+
+    Install {
+        layout::{ direction::column, align::center, max-width::"100%", min-width::0, padding.x::16 }
+        animation::"rise .7s .36s cubic-bezier(.2,.7,.2,1) both"
+        import "./install.tn";
+    }
 }

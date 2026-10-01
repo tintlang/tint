@@ -1,0 +1,6 @@
+InstallBar {
+    use::InstallBase
+    Text { text::{14, @text-muted} "$" }
+    Cmd { use::InstallCmd "{install_cmd}" }
+    Button { use::CopyButtonBase click||copy_install "{copy_label}" }
+}
