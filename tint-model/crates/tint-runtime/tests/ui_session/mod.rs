@@ -36,3 +36,4 @@ const DEMO_SOURCE: &str = concat!(
 
 include!("basic.rs");
 include!("demo.rs");
+include!("components.rs");

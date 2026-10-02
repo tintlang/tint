@@ -36,6 +36,7 @@ subject.
 - `modifiers.md` — the `::` modifier syntax and semantic groups (`layout`, `paint`, `motion`)
 - `styling.md` — the currently implemented layout, paint, gradient, blur, and hover modifiers
 - `animations.md` — current transition and hover behavior
+- `guide/gestures.md` — pan, swipe, long-press, hotkeys, URL params, derived values
 - `guide/assets.md` — URL-backed image assets and the resource boundary
 - `guide/audio.md` — event sounds and the current audio boundary
 - [`guide/collections.md`](guide/collections.md) — methods on lists, strings, and maps

@@ -26,7 +26,7 @@ impl Parser {
                 nodes.push(self.parse_style_node()?);
             } else if self.stream.peek().lexeme == "component"
                 && self.stream.peek2_kind() == TokenKind::Ident
-                && self.stream.peek_n_kind(2) == TokenKind::LBrace
+                && matches!(self.stream.peek_n_kind(2), TokenKind::LBrace | TokenKind::LParen)
             {
                 nodes.push(self.parse_component_node()?);
             } else {
@@ -61,7 +61,7 @@ impl Parser {
                 nodes.push(self.parse_style_node()?);
             } else if self.stream.peek().lexeme == "component"
                 && self.stream.peek2_kind() == TokenKind::Ident
-                && self.stream.peek_n_kind(2) == TokenKind::LBrace
+                && matches!(self.stream.peek_n_kind(2), TokenKind::LBrace | TokenKind::LParen)
             {
                 nodes.push(self.parse_component_node()?);
             } else {
@@ -95,7 +95,7 @@ impl Parser {
                         && self.stream.peek_n_kind(2) == TokenKind::LBrace)
                     || (self.stream.peek().lexeme == "component"
                         && self.stream.peek2_kind() == TokenKind::Ident
-                        && self.stream.peek_n_kind(2) == TokenKind::LBrace)
+                        && matches!(self.stream.peek_n_kind(2), TokenKind::LBrace | TokenKind::LParen))
                     || (self.stream.peek().lexeme == "theme"
                         && self.stream.peek2_kind() == TokenKind::PathSep
                         && self.stream.peek_n_kind(2) == TokenKind::Ident
@@ -121,6 +121,11 @@ impl Parser {
             TokenKind::Ident => {
                 let tok = self.stream.next();
                 Ok(UiAttrValue::Ident(tok.lexeme.clone()))
+            }
+            // `trap||true`, `aria_hidden||false`
+            TokenKind::True | TokenKind::False => {
+                let tok = self.stream.next();
+                Ok(UiAttrValue::Ident(if tok.kind == TokenKind::True { "true" } else { "false" }.to_string()))
             }
 
             TokenKind::String => {

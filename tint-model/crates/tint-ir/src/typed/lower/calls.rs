@@ -367,6 +367,11 @@ impl<'a> Lowerer<'a> {
             h
         } else if discard {
             self.unit_ty()
+        } else if name == "cache_fresh" || name == "cache_set" {
+            self.bool_ty()
+        } else if name == "query_get" || name == "cache_get" {
+            // A built-in `web` function with a declared type.
+            self.str_ty()
         } else {
             return self.err(
                 Some(span),

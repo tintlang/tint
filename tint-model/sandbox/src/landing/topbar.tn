@@ -1,5 +1,6 @@
 Nav {
     use::NavBase
+    role||"navigation" aria_label||"Main"
 
     Logo {
         use::LogoBase
@@ -13,26 +14,27 @@ Nav {
 
             ThemeSwitch {
                 use::ThemeSwitchBase
+                role||"group" aria_label||"Theme"
                 ThemeButton {
-                    click||set_dark
+                    click||set_dark aria_pressed||true
                     paint::{ background::@theme-dark-bg, color::@theme-dark-text }
                     if{theme == "dark"}
                     "Dark"
                 }
                 ThemeButtonInactive {
-                    click||set_dark
+                    click||set_dark aria_pressed||false
                     paint::{ background::@theme-dark-bg, color::@theme-dark-text }
                     if{theme == "light"}
                     "Dark"
                 }
                 ThemeButton {
-                    click||set_light
+                    click||set_light aria_pressed||true
                     paint::{ background::@theme-light-bg, color::@theme-light-text }
                     if{theme == "light"}
                     "Light"
                 }
                 ThemeButtonInactive {
-                    click||set_light
+                    click||set_light aria_pressed||false
                     paint::{ background::@theme-light-bg, color::@theme-light-text }
                     if{theme == "dark"}
                     "Light"

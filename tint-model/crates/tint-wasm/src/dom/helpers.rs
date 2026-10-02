@@ -317,6 +317,7 @@ const BASE_CSS: &str = concat!(
     ":where(a[data-tag]){color:inherit;text-decoration:none}",
     ":where(textarea[data-tag]){appearance:none;border:0;margin:0;padding:0;background:transparent;color:inherit;font:inherit;resize:none;outline:none;overflow:hidden}",
     ":where(button[data-tag]){-webkit-tap-highlight-color:transparent;appearance:none;background:none;border:none;padding:0;margin:0;font:inherit;color:inherit;text-align:inherit}",
+    ":where([data-tag]):focus-visible{outline:2px solid #5b9dff;outline-offset:2px}",
 );
 
 fn ensure_base_styles(document: &Document) -> Result<(), JsValue> {
@@ -338,6 +339,7 @@ fn ensure_base_styles(document: &Document) -> Result<(), JsValue> {
 /// `tree`. Whole-subtree teardown/rebuild, not a diff -- see this
 /// module's doc comment.
 fn mount_tree(tree: Vec<Rc<UiRenderNode>>, shared: &Rc<Shared>) -> Result<(), JsValue> {
+    RENDER_SEQ.with(|s| s.set(s.get().wrapping_add(1)));
     let document = document()?;
     ensure_base_styles(&document)?;
     let container = document
@@ -349,6 +351,9 @@ fn mount_tree(tree: Vec<Rc<UiRenderNode>>, shared: &Rc<Shared>) -> Result<(), Js
     // innerWidth and finishing the rebuild -- not realistic, but cheap
     // to make free.
     bind_click_delegate(&container, shared);
+    bind_lifecycle(&container, shared);
+    bind_gestures(&container, shared);
+    bind_hotkeys(&container, shared);
     let prof = profiling();
     let q0 = if prof { now() } else { 0.0 };
     let scan = scan_tree(&tree);
@@ -364,7 +369,8 @@ fn mount_tree(tree: Vec<Rc<UiRenderNode>>, shared: &Rc<Shared>) -> Result<(), Js
     // tight calls below, with no empty state in between for the browser
     // to ever paint.
     let previous = shared.retained.borrow_mut().take().filter(|r| {
-        r.breakpoint == breakpoint && container.child_element_count() as usize == r.mounts.len()
+        r.breakpoint == breakpoint
+            && container.child_element_count() as usize == r.mounts.len() + exiting_children(&container)
     });
     let (old_nodes, old_mounts) = match previous {
         Some(r) => (r.nodes, r.mounts),
@@ -375,7 +381,10 @@ fn mount_tree(tree: Vec<Rc<UiRenderNode>>, shared: &Rc<Shared>) -> Result<(), Js
             (Vec::new(), Vec::new())
         }
     };
+    let flips = flip_measure(&container);
     let mounts = patch_list(&document, &container, &old_nodes, old_mounts, &tree, shared, &breakpoint)?;
+    flip_play(flips);
+    scroll_update_all();
 
     // `frame||` (see docs/guide/events.md) drives its own clock instead of
     // waiting for a click/hover/key event: refresh which handler (if any)
@@ -1062,14 +1071,18 @@ fn patch_middle(
     }
     let mut replaces: Vec<bool> = vec![false; nodes.len()];
     for (index, candidate) in candidates.iter().enumerate() {
-        if candidate.is_none() && index < matched.len() && !matched[index] {
+        if candidate.is_none() && index < matched.len() && !matched[index] && exit_style(&old_nodes[index]).is_none() {
             matched[index] = true;
             replaces[index] = true;
         }
     }
 
     // Nothing reused and everything plain: replace the parent's content outright.
-    if whole && candidates.iter().all(|c| c.is_none()) && !nodes.is_empty() {
+    if whole
+        && candidates.iter().all(|c| c.is_none())
+        && !nodes.is_empty()
+        && !old_nodes.iter().any(|o| exit_style(o).is_some())
+    {
         if let Some(mounts) = build_bulk_into(parent, nodes, shared, breakpoint)? {
             return Ok(mounts);
         }
@@ -1110,8 +1123,15 @@ fn patch_middle(
     }
 
     // Unmatched old elements go away.
-    for leftover in old.into_iter().flatten() {
-        parent.remove_child(&leftover.el)?;
+    for (i, leftover) in old.into_iter().enumerate() {
+        if let Some(leftover) = leftover {
+            match exit_style(&old_nodes[i]) {
+                Some(props) => start_exit(&leftover.el, props),
+                None => {
+                    parent.remove_child(&leftover.el)?;
+                }
+            }
+        }
     }
 
     // Place elements. Reused elements that already sit in increasing old order
@@ -1373,6 +1393,13 @@ fn apply_style_props(el: &Element, props: &[(String, String)]) -> Result<(), JsV
     // properties (for example box-shadow) that do not exist in the base
     // style when a stale mouseleave was missed.
     let mut css = style_to_css_text(props);
+    if let Some((_, view)) = props.iter().rev().find(|(k, _)| k == "--tint-fx-view") {
+        if el.get_attribute("data-tint-view").as_deref() == Some("in") {
+            let mut merged = props.to_vec();
+            merged.extend(fx_decode(view));
+            css = style_to_css_text(&merged);
+        }
+    }
     if el.has_attribute("data-tint-drag") {
         // Keep a dragged node where it was dropped.
         let (x, y) = read_drag_offset(el);
@@ -1514,23 +1541,43 @@ fn apply_html_attrs(el: &Element, old: &[(String, String)], new: &[(String, Stri
 /// remembered in `data-tint-drag` so a re-render keeps the node where it was
 /// dropped (see `apply_style_props`).
 fn apply_gestures(el: &Element, node: &UiRenderNode) {
+    apply_fx(el, node);
     let mode = node.style.iter().rev().find(|(k, _)| k == "--tint-drag").map(|(_, v)| v.clone());
     let Some(mode) = mode else { return };
     let back = node.style.iter().any(|(k, _)| k == "--tint-drag-return");
     let _ = el.set_attribute("data-tint-drag-mode", &mode);
+    match node.style.iter().rev().find(|(k, _)| k == "--tint-drag-bounds") {
+        Some((_, bounds)) => {
+            let _ = el.set_attribute("data-tint-drag-bounds", bounds);
+            let elastic = node.style.iter().rev().find(|(k, _)| k == "--tint-drag-elastic");
+            let _ = el.set_attribute("data-tint-drag-elastic", elastic.map_or("0.35", |(_, v)| v.as_str()));
+        }
+        None => {
+            let _ = el.remove_attribute("data-tint-drag-bounds");
+        }
+    }
     if back {
         let _ = el.set_attribute("data-tint-drag-return", "1");
     } else {
         let _ = el.remove_attribute("data-tint-drag-return");
+    }
+    if node.style.iter().any(|(k, _)| k == "--tint-drag-momentum") {
+        let _ = el.set_attribute("data-tint-drag-momentum", "1");
+    } else {
+        let _ = el.remove_attribute("data-tint-drag-momentum");
     }
     if el.has_attribute("data-tint-drag-bound") {
         return;
     }
     let _ = el.set_attribute("data-tint-drag-bound", "1");
     let start: Rc<Cell<Option<(f64, f64, f64, f64)>>> = Rc::new(Cell::new(None));
+    // Last pointer position, its time, and the velocity (px/ms) for `drag::momentum`.
+    let track: Rc<Cell<(f64, f64, f64, f64, f64)>> = Rc::new(Cell::new((0.0, 0.0, 0.0, 0.0, 0.0)));
 
-    let (target, st) = (el.clone(), start.clone());
+    let (target, st, tr) = (el.clone(), start.clone(), track.clone());
     let down = Closure::wrap(Box::new(move |e: web_sys::PointerEvent| {
+        drag_stop_momentum(&target);
+        tr.set((f64::from(e.client_x()), f64::from(e.client_y()), now(), 0.0, 0.0));
         let (ox, oy) = read_drag_offset(&target);
         st.set(Some((f64::from(e.client_x()), f64::from(e.client_y()), ox, oy)));
         let _ = target.set_pointer_capture(e.pointer_id());
@@ -1539,25 +1586,44 @@ fn apply_gestures(el: &Element, node: &UiRenderNode) {
     let _ = el.add_event_listener_with_callback("pointerdown", down.as_ref().unchecked_ref());
     down.forget();
 
-    let (target, st) = (el.clone(), start.clone());
+    let (target, st, tr) = (el.clone(), start.clone(), track.clone());
     let moved = Closure::wrap(Box::new(move |e: web_sys::PointerEvent| {
         let Some((sx, sy, ox, oy)) = st.get() else { return };
+        let (px, py, pt, pvx, pvy) = tr.get();
+        let t = now();
+        if t > pt {
+            // Smoothed so one odd event does not decide the release speed.
+            let a = 0.6;
+            let vx = (f64::from(e.client_x()) - px) / (t - pt);
+            let vy = (f64::from(e.client_y()) - py) / (t - pt);
+            tr.set((f64::from(e.client_x()), f64::from(e.client_y()), t, pvx * (1.0 - a) + vx * a, pvy * (1.0 - a) + vy * a));
+        }
         let mode = target.get_attribute("data-tint-drag-mode").unwrap_or_default();
         let dx = if mode == "y" { 0.0 } else { f64::from(e.client_x()) - sx };
         let dy = if mode == "x" { 0.0 } else { f64::from(e.client_y()) - sy };
-        write_drag_offset(&target, ox + dx, oy + dy);
+        let [left, top, right, bottom] = drag_bounds(&target);
+        let k: f64 = target.get_attribute("data-tint-drag-elastic").and_then(|v| v.parse().ok()).unwrap_or(0.35);
+        write_drag_offset(&target, clamp_axis(ox + dx, left, right, k), clamp_axis(oy + dy, top, bottom, k));
     }) as Box<dyn FnMut(_)>);
     let _ = el.add_event_listener_with_callback("pointermove", moved.as_ref().unchecked_ref());
     moved.forget();
 
-    let (target, st) = (el.clone(), start);
+    let (target, st, tr) = (el.clone(), start, track);
     let up = Closure::wrap(Box::new(move |_e: web_sys::PointerEvent| {
         if st.take().is_none() {
             return;
         }
         let _ = target.remove_attribute("data-tint-dragging");
-        if target.has_attribute("data-tint-drag-return") {
+        let (_, _, pt, vx, vy) = tr.get();
+        if target.has_attribute("data-tint-drag-momentum") && now() - pt < 80.0 && (vx.abs() > 0.05 || vy.abs() > 0.05) {
+            drag_momentum(&target, vx, vy);
+        } else if target.has_attribute("data-tint-drag-return") {
             write_drag_offset(&target, 0.0, 0.0);
+        } else {
+            // Released past a bound: settle on it.
+            let [left, top, right, bottom] = drag_bounds(&target);
+            let (x, y) = read_drag_offset(&target);
+            write_drag_offset(&target, clamp_axis(x, left, right, 0.0), clamp_axis(y, top, bottom, 0.0));
         }
     }) as Box<dyn FnMut(_)>);
     let _ = el.add_event_listener_with_callback("pointerup", up.as_ref().unchecked_ref());
@@ -1576,4 +1642,44 @@ fn write_drag_offset(el: &Element, x: f64, y: f64) {
     if let Some(html) = el.dyn_ref::<web_sys::HtmlElement>() {
         let _ = html.style().set_property("translate", &format!("{}px {}px", x, y));
     }
+}
+
+fn drag_stop_momentum(el: &Element) {
+    let _ = js_sys::Reflect::set(el, &JsValue::from_str("__tintMomentum"), &JsValue::from_f64(0.0));
+}
+
+/// After release the node keeps its speed (px/ms), losing about 5% per frame, and stops at its bounds.
+fn drag_momentum(el: &Element, vx: f64, vy: f64) {
+    let token = now() + 1.0;
+    let _ = js_sys::Reflect::set(el, &JsValue::from_str("__tintMomentum"), &JsValue::from_f64(token));
+    let el = el.clone();
+    let mode = el.get_attribute("data-tint-drag-mode").unwrap_or_default();
+    let (mut vx, mut vy) = (if mode == "y" { 0.0 } else { vx }, if mode == "x" { 0.0 } else { vy });
+    let last = Rc::new(Cell::new(now()));
+    fn step(el: Element, token: f64, mut vx: f64, mut vy: f64, last: Rc<Cell<f64>>) {
+        let alive = js_sys::Reflect::get(&el, &JsValue::from_str("__tintMomentum")).ok().and_then(|v| v.as_f64()) == Some(token);
+        if !alive || !el.is_connected() {
+            return;
+        }
+        let t = now();
+        let dt = (t - last.get()).clamp(1.0, 50.0);
+        last.set(t);
+        let decay = 0.95f64.powf(dt / 16.0);
+        vx *= decay;
+        vy *= decay;
+        let (x, y) = read_drag_offset(&el);
+        let [left, top, right, bottom] = drag_bounds(&el);
+        let (nx, ny) = (clamp_axis(x + vx * dt, left, right, 0.0), clamp_axis(y + vy * dt, top, bottom, 0.0));
+        if nx == x { vx = 0.0 }
+        if ny == y { vy = 0.0 }
+        write_drag_offset(&el, nx, ny);
+        if vx.abs() < 0.02 && vy.abs() < 0.02 {
+            return;
+        }
+        let Some(window) = web_sys::window() else { return };
+        let next = Closure::once_into_js(move || step(el, token, vx, vy, last));
+        let _ = window.request_animation_frame(next.unchecked_ref());
+    }
+    let _ = (&mut vx, &mut vy);
+    step(el, token, vx, vy, last);
 }

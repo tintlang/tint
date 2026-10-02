@@ -10,6 +10,7 @@ pub mod parse_kernel;
 pub mod parse_space;
 pub mod parse_type;
 pub mod parse_type_alias;
+mod components;
 pub mod parser;
 pub mod skip_parens;
 pub mod symbols;

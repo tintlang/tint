@@ -2,6 +2,7 @@
 //! host functions (`app { rs::"./native.rs" }`) and reuse the same commands.
 
 mod build;
+mod prerender;
 mod dev;
 mod module_loader;
 mod native_runner;

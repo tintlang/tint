@@ -79,6 +79,37 @@ ui fn App() {
             paint::{ background::#ef476f, radius::full }
             animation::"pulse 1.2s ease-in-out infinite"
         }
+
+        // drag inside bounds, with a rubber band
+        Box {
+            drag::{ x, bounds::{ left::-60, right::60 }, elastic::0.25 }
+            layout::{ width::56, height::56 }
+            paint::{ background::#ffd166, radius::12 }
+            motion::{ spring::{ stiffness::300, damping::22, props::"translate" } }
+        }
+
+        // enter / exit / layout: toggle it with the button below
+        Button { click||unlock "toggle" }
+        Box {
+            key::"toast"
+            layout::{ padding::12 }
+            paint::{ background::#1d2030, color::white, radius::10 }
+            motion::{
+                spring::{ stiffness::300, damping::24, props::"transform, opacity" },
+                enter::{ opacity::0, translate.y::20 },
+                exit::{ opacity::0, scale::0.9 },
+                layout::position
+            }
+            if{locked}
+            "Locked"
+        }
+        Box {
+            key::"below"
+            layout::{ padding::12 }
+            paint::{ background::#2a2f45, color::white, radius::10 }
+            motion::{ spring::{ stiffness::300, damping::24 }, layout::position }
+            "I glide when the toast comes and goes"
+        }
     }
 }
 

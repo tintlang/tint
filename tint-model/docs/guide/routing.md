@@ -28,6 +28,7 @@ See `examples/router.tn`.
 | `title`  | the page `<title>` (`tint build`/`dev`, and set at runtime in a host page) |
 | `lang`   | the `<html lang>` attribute                                          |
 | `router` | `on` turns on the client router below                                |
+| `loading` | `loading::Splash` uses `ui fn Splash()` as the static screen while the live UI mounts; omit it for an empty shell with the selected theme background |
 | `route.Ui` | `route.Home::"/"` or `route.About::{ path::"/about", title::"About" }`: with `router::on`, the URL picks which `ui fn` renders. Each page is its own `ui fn` with its own `state` (`theme` carries over); a link `route||"/about"` switches without a page load |
 | `page`   | `page::{ margin::0, background::#0a0a12 }` styles the host `<body>` (same syntax as `layout::{ }`; also `color-scheme`) |
 | `keyframes.name` | `keyframes.spin::{ from::{ opacity::0 }, p50::{ opacity::0.5 }, to::{ opacity::1 } }` becomes `@keyframes spin`; `pN` is N%. Use with `animation::"spin 1s infinite"` |
@@ -38,6 +39,21 @@ See `examples/router.tn`.
 `route_path` is a string variable holding the current URL path (`"/"`,
 `"/about"`). It is read from the URL on every render, so back/forward and typed
 URLs just work.
+
+The optional loading screen is ordinary Tint UI. It is rendered once into the
+HTML shell before WebAssembly starts, then replaced by the selected route:
+
+```tn
+app { loading::Loading }
+
+ui fn Loading() {
+    Page { layout::{ min-height::"100dvh", align::center, justify::center } "Starting…" }
+}
+```
+
+If `loading` is omitted, the shell contains no text or controls. Its background
+follows the saved `theme` value (`dark` by default, `light` when selected by
+the app), so the loading UI can also be left entirely to the application.
 
 With `router::on`, a link written `route||"/about"` navigates through the history
 API and re-renders instead of loading a page. Links with `target||"_blank"`,

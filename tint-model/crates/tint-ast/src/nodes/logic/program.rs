@@ -16,6 +16,9 @@ pub struct AppMeta {
     /// itself -- history navigation, no page load -- and keeps `route_path`
     /// current. Without it, links are ordinary links.
     pub router: bool,
+    /// `loading::Splash`: an optional `ui fn` rendered while the live app mounts.
+    /// When absent, the host keeps the shell empty and uses the selected theme background.
+    pub loading: Option<String>,
     /// `page::{ margin::0, background::#000 }`: styles for the host page's
     /// `<body>`, in the same modifier syntax as a node's `layout::{ ... }`.
     pub page: Vec<UiModifierValue>,
@@ -115,6 +118,7 @@ impl Program {
                     "title" => meta.title = Some(value.clone()),
                     "lang" => meta.lang = Some(value.clone()),
                     "router" => meta.router = value == "on",
+                    "loading" => meta.loading = Some(value.clone()),
                     "js" => meta.js.push(value.clone()),
                     "css" => meta.css.push(value.clone()),
                     "rs" => meta.rs.push(value.clone()),

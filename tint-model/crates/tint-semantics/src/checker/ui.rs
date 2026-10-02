@@ -208,11 +208,13 @@ impl SemanticChecker {
                         "frame" => Some(vec![Type::Number]),
                         "key_down" | "key_up" => Some(vec![Type::String]),
                         "input" => Some(vec![Type::String]),
-                        "submit" => Some(Vec::new()),
+                        "submit" | "long_press" | "hotkey" | "blur" | "poll" => Some(Vec::new()),
+                        "swipe" => Some(vec![Type::String]),
+                        "pan" | "sortable" | "scroll" => Some(vec![Type::Number, Type::Number]),
                         "pointer_start" | "pointer_move" | "pointer_up" => {
                             Some(vec![Type::Number, Type::Number])
                         }
-                        "click" | "pointer_down" | "hover_in" | "hover_out" | "tick" => {
+                        "click" | "pointer_down" | "hover_in" | "hover_out" | "tick" | "mount" | "unmount" | "effect" | "dismiss" => {
                             Some(Vec::new())
                         }
                         _ => None,
@@ -236,6 +238,18 @@ impl SemanticChecker {
                             | "hover_in"
                             | "hover_out"
                             | "frame"
+                            | "mount"
+                            | "unmount"
+                            | "effect"
+                            | "dismiss"
+                            | "pan"
+                            | "swipe"
+                            | "long_press"
+                            | "hotkey"
+                            | "blur"
+                            | "poll"
+                            | "sortable"
+                            | "scroll"
                     ) && !self.known_fns.contains(name)
                     {
                         self.error(attr.span, SemanticErrorKind::UnknownIdent(name.clone()));

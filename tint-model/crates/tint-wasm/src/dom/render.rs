@@ -86,6 +86,7 @@ fn build_node(
     if !css.is_empty() {
         el.set_attribute("style", &css)?;
     }
+    start_enter(&el, node, &base_props);
 
     if !node.hover_style.is_empty() {
         let base_css = style_to_css_text(&base_props);
@@ -206,7 +207,7 @@ fn bulk_size(node: &UiRenderNode, in_button: bool) -> Option<usize> {
         || node.reference.is_some()
         || node.class.is_some()
         || !node.attrs.is_empty()
-        || node.style.iter().any(|(k, _)| k == "--tint-drag")
+        || node.style.iter().any(|(k, _)| k == "--tint-drag" || k.starts_with("--tint-fx-"))
         || node.breakpoints.iter().any(|(name, _)| name.starts_with(':'))
         || node.component.is_some()
         || node.on_js.is_some()

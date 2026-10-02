@@ -111,7 +111,7 @@ pub fn replay(templates: &[UiTemplate], events: &[UiEvent], host: &mut dyn UiHos
 
 /// Attributes whose value is a run-time expression (`placeholder||{hint}`, `props||{..}`);
 /// their expressions follow the modifiers' in a template's slots.
-pub const VALUE_ATTRS: [&str; 7] = ["placeholder", "disabled", "readonly", "title", "alt", "tabindex", "props"];
+pub use tint_ast::ui_attrs::{html_attr_name, LIFECYCLE_ATTRS, VALUE_ATTRS};
 
 pub fn attr_exprs(attributes: &[UiAttribute]) -> Vec<&Expr> {
     attributes

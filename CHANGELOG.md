@@ -4,6 +4,12 @@ All notable changes to Tint are documented here.
 
 ## [Unreleased]
 
+- Components with props and per-use state (`component Name(props) { state ... fn ... }`), `derived` values, `persist state`, and `form` blocks (`docs/guide/components.md`, `forms.md`).
+- Life cycle: `mount||`, `unmount||`, `effect||` with `deps||`, `poll||` with `every||`; `resource name = host_fn(..)` with `cache::ms` and `every::ms` (`docs/guide/lifecycle.md`).
+- `web` natives: `clipboard_write`, `sleep`, `download`, `open_url`, `set_title`, `focus`, `scroll_to`, `fetch_text`, `post_text`, `query_get`, `query_set`, `cache_*` (`docs/guide/web.md`). The landing page no longer needs `copy.js`.
+- Overlays (`dismiss||`, `anchor||`/`place||`, `trap||`), accessibility (`role||`, `aria_*||`, focus-visible, reduced motion) and `tint build` prerender (`docs/guide/overlays.md`, `accessibility.md`, `prerender.md`).
+- Motion and gestures: `layout-id`, `scroll`/`scroll-page`, `stagger`, `drag::{ momentum }`, `pan||`, `swipe||`, `long_press||`, `hotkey||` with `keys||`, `sortable||`, `scroll||`, `blur||` (`docs/ui/animations.md`, `docs/guide/gestures.md`).
+
 ## [0.3.0] - 2026-10-02
 
 - `tint build` now compiles the program to WebAssembly by default: typed IR -> wasm backend (`tint-wasmgen`) -> `app.wasm`, run by the small `tint-wasmrt` runtime (no parser, checker or interpreter in the page). `--engine interpreter` keeps the previous page. Constructs the compiler does not support are a build error; there is no silent fallback. `tint dev` and `tint run` are unchanged (interpreter / Cranelift).

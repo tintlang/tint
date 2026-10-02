@@ -44,9 +44,14 @@ impl Parser {
         // yet); see UiStateDecl's doc comment in tint-ast for what these
         // become at runtime.
         let mut state = Vec::new();
-        while self.stream.peek().kind == TokenKind::State {
+        while self.stream.peek().kind == TokenKind::State || self.at_derived() || self.at_persist() {
+            let persist = self.at_persist();
+            if persist {
+                self.stream.next();
+            }
             let tok = self.stream.next();
             let decl_start = tok.span;
+            let derived = tok.kind != TokenKind::State && !persist;
 
             let name = self.parse_ident()?;
             self.stream.expect(TokenKind::Eq)?;
@@ -55,6 +60,8 @@ impl Parser {
             state.push(UiStateDecl {
                 name,
                 init,
+                derived,
+                persist,
                 span: Span::merge(decl_start, self.stream.last_span()),
             });
         }

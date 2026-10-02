@@ -882,6 +882,10 @@ impl SemanticChecker {
             "storage_set" => (Some(vec![Type::String, Type::String]), Type::Unit),
             "storage_remove" => (Some(vec![Type::String]), Type::Unit),
             "now_ms" => (Some(vec![]), Type::Number),
+            "query_get" => (Some(vec![Type::String]), Type::String),
+            "cache_get" => (Some(vec![Type::String]), Type::String),
+            "cache_set" => (Some(vec![Type::String, Type::String]), Type::Bool),
+            "cache_fresh" => (Some(vec![Type::String, Type::Number]), Type::Bool),
             "line_count" | "max_line_len" => (Some(vec![Type::String]), Type::Number),
             "line_numbers" => (Some(vec![Type::String]), Type::String),
             "tint_highlight" => (

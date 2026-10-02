@@ -5,14 +5,7 @@ ui fn Landing() {
     state theme = storage_get_or("theme", "dark")
     state code = include_str("./demo-app.tn")
     state tint_src = include_str("./demo-counter.tn")
-    state install_cmd = "curl -fsSL tint-gamma.vercel.app/install | bash"
-    state copy_label = "Copy"
     state compare_file = "index.html"
-    state web_shown = include_str("./compare/index.html.txt")
-    state web_index = include_str("./compare/index.html.txt")
-    state web_main = include_str("./compare/main.jsx.txt")
-    state web_app = include_str("./compare/App.jsx.txt")
-    state web_css = include_str("./compare/App.css.txt")
     import "./chrome.tn";
 
     style HeroLayout {
@@ -34,6 +27,25 @@ ui fn Landing() {
             tap::{ scale::0.94 },
             focus-visible::{ ring::{3, #8b7cf0} }
         }
+    }
+
+    // Scroll reveal: fades and rises once when the section first comes into view.
+    style Reveal {
+        motion::{
+            translate.y::28,
+            transition::"opacity .7s cubic-bezier(.2,.7,.2,1), transform .7s cubic-bezier(.2,.7,.2,1)",
+            view::{ once, opacity::1, translate.y::0 }
+        }
+        paint::{ opacity::0 }
+    }
+
+    style RevealLate {
+        motion::{
+            translate.y::28,
+            transition::"opacity .7s .14s cubic-bezier(.2,.7,.2,1), transform .7s .14s cubic-bezier(.2,.7,.2,1)",
+            view::{ once, opacity::1, translate.y::0 }
+        }
+        paint::{ opacity::0 }
     }
 
     style DemoBase {
@@ -160,12 +172,28 @@ ui fn Landing() {
         slot::content
     }
 
+    // The copy button keeps its own label: every use has its own state.
+    component InstallBar(cmd: string) {
+        state label = "Copy"
+        async fn copy() {
+            label = "Copied"
+            clipboard_write(cmd);
+            await sleep(1500)
+            label = "Copy"
+        }
+        use::InstallBase
+        Text { text::{14, @text-muted} "$" }
+        Cmd { use::InstallCmd "{cmd}" }
+        Button { use::CopyButtonBase click||copy "{label}" }
+    }
+
     Page {
         color-scheme::{ theme }
         layout::{ direction::column }
         paint::{ background::@page-bg }
         import "./topbar.tn";
         Main {
+            role||"main"
             layout::{ direction::column, align::center, width::"100%" }
             Content {
                 layout::{ direction::column, width::"100%", max-width::1440 }
@@ -173,6 +201,7 @@ ui fn Landing() {
                 import "./demo.tn";
                 InstallSection {
                     use::InstallSection
+                    use::Reveal
                     import "./install.tn";
                 }
             }

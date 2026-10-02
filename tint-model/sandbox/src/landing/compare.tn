@@ -3,15 +3,17 @@ Compare {
 
     CompareTitle {
         use::CenteredOnSmall
+        use::Reveal
         Text { text-align::center text::{28..44, bold, @text-main} "Same app. Less scaffolding." }
     }
-    Sub { use::CenteredOnSmall text::{15..17, @text-muted} "One Tint file, or four files in Vite + React." }
+    Sub { use::CenteredOnSmall use::Reveal text::{15..17, @text-muted} "One Tint file, or four files in Vite + React." }
 
     Versus {
         use::VersusBase
 
         Side {
             use::SideBase
+            use::Reveal
             Top {
                 use::SideTop
                 Text { text::{13, @text-muted} "Tint" }
@@ -33,6 +35,7 @@ Compare {
 
         Side {
             use::SideBase
+            use::RevealLate
             Top {
                 use::SideTop
                 Text { text::{13, @text-muted} "HTML + CSS + JS" }

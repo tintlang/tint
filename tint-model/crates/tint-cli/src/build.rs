@@ -107,10 +107,14 @@ fn build_file(path: &str, entry: Option<&str>, output: Option<&str>, engine: Eng
     }
 
     let meta = loaded.program.app_meta();
-    let inline = read_inline_assets(path, &meta).unwrap_or_else(|error| {
+    let mut inline = read_inline_assets(path, &meta).unwrap_or_else(|error| {
         eprintln!("{}", error);
         std::process::exit(1);
     });
+    inline.loading = meta
+        .loading
+        .as_deref()
+        .and_then(|entry| crate::prerender::render(&combined_source, entry));
     let html = match engine {
         Engine::Interpreter => standalone_html(&combined_source, entry, &meta, &inline),
         Engine::Wasm => match crate::wasm_app::compile(&loaded) {
@@ -118,6 +122,11 @@ fn build_file(path: &str, entry: Option<&str>, output: Option<&str>, engine: Eng
                 // A page may start from a `ui fn` the entry file does not declare (routes).
                 let start = if app.ui_fns.iter().any(|name| name == entry) { entry } else { app.ui_fns[0].as_str() };
                 println!("compiled: {} KB of WebAssembly", app.wasm.len() / 1024);
+                inline.prerender = crate::prerender::render(&combined_source, start);
+                match &inline.prerender {
+                    Some(html) => println!("prerendered: {} KB of HTML", html.len() / 1024),
+                    None => println!("prerender skipped: `{start}` could not run at build time"),
+                }
                 compiled_html(&app, start, &meta, &inline)
             }
             Err(message) => {
@@ -141,6 +150,10 @@ pub(crate) struct InlineAssets {
     pub wasm: Option<std::sync::Arc<crate::wasm_build::WasmAssets>>,
     pub js: Vec<String>,
     pub css: Vec<String>,
+    /// The first screen as static HTML (`prerender.rs`), shown until the runtime has loaded.
+    pub prerender: Option<String>,
+    /// Optional user-defined loading screen from `app { loading::UiFn }`.
+    pub loading: Option<String>,
 }
 
 /// Reads the declared files, resolving paths against the entry file's folder.
@@ -163,6 +176,8 @@ pub(crate) fn read_inline_assets(
         wasm,
         js: meta.js.iter().map(read).collect::<Result<_, _>>()?,
         css: meta.css.iter().map(read).collect::<Result<_, _>>()?,
+        prerender: None,
+        loading: None,
     })
 }
 
@@ -361,6 +376,16 @@ fn page(meta: &tint_ast::AppMeta, inline: &InlineAssets, script: &str) -> String
         None => "null".to_string(),
     };
 
+    // A prerendered first screen belongs to `/`: on another path it is replaced by the user's
+    // optional loading screen. Without one, the shell stays empty until the selected route mounts.
+    let loading_html = inline.loading.as_deref().unwrap_or("");
+    let app_div = match &inline.prerender {
+        Some(html) => format!(
+            "<div id=\"app\" class=\"app-shell\" data-tint-route=\"/\">{html}</div>\n    <script>{{const a=document.getElementById('app');if(location.pathname!=='/'){{a.innerHTML={};a.removeAttribute('data-tint-route')}}}}</script>",
+            js_string(loading_html)
+        ),
+        None => format!(r#"<div id="app" class="app-shell">{loading_html}</div>"#),
+    };
     format!(
         r#"<!DOCTYPE html>
 <html lang="{lang}">
@@ -370,15 +395,21 @@ fn page(meta: &tint_ast::AppMeta, inline: &InlineAssets, script: &str) -> String
     <title>{title}</title>
     <style>
         * {{ box-sizing: border-box; }}
+        html, body {{ background: #0a0a0a; }}
+        html[data-tint-theme="light"], html[data-tint-theme="light"] body {{ background: #ffffff; }}
         body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }}
         body {{{page_base}{page_css} }}
         {at_rules}
         .error {{ background: #fee; border: 1px solid #fcc; border-radius: 4px; padding: 16px; color: #c00; font-family: monospace; white-space: pre-wrap; }}
-        .loading {{ padding: 40px 20px; color: #666; }}
+        .app-shell {{ min-height: 100dvh; background: inherit; }}
     </style>
 {user_css}</head>
 <body>
-    <div id="app" class="loading">Loading Tint UI...</div>
+    <script>
+        try {{ document.documentElement.dataset.tintTheme = localStorage.getItem('theme') === 'light' ? 'light' : 'dark'; }}
+        catch (_) {{ document.documentElement.dataset.tintTheme = 'dark'; }}
+    </script>
+    {app_div}
     <script type="module">
         const USER_JS = [{user_js}];
         const USER_WASM = {user_wasm};

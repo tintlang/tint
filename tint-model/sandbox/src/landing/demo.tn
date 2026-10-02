@@ -3,6 +3,7 @@ Demo {
 
     SourceRender {
         use::SourceRenderBase
+        use::Reveal
         CodePanel {
             use::CodePanelBase
             import "../editor/editor.tn";
@@ -16,6 +17,7 @@ Demo {
     import "./compare.tn";
 
     PongBlock {
+        use::Reveal
         layout::{ direction::column, align::center, gap::28, margin.t::72, padding.b::24 }
         Text { use::CenteredOnSmall text::{28..44, bold, @text-main} "Mini app on Tint" }
         PongButton { route||"/pong" "Pong game" }

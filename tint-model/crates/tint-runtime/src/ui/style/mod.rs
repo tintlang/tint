@@ -420,4 +420,5 @@ include!("properties_base.rs");
 include!("properties_box.rs");
 include!("layout.rs");
 include!("spring.rs");
+include!("fx.rs");
 include!("dispatch.rs");

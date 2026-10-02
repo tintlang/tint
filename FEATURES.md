@@ -32,6 +32,11 @@ still missing. The short introduction is in the [README](README.md).
 - **Logic loops**: `while`, `loop`, `break`, and `continue`
 - **Native Rust interop**: `TintVM::register_native("name", |args| ...)` registers a real Rust closure that `.tn` source calls directly by name -- no Rust syntax inside the language, no reimplementing rustc's borrow checker, just an ordinary Rust function called across the boundary (see `tint run <file> now_ms`, a demo native in `tint-cli`)
 - **Multi-file modules**: `mod name;` resolves to `name.tn` or `name/mod.tn` (the `mod.rs` convention); `use path::to::item;` + `export` control what crosses file boundaries (see `examples/modules/`)
+- **Components**: `component Name(props) { state ... fn ... }` inside a `ui fn`, with props and defaults, slots, variants and per-use state; `derived`, `persist state` and `form` blocks (fields, rules, touched, errors, submitting) -- see [`tint-model/docs/guide/components.md`](tint-model/docs/guide/components.md) and [`forms.md`](tint-model/docs/guide/forms.md)
+- **Life cycle and data**: `mount||`/`unmount||`/`effect||`, `resource name = fetch_text(..)` with `cache::` and `every::`, `poll||`, and the built-in `web` natives (clipboard, download, URL query, focus, scroll, fetch) -- see [`lifecycle.md`](tint-model/docs/guide/lifecycle.md) and [`web.md`](tint-model/docs/guide/web.md)
+- **Overlays and accessibility**: `dismiss||`, `anchor||`/`place||`, `trap||`, `role||`, `aria_*||`, focus-visible outline, reduced-motion support
+- **Motion and gestures**: enter/exit/view animations, `layout-id` shared layout, scroll-linked styles, `stagger`, `drag` with bounds and momentum, `pan||`, `swipe||`, `long_press||`, `hotkey||`, `sortable||`, `scroll||`, `blur||` -- see [`animations.md`](tint-model/docs/ui/animations.md) and [`gestures.md`](tint-model/docs/guide/gestures.md)
+- **Prerender**: `tint build` writes the first screen as static HTML into the page, so it has content before the WebAssembly runtime loads
 - **VSCode extension**: Syntax highlighting + build commands
 
 
@@ -66,14 +71,14 @@ still missing. The short introduction is in the [README](README.md).
 
 ## Known gaps
 
-- Multiple independent component instances (state is one flat scope per `UiSession`)
+- Done: components with their own state per use (expanded at parse time; a stateful component cannot be used inside `for`)
 - Done: `match{}` in UI trees: `case label { ... }` children (`case _ { ... }` as the wildcard arm), matched by comparing the scrutinee's display text against each label -- see `tint-runtime/tests/render_ui.rs`
 - Done: Compile-time `.tn` imports in the Vite sandbox source pipeline
 - Namespace access (`Ns::item`) and lambda expressions are unimplemented specifically in the IR VM path (both already work through the tree-walking path used for UI handlers)
 - Tuple-style enum variants (`enum E { A(T) }`) -- rejected at the semantic-check stage; only named-field variants (`enum E { A { x } }`) are supported
 - Full type-system coverage (lambda parameters, `Option`/`Result` holes, generic functions, and some host-specific UI contracts are still incomplete)
 - Generic functions and advanced generic constraints
-- Async/await
+- Async/await beyond the top level of an `async fn` body (`await` works there for host functions; see `tint-model/docs/guide/async.md`)
 
 These are deliberate design choices for a proof of concept, not bugs. The architecture supports adding them without major changes.
 

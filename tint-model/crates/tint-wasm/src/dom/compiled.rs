@@ -187,15 +187,15 @@ fn install_native_hook(natives: Vec<(String, js_sys::Function)>) {
 #[wasm_bindgen]
 pub fn compiled_prepare(natives: Option<js_sys::Object>) {
     tint_wasmrt::host_storage_hydrate(load_browser_storage());
-    install_native_hook(
-        js_sys::Object::entries(&natives.unwrap_or_default())
-            .iter()
-            .filter_map(|e| {
-                let e: js_sys::Array = e.into();
-                Some((e.get(0).as_string()?, e.get(1).dyn_into::<js_sys::Function>().ok()?))
-            })
-            .collect(),
-    );
+    let mut all = web_natives();
+    for e in js_sys::Object::entries(&natives.unwrap_or_default()).iter() {
+        let e: js_sys::Array = e.into();
+        if let (Some(name), Ok(function)) = (e.get(0).as_string(), e.get(1).dyn_into::<js_sys::Function>()) {
+            all.retain(|(n, _)| *n != name);
+            all.push((name, function));
+        }
+    }
+    install_native_hook(all);
 }
 
 #[wasm_bindgen]

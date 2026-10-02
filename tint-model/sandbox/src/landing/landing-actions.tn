@@ -1,16 +1,11 @@
 fn set_dark() { theme = "dark"  storage_set("theme", "dark") }
 fn set_light() { theme = "light"  storage_set("theme", "light") }
 fn open_sandbox() {}
-async fn copy_install() {
-    copy_label = "Copied"
-    await copy_text(install_cmd)
-    copy_label = "Copy"
-}
 fn open_github() {}
-fn pick_web_index() { compare_file = "index.html"  web_shown = web_index }
-fn pick_web_main() { compare_file = "main.jsx"  web_shown = web_main }
-fn pick_web_app() { compare_file = "App.jsx"  web_shown = web_app }
-fn pick_web_css() { compare_file = "App.css"  web_shown = web_css }
+fn pick_web_index() { compare_file = "index.html" }
+fn pick_web_main() { compare_file = "main.jsx" }
+fn pick_web_app() { compare_file = "App.jsx" }
+fn pick_web_css() { compare_file = "App.css" }
 
 // Fill of a file chip: highlighted when it is the selected one.
 fn chip_bg(current, name, theme) {
@@ -20,4 +15,12 @@ fn chip_bg(current, name, theme) {
     }
     if theme == "light" { return "#f5f5f5" }
     return "#161616"
+}
+
+// The text of the file chosen in the "HTML + CSS + JS" column.
+fn web_source(file) {
+    if file == "main.jsx" { return include_str("./compare/main.jsx.txt") }
+    if file == "App.jsx" { return include_str("./compare/App.jsx.txt") }
+    if file == "App.css" { return include_str("./compare/App.css.txt") }
+    return include_str("./compare/index.html.txt")
 }

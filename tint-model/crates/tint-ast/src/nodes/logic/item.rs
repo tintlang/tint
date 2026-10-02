@@ -159,6 +159,13 @@ pub struct UiFnDecl {
 pub struct UiStateDecl {
     pub name: String,
     pub init: Expr,
+    /// `derived total = price * qty`: not state but a name for an expression of the view (the
+    /// parser substitutes it where it is used, see tint-parser/src/components.rs).
+    #[serde(default)]
+    pub derived: bool,
+    /// `persist state name = "x"`: a string state kept in storage (see components.rs).
+    #[serde(default)]
+    pub persist: bool,
     pub span: Span,
 }
 

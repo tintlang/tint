@@ -1,5 +1,6 @@
 use super::{UiAttribute, UiModifier, UiText};
 use crate::logic::expr::Expr;
+use crate::logic::item::{FnDecl, Param, UiStateDecl};
 use crate::Span;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -50,8 +51,17 @@ pub enum UiNode {
     },
 
     /// Reusable UI component declaration: `component Button { ... }`.
+    ///
+    /// With `(params)`, `state` and `fn` lines it is a component with props and
+    /// its own state; the parser expands every use of one into plain nodes
+    /// (tint-parser/src/components.rs), so no later stage sees these fields.
     Component {
         name: String,
+        params: Vec<Param>,
+        state: Vec<UiStateDecl>,
+        fns: Vec<FnDecl>,
+        /// `mount||h`, `effect||h` ... declared on the component (and from `resource` lines).
+        attributes: Vec<UiAttribute>,
         modifiers: Vec<UiModifier>,
         children: Vec<UiNodeOrExpr>,
         span: Span,

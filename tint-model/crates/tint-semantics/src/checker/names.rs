@@ -167,6 +167,21 @@ impl SemanticChecker {
             "storage_remove",
             "now_ms",
             "http_get",
+            // `web` module, provided by the browser host (tint-wasm dom/web.rs)
+            "clipboard_write",
+            "sleep",
+            "download",
+            "open_url",
+            "set_title",
+            "focus",
+            "scroll_to",
+            "fetch_text",
+            "post_text",
+            "query_get",
+            "query_set",
+            "cache_get",
+            "cache_set",
+            "cache_fresh",
         ] {
             self.known_fns.insert(builtin.to_string());
         }

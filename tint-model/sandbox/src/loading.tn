@@ -1,0 +1,7 @@
+// Optional pre-mount screen for the site. Keep it transparent so the host
+// shell can show the user's saved dark/light theme while the live route starts.
+ui fn SiteLoading() {
+    Page {
+        layout::{ min-height::"100dvh", width::"100%", align::center, justify::center }
+    }
+}

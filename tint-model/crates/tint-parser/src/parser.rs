@@ -81,7 +81,9 @@ impl Parser {
             self.parse_item_into(&mut items)?;
         }
 
-        Ok(Program { globals, items })
+        let mut program = Program { globals, items };
+        crate::components::expand_components(&mut program)?;
+        Ok(program)
     }
 
     /// Parses one item-position entry and appends whatever it produces to

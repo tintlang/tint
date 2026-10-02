@@ -84,6 +84,12 @@ fn apply_spring(value: &UiModifierValue, out: &mut StyleList) {
 fn apply_drag(value: &UiModifierValue, out: &mut StyleList) {
     let mut axis = "both".to_string();
     let mut back = false;
+    let mut momentum = false;
+    // `bounds::{ left::-80, right::80, top::0, bottom::0 }` (px from the start position,
+    // a missing side is free) and `elastic::0.3` (how much of the overshoot beyond a bound
+    // follows the pointer; 0 = hard wall).
+    let mut bounds: Option<[String; 4]> = None;
+    let mut elastic = 0.35;
     match value {
         UiModifierValue::Ident(s) | UiModifierValue::String(s) => axis = s.clone(),
         UiModifierValue::Tuple(items) => {
@@ -91,11 +97,30 @@ fn apply_drag(value: &UiModifierValue, out: &mut StyleList) {
                 if let UiModifierValue::MiniMod { key, value } = item {
                     match (key.first().map(String::as_str), value.as_ref()) {
                         (Some("axis"), UiModifierValue::Ident(s) | UiModifierValue::String(s)) => axis = s.clone(),
+                        (Some("elastic"), UiModifierValue::Number(n)) => elastic = n.clamp(0.0, 1.0),
+                        (Some("bounds"), UiModifierValue::Tuple(sides)) => {
+                            let mut b = ["x".to_string(), "x".to_string(), "x".to_string(), "x".to_string()];
+                            for side in sides {
+                                if let UiModifierValue::MiniMod { key, value } = side {
+                                    if let UiModifierValue::Number(n) = value.as_ref() {
+                                        match key.first().map(String::as_str) {
+                                            Some("left") => b[0] = n.to_string(),
+                                            Some("top") => b[1] = n.to_string(),
+                                            Some("right") => b[2] = n.to_string(),
+                                            Some("bottom") => b[3] = n.to_string(),
+                                            _ => {}
+                                        }
+                                    }
+                                }
+                            }
+                            bounds = Some(b);
+                        }
                         _ => {}
                     }
                 } else if let UiModifierValue::Ident(word) = item {
                     match word.as_str() {
                         "back" => back = true,
+                        "momentum" => momentum = true,
                         "x" | "y" | "both" => axis = word.clone(),
                         _ => {}
                     }
@@ -110,6 +135,14 @@ fn apply_drag(value: &UiModifierValue, out: &mut StyleList) {
     out.push(("--tint-drag".to_string(), axis));
     if back {
         out.push(("--tint-drag-return".to_string(), "1".to_string()));
+    } else if momentum {
+        // Released while moving, it keeps going and slows down (inside its bounds).
+        out.push(("--tint-drag-momentum".to_string(), "1".to_string()));
+    }
+    if let Some(b) = bounds {
+        // left,top,right,bottom
+        out.push(("--tint-drag-bounds".to_string(), b.join(",")));
+        out.push(("--tint-drag-elastic".to_string(), elastic.to_string()));
     }
     out.push(("touch-action".to_string(), "none".to_string()));
     out.push(("user-select".to_string(), "none".to_string()));

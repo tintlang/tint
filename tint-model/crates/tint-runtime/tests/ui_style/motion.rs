@@ -147,3 +147,31 @@ ui fn App() {
     assert!(get("Row", "width").unwrap().starts_with("clamp(100px,"));
     assert_eq!(get("Row", "margin").unwrap(), "calc(1px + 1vw)");
 }
+
+#[test]
+fn enter_exit_view_layout_and_drag_bounds_resolve_to_host_flags() {
+    let tree = build(
+        r#"
+ui fn App() {
+    Box {
+        motion::{
+            layout::all,
+            enter::{ opacity::0, scale::0.8 },
+            exit::{ opacity::0 },
+            view::{ once, opacity::1 }
+        }
+        drag::{ x, bounds::{ left::-40, right::80 }, elastic::0.2 }
+    }
+}
+"#,
+    );
+    let b = node(&tree, "Box");
+    let get = |k: &str| b.style.iter().find(|(key, _)| key == k).map(|(_, v)| v.as_str());
+    assert_eq!(get("--tint-fx-layout"), Some("all"));
+    assert_eq!(get("--tint-fx-enter"), Some("opacity:0|transform:scale(0.8)"));
+    assert_eq!(get("--tint-fx-exit"), Some("opacity:0"));
+    assert_eq!(get("--tint-fx-view"), Some("opacity:1"));
+    assert_eq!(get("--tint-fx-view-once"), Some("1"));
+    assert_eq!(get("--tint-drag-bounds"), Some("-40,x,80,x"));
+    assert_eq!(get("--tint-drag-elastic"), Some("0.2"));
+}

@@ -413,9 +413,16 @@ fn apply_slot_attrs(
     use tint_ast::UiAttrValue;
     let mut out: Vec<(String, String)> = Vec::new();
     for attr in attributes {
-        if attr.name == "props" || !tint_ir::typed::ui::VALUE_ATTRS.contains(&attr.name.as_str()) {
+        if tint_ast::ui_attrs::LIFECYCLE_ATTRS.contains(&attr.name.as_str()) {
+            if let UiAttrValue::Ident(h) = &attr.value {
+                out.push((tint_ast::ui_attrs::html_attr_name(&attr.name), h.clone()));
+            }
             continue;
         }
+        if attr.name == "props" || !tint_ast::ui_attrs::VALUE_ATTRS.contains(&attr.name.as_str()) {
+            continue;
+        }
+        let name = tint_ast::ui_attrs::html_attr_name(&attr.name);
         let value = match &attr.value {
             UiAttrValue::Literal(s) => Some(EvalValue::String(s.clone())),
             UiAttrValue::Expr(expr) => Some(lookup(expr)),
@@ -424,10 +431,11 @@ fn apply_slot_attrs(
             _ => None,
         };
         match value {
-            Some(EvalValue::Bool(true)) => out.push((attr.name.clone(), String::new())),
+            Some(EvalValue::Bool(b)) if attr.name.starts_with("aria_") => out.push((name.clone(), b.to_string())),
+            Some(EvalValue::Bool(true)) => out.push((name.clone(), String::new())),
             Some(EvalValue::Bool(false)) | None => {}
-            Some(EvalValue::String(s)) => out.push((attr.name.clone(), s)),
-            Some(other) => out.push((attr.name.clone(), other.to_string())),
+            Some(EvalValue::String(s)) => out.push((name.clone(), s)),
+            Some(other) => out.push((name.clone(), other.to_string())),
         }
     }
     out.sort();

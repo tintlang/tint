@@ -303,7 +303,6 @@ pub(crate) fn render_ui_text<H: EvalHost>(text: &UiText, host: &mut H) -> String
 
 /// HTML attributes a node can set: `placeholder||"text"`, `disabled||{busy}`.
 /// A bool attribute is present (empty value) when true and left out when false.
-const HTML_ATTRS: [&str; 6] = ["placeholder", "disabled", "readonly", "title", "alt", "tabindex"];
 
 pub(crate) fn apply_html_attrs<H: tint_evaluator::EvalHost>(
     tree: &mut UiTree,
@@ -314,9 +313,16 @@ pub(crate) fn apply_html_attrs<H: tint_evaluator::EvalHost>(
     use tint_evaluator::Value as V;
     let mut out: Vec<(String, String)> = Vec::new();
     for attr in attributes {
-        if !HTML_ATTRS.contains(&attr.name.as_str()) {
+        if tint_ast::ui_attrs::LIFECYCLE_ATTRS.contains(&attr.name.as_str()) {
+            if let UiAttrValue::Ident(h) = &attr.value {
+                out.push((tint_ast::ui_attrs::html_attr_name(&attr.name), h.clone()));
+            }
             continue;
         }
+        if attr.name == "props" || !tint_ast::ui_attrs::VALUE_ATTRS.contains(&attr.name.as_str()) {
+            continue;
+        }
+        let name = tint_ast::ui_attrs::html_attr_name(&attr.name);
         let value = match &attr.value {
             UiAttrValue::Literal(s) => Some(V::String(s.clone())),
             UiAttrValue::Expr(expr) => Some(host.eval_expr(expr)),
@@ -326,10 +332,11 @@ pub(crate) fn apply_html_attrs<H: tint_evaluator::EvalHost>(
             _ => None,
         };
         match value {
-            Some(V::Bool(true)) => out.push((attr.name.clone(), String::new())),
+            Some(V::Bool(b)) if attr.name.starts_with("aria_") => out.push((name.clone(), b.to_string())),
+            Some(V::Bool(true)) => out.push((name.clone(), String::new())),
             Some(V::Bool(false)) | None => {}
-            Some(V::String(s)) => out.push((attr.name.clone(), s)),
-            Some(other) => out.push((attr.name.clone(), other.to_string())),
+            Some(V::String(s)) => out.push((name.clone(), s)),
+            Some(other) => out.push((name.clone(), other.to_string())),
         }
     }
     out.sort();

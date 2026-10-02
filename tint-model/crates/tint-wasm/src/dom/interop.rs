@@ -44,16 +44,23 @@ fn assets_to_js(program: &tint_ast::Program) -> JsValue {
 
 /// Turns `{ name: function }` into natives. Non-function entries are ignored.
 fn natives_from_js(object: Option<js_sys::Object>) -> Vec<(String, NativeFn)> {
-    let Some(object) = object else { return Vec::new() };
-    js_sys::Object::entries(&object)
-        .iter()
-        .filter_map(|entry| {
+    // The `web` functions first; a page function of the same name replaces one.
+    let mut all: Vec<(String, js_sys::Function)> = web_natives();
+    if let Some(object) = object {
+        for entry in js_sys::Object::entries(&object).iter() {
             let entry: js_sys::Array = entry.into();
-            let name = entry.get(0).as_string()?;
-            let function: js_sys::Function = entry.get(1).dyn_into().ok()?;
+            let (Some(name), Ok(function)) = (entry.get(0).as_string(), entry.get(1).dyn_into::<js_sys::Function>()) else {
+                continue;
+            };
+            all.retain(|(n, _)| *n != name);
+            all.push((name, function));
+        }
+    }
+    all.into_iter()
+        .map(|(name, function)| {
             let label = name.clone();
             let native: NativeFn = Rc::new(move |args| call_js(&label, &function, args));
-            Some((name, native))
+            (name, native)
         })
         .collect()
 }

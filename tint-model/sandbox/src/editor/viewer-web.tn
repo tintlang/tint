@@ -1,5 +1,5 @@
-// Read-only twin of editor.tn: the same highlighted view of `web_shown`.
-// Spliced into a container inside a `ui fn` with `state web_shown` and `theme`.
+// Read-only twin of editor.tn: the same highlighted view of the chosen web file.
+// Spliced into a container inside a `ui fn` with `state compare_file` and `theme`.
 Editor {
     layout::{ grow::1, min-width::0, min-height::0, overflow::auto }
     Document {
@@ -16,18 +16,18 @@ Editor {
             white-space::pre
             color::{ hl_color("gutter", theme) }
             background::@panel-bg
-            "{line_numbers(web_shown)}"
+            "{line_numbers(web_source(compare_file))}"
         }
         Body {
             position::relative
             layout::{ grow::1 }
-            min-width::{ "" + (max_line_len(web_shown) + 4) + "ch" }
-            height::{ line_count(web_shown) * 22 }
+            min-width::{ "" + (max_line_len(web_source(compare_file)) + 4) + "ch" }
+            height::{ line_count(web_source(compare_file)) * 22 }
             Layer {
                 position::absolute
                 inset::0
                 white-space::pre
-                for{seg in tint_highlight(web_shown)}
+                for{seg in tint_highlight(web_source(compare_file))}
                 Text { color::{ hl_color(seg[1], theme) } font-style::{ hl_style(seg[1]) } "{seg[0]}" }
             }
         }

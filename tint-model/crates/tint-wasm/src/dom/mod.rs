@@ -61,6 +61,11 @@ struct Shared {
     key_up_bound: Cell<bool>,
     /// The one delegated `click` listener on the container is bound.
     click_bound: Cell<bool>,
+    /// The life-cycle MutationObserver (`lifecycle.rs`) is bound.
+    life_bound: Cell<bool>,
+    /// The pointer gesture listeners (`gestures.rs`) are bound.
+    gesture_bound: Cell<bool>,
+    hotkey_bound: Cell<bool>,
     /// The rAF timestamp (ms, from `performance.now()`) the loop last ran
     /// at, used to compute the real elapsed `dt` (seconds) handed to the
     /// `frame||` handler. `None` on the very first frame, which reports
@@ -112,6 +117,10 @@ pub struct DomSession {
 include!("interop.rs");
 include!("session.rs");
 include!("helpers.rs");
+include!("fx.rs");
+include!("lifecycle.rs");
+include!("gestures.rs");
+include!("web.rs");
 include!("render.rs");
 #[cfg(all(feature = "compiled", target_arch = "wasm32"))]
 include!("compiled.rs");

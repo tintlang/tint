@@ -121,7 +121,11 @@ fn page(path: &str, entry: Option<&str>) -> String {
             let entry = entry.map_or_else(|| infer_entry(&loaded.entry_source), str::to_owned);
             let meta = loaded.program.app_meta();
             match read_inline_assets(path, &meta) {
-                Ok(inline) => {
+                Ok(mut inline) => {
+                    inline.loading = meta
+                        .loading
+                        .as_deref()
+                        .and_then(|loading| crate::prerender::render(&loaded.all_sources.join("\n\n"), loading));
                     standalone_html(&loaded.all_sources.join("\n\n"), &entry, &meta, &inline)
                 }
                 Err(error) => {
