@@ -1,6 +1,76 @@
 use super::*;
 
 impl<'a, 'b> Fc<'a, 'b> {
+    /// `a % b` on floats. Whole numbers of moderate size (the common `i % 7`) take
+    /// an integer remainder inline; anything else (fractions, huge values, zero,
+    /// infinities, NaN) goes to the runtime's `fmod`. Pushes the result.
+    fn f64_rem(&mut self, a: Reg, b: Reg) {
+        let (ta, tb) = (self.tmp(F64), self.tmp(F64));
+        self.get(a);
+        self.lset(ta);
+        self.get(b);
+        self.lset(tb);
+        let limit = 9007199254740992.0f64; // 2^53
+        // both whole, both below 2^53 in magnitude, divisor not zero
+        self.lget(ta);
+        self.lget(ta);
+        self.ins(I::F64Trunc);
+        self.ins(I::F64Eq);
+        self.lget(tb);
+        self.lget(tb);
+        self.ins(I::F64Trunc);
+        self.ins(I::F64Eq);
+        self.ins(I::I32And);
+        self.lget(ta);
+        self.ins(I::F64Abs);
+        self.ins(I::F64Const(limit.into()));
+        self.ins(I::F64Lt);
+        self.ins(I::I32And);
+        self.lget(tb);
+        self.ins(I::F64Abs);
+        self.ins(I::F64Const(limit.into()));
+        self.ins(I::F64Lt);
+        self.ins(I::I32And);
+        self.lget(tb);
+        self.ins(I::F64Const(0.0f64.into()));
+        self.ins(I::F64Ne);
+        self.ins(I::I32And);
+        self.ins(I::If(BlockType::Result(F64)));
+        // below 2^31 the 32-bit divide is much cheaper than the 64-bit one
+        let small = 2147483648.0f64;
+        self.lget(ta);
+        self.ins(I::F64Abs);
+        self.ins(I::F64Const(small.into()));
+        self.ins(I::F64Lt);
+        self.lget(tb);
+        self.ins(I::F64Abs);
+        self.ins(I::F64Const(small.into()));
+        self.ins(I::F64Lt);
+        self.ins(I::I32And);
+        self.ins(I::If(BlockType::Result(F64)));
+        self.lget(ta);
+        self.ins(I::I32TruncF64S);
+        self.lget(tb);
+        self.ins(I::I32TruncF64S);
+        self.ins(I::I32RemS);
+        self.ins(I::F64ConvertI32S);
+        self.ins(I::Else);
+        self.lget(ta);
+        self.ins(I::I64TruncF64S);
+        self.lget(tb);
+        self.ins(I::I64TruncF64S);
+        self.ins(I::I64RemS);
+        self.ins(I::F64ConvertI64S);
+        self.ins(I::End);
+        self.lget(ta);
+        self.ins(I::F64Copysign);
+        self.ins(I::Else);
+        self.lget(ta);
+        self.lget(tb);
+        self.call(Imp::Fmod);
+        self.ins(I::End);
+    }
+
     pub(super) fn instr_basic(&mut self, ins: &Instr) -> Result<(), Unsupported> {
         match ins {
             Instr::Const { dst, value } => {
@@ -39,7 +109,12 @@ impl<'a, 'b> Fc<'a, 'b> {
                 a,
                 b,
             } => {
-                if kind.is_float() {
+                if kind.is_float() && *op == BinOp::Rem {
+                    self.f64_rem(*a, *b);
+                    if *kind == NumKind::F32 {
+                        self.round_f32();
+                    }
+                } else if kind.is_float() {
                     self.get(*a);
                     self.get(*b);
                     match op {

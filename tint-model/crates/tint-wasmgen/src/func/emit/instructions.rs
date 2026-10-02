@@ -19,6 +19,8 @@ impl<'a, 'b> Fc<'a, 'b> {
             | Instr::UiOpen { .. }
             | Instr::UiClose
             | Instr::UiTokens { .. }
+            | Instr::UiMemo { .. }
+            | Instr::UiMemoEnd
             | Instr::UiText { .. } => self.instr_host(ins),
             _ => self.instr_basic(ins),
         }

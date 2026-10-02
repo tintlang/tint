@@ -58,7 +58,18 @@ impl<'a, 'b> Fc<'a, 'b> {
     pub(super) fn block_code(&mut self, x: usize, ctx: &mut Vec<Frame>) -> Result<(), Unsupported> {
         let f = self.f;
         let block = &f.blocks[x];
+        let mut skip_next = false;
         for (ii, ins) in block.instrs.iter().enumerate() {
+            if skip_next {
+                skip_next = false;
+                continue;
+            }
+            if let Some(next) = block.instrs.get(ii + 1) {
+                if self.fuse_index_field(x, ii, ins, next)? {
+                    skip_next = true;
+                    continue;
+                }
+            }
             self.dying = self.dies[x][ii].clone();
             self.moved.clear();
             self.instr(ins)?;

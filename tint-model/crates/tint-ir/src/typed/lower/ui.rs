@@ -322,7 +322,7 @@ impl<'a> Lowerer<'a> {
         let item = self.new_reg(elem);
         self.emit(Instr::Get { dst: item, base: value, proj: Proj::Index(counter) });
         self.f().define(var, item);
-        let outcome = body(self);
+        let outcome = self.ui_memo_region(&mut body);
         self.pop_scope();
         outcome?;
         let one = self.const_reg(num, Const::Float(1.0));
@@ -331,6 +331,200 @@ impl<'a> Lowerer<'a> {
         self.terminate(Term::Jump(head));
         self.switch_to(exit);
         Ok(())
+    }
+
+    /// Runs `body` (one iteration of a `for{}`), memoizable when it is a pure
+    /// function of scalars: the host may answer `UiMemo` with a hit and skip
+    /// the body when it holds what the body emitted for the same inputs.
+    ///
+    /// The inputs are the registers defined before the body that it reads, plus
+    /// the globals it reads, all numbers, strings or bools. A body that calls a
+    /// function, touches a heap value from outside, writes outside itself or
+    /// changes theme tokens is left as it is.
+    fn ui_memo_region(&mut self, body: &mut dyn FnMut(&mut Self) -> LResult<()>) -> LResult<()> {
+        let check_b = self.new_block();
+        let after = self.new_block();
+        let body_b = self.new_block();
+        let outer_regs = self.f().regs.len() as u32;
+        self.terminate(Term::Jump(check_b));
+        self.switch_to(body_b);
+        body(self)?;
+        match self.memo_inputs(body_b.0 as usize, outer_regs) {
+            None => {
+                self.terminate(Term::Jump(after));
+                self.switch_to(check_b);
+                self.terminate(Term::Jump(body_b));
+            }
+            Some((hoisted, inputs)) => {
+                self.emit(Instr::UiMemoEnd);
+                self.terminate(Term::Jump(after));
+                self.switch_to(check_b);
+                for ins in hoisted {
+                    self.emit(ins);
+                }
+                let bool_ty = self.bool_ty();
+                let hit = self.new_reg(bool_ty);
+                let site = self.memo_sites;
+                self.memo_sites += 1;
+                self.emit(Instr::UiMemo { dst: hit, site, inputs });
+                self.terminate(Term::Branch { cond: hit, then_: after, else_: body_b });
+            }
+        }
+        self.switch_to(after);
+        Ok(())
+    }
+
+    /// What the blocks from `first` on depend on, when that is a handful of
+    /// scalars: `(instructions to run first, registers to key on)`.
+    ///
+    /// Comparisons of outer values and reads of globals are not keyed by their
+    /// operands but by their results: a row that compares itself with
+    /// `selected` is keyed by "am I the selected one", so changing `selected`
+    /// only disturbs the two rows whose answer changed. Those instructions are
+    /// copied (they cannot trap) ahead of the `UiMemo`.
+    ///
+    /// `None` when the blocks are not a pure function of such scalars: they
+    /// call a function, touch a heap value from outside, write a register
+    /// defined before them or change theme tokens.
+    fn memo_inputs(&self, first: usize, outer_regs: u32) -> Option<(Vec<Instr>, Vec<Reg>)> {
+        let fb = self.stack.last()?;
+        let scalar = |ty: TyId| matches!(self.module.types.kind(ty), TyKind::Num(_) | TyKind::Str | TyKind::Bool);
+        let region = &fb.blocks[first..];
+        // How often each register is written inside.
+        let mut defs: std::collections::HashMap<u32, usize> = std::collections::HashMap::new();
+        for (instrs, _) in region {
+            for ins in instrs {
+                if let Some(d) = ins.dst() {
+                    if d.0 < outer_regs {
+                        return None;
+                    }
+                    *defs.entry(d.0).or_default() += 1;
+                }
+                match ins {
+                    Instr::Call { .. }
+                    | Instr::CallClosure { .. }
+                    | Instr::Closure { .. }
+                    | Instr::Host { .. }
+                    | Instr::GlobalSet { .. }
+                    | Instr::UiTokens { .. } => return None,
+                    Instr::Set { base, .. } if base.0 < outer_regs => return None,
+                    _ => {}
+                }
+            }
+        }
+        let single = |r: Reg| defs.get(&r.0) == Some(&1);
+        let mut avail: std::collections::HashSet<u32> = std::collections::HashSet::new();
+        let mut consts: std::collections::HashSet<u32> = std::collections::HashSet::new();
+        let mut hoist: Vec<Instr> = Vec::new();
+        let mut root: std::collections::HashMap<u32, u32> = std::collections::HashMap::new();
+        let mut frontier: Vec<Reg> = Vec::new();
+        // The registers a non-hoisted instruction (or a terminator) reads.
+        let need = |r: Reg,
+                    avail: &std::collections::HashSet<u32>,
+                    consts: &std::collections::HashSet<u32>,
+                    root: &std::collections::HashMap<u32, u32>,
+                    frontier: &mut Vec<Reg>|
+         -> bool {
+            // A copy of a value is keyed by the value itself.
+            let r = Reg(*root.get(&r.0).unwrap_or(&r.0));
+            if consts.contains(&r.0) || frontier.contains(&r) {
+                return true;
+            }
+            if r.0 < outer_regs {
+                if !scalar(fb.reg_ty(r)) {
+                    return false;
+                }
+                frontier.push(r);
+                return true;
+            }
+            if avail.contains(&r.0) {
+                frontier.push(r);
+            }
+            true
+        };
+        for (instrs, term) in region {
+            for ins in instrs {
+                let hoisted = match ins {
+                    Instr::Const { dst, .. } if single(*dst) => {
+                        consts.insert(dst.0);
+                        true
+                    }
+                    Instr::GlobalGet { dst, global } => {
+                        if !single(*dst) || !scalar(self.module.globals[global.0 as usize].ty) {
+                            return None;
+                        }
+                        true
+                    }
+                    Instr::Cmp { dst, a, b, .. } if single(*dst) => {
+                        let ok = |r: &Reg| {
+                            (r.0 < outer_regs && scalar(fb.reg_ty(*r))) || avail.contains(&r.0) || consts.contains(&r.0)
+                        };
+                        ok(a) && ok(b)
+                    }
+                    Instr::Mov { dst, src } if single(*dst) => {
+                        let ok = (src.0 < outer_regs && scalar(fb.reg_ty(*src)))
+                            || avail.contains(&src.0)
+                            || consts.contains(&src.0);
+                        if ok {
+                            let r = *root.get(&src.0).unwrap_or(&src.0);
+                            root.insert(dst.0, r);
+                            if consts.contains(&r) {
+                                consts.insert(dst.0);
+                            }
+                        }
+                        ok
+                    }
+                    Instr::Not { dst, src } if single(*dst) => {
+                        (src.0 < outer_regs && scalar(fb.reg_ty(*src))) || avail.contains(&src.0) || consts.contains(&src.0)
+                    }
+                    _ => false,
+                };
+                if hoisted {
+                    if let Some(d) = ins.dst() {
+                        avail.insert(d.0);
+                    }
+                    hoist.push(ins.clone());
+                    continue;
+                }
+                if matches!(ins, Instr::GlobalGet { .. }) {
+                    return None;
+                }
+                for r in ins.uses() {
+                    if !need(r, &avail, &consts, &root, &mut frontier) {
+                        return None;
+                    }
+                }
+            }
+            let used = match term {
+                Some(Term::Branch { cond, .. }) => Some(*cond),
+                Some(Term::Switch { value, .. }) => Some(*value),
+                _ => None,
+            };
+            if let Some(r) = used {
+                if !need(r, &avail, &consts, &root, &mut frontier) {
+                    return None;
+                }
+            }
+            if matches!(term, Some(Term::Return(_)) | Some(Term::Trap(_))) {
+                return None;
+            }
+        }
+        if frontier.len() > 8 {
+            return None;
+        }
+        // Keep only the hoisted instructions the keyed registers need.
+        let mut needed: std::collections::HashSet<u32> = frontier.iter().map(|r| r.0).collect();
+        let mut keep: Vec<Instr> = Vec::new();
+        for ins in hoist.into_iter().rev() {
+            if ins.dst().is_some_and(|d| needed.contains(&d.0)) {
+                for r in ins.uses() {
+                    needed.insert(r.0);
+                }
+                keep.push(ins);
+            }
+        }
+        keep.reverse();
+        Some((keep, frontier))
     }
 
     fn ui_children(&mut self, cx: &UiStatic<'a>, children: &[&'a UiNodeOrExpr], depth: usize) -> LResult<()> {

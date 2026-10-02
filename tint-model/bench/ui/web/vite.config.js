@@ -4,5 +4,5 @@ import { svelte } from '@sveltejs/vite-plugin-svelte';
 export default defineConfig({
   base: './',
   plugins: [react(), svelte()],
-  build: { rollupOptions: { input: { react: 'react.html', svelte: 'svelte.html', vanilla: 'vanilla.html' } } },
+  build: { rollupOptions: { input: { react: 'react.html', 'react-stack': 'react-stack.html', svelte: 'svelte.html', vanilla: 'vanilla.html' } } },
 });

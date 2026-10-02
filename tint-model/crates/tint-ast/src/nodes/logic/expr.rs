@@ -40,7 +40,8 @@ pub enum StringPart {
     Expr(Expr),
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize)]
+#[cfg_attr(not(feature = "lean-expr"), derive(serde::Deserialize))]
 pub enum Expr {
     Number(String, Span),
     String(String, Span), // raw literal (no interpolation)
@@ -218,5 +219,19 @@ impl Expr {
             Expr::Try { span, .. } => *span,
             Expr::Cast { span, .. } => *span,
         }
+    }
+}
+
+/// With `lean-expr` an expression read back from JSON is skipped and replaced by
+/// a unit placeholder. The runtime of a page compiled to WebAssembly only needs
+/// the *position* of each expression inside a UI template (its value arrives in
+/// a slot, see `tint_ir::typed::ui`), and not carrying the deserializer for the
+/// whole expression language saves about a fifth of that runtime.
+#[cfg(feature = "lean-expr")]
+impl<'de> serde::Deserialize<'de> for Expr {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        serde::de::IgnoredAny::deserialize(deserializer)?;
+        let at = crate::Position { offset: 0, line: 1, column: 1 };
+        Ok(Expr::Unit(Span::new(at, at)))
     }
 }

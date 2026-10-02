@@ -274,6 +274,7 @@ impl DomSession {
                     previews: RefCell::new(std::collections::HashMap::new()),
                     preview_seq: Cell::new(0),
                     key_up_bound: Cell::new(false),
+                    click_bound: Cell::new(false),
                     last_frame_time: Cell::new(None),
                     timers: RefCell::new(Vec::new()),
                     natives,

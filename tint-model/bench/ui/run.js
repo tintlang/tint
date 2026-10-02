@@ -8,8 +8,8 @@ const { chromium } = require('playwright');
 const args = process.argv.slice(2);
 const opt = (k, d) => { const i = args.indexOf('--' + k); return i >= 0 ? args[i + 1] : d; };
 const RUNS = +opt('runs', 7);
-const APPS = opt('apps', 'tint,tint-render,react,svelte,vanilla').split(',');
-const URLS = { tint: '/tint/index.html', 'tint-render': '/tint/render.html', react: '/web/dist/react.html', svelte: '/web/dist/svelte.html', vanilla: '/web/dist/vanilla.html' };
+const APPS = opt('apps', 'tint,tint-render,react,react-stack,svelte,vanilla').split(',');
+const URLS = { tint: '/tint/index.html', 'tint-render': '/tint/render.html', react: '/web/dist/react.html', 'react-stack': '/web/dist/react-stack.html', svelte: '/web/dist/svelte.html', vanilla: '/web/dist/vanilla.html' };
 const ROOT = __dirname;
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm' };
 
@@ -80,14 +80,24 @@ const fmt = (ms) => (ms >= 100 ? ms.toFixed(0) : ms >= 10 ? ms.toFixed(1) : ms.t
     const steps = {};
     for (const [label] of STEPS) steps[label] = { work: median(runs.map((r) => r.steps[label].work)), frame: median(runs.map((r) => r.steps[label].frame)) };
     const file = path.join(ROOT, URLS[app]);
-    let bytes = fs.statSync(file).size, gz = zlib.gzipSync(fs.readFileSync(file)).length;
-    if (URLS[app].startsWith('/web/')) { // add the JS chunks the page imports
-      const dist = path.dirname(file);
-      for (const f of fs.readdirSync(path.join(dist, 'assets')).filter((f) => f.startsWith(app) || f.startsWith('modulepreload'))) {
-        const b = fs.readFileSync(path.join(dist, 'assets', f)); bytes += b.length; gz += zlib.gzipSync(b).length;
+    // Everything a cold load fetches: the page, and for the Vite apps the scripts and
+    // stylesheets it references plus the chunks those import (React, router, CSS ...).
+    const files = new Set([file]);
+    const queue = [file];
+    while (queue.length) {
+      const f = queue.pop();
+      if (!URLS[app].startsWith('/web/') || !/\.(html|js|css)$/.test(f)) continue;
+      const text = fs.readFileSync(f, 'utf8');
+      for (const m of text.matchAll(/(?:src|href)="([^"]+\.(?:js|css))"|(?:from|import)\s*["']([^"']+\.(?:js|css))["']/g)) {
+        const rel = m[1] || m[2];
+        if (/^https?:/.test(rel)) continue;
+        const p = path.resolve(path.dirname(f), rel);
+        if (fs.existsSync(p) && !files.has(p)) { files.add(p); queue.push(p); }
       }
     }
-    results[app] = { startup: median(runs.map((r) => r.startup)), steps, bytes, gz, dom: runs[0].dom };
+    let bytes = 0, gz = 0, br = 0;
+    for (const f of files) { const b = fs.readFileSync(f); bytes += b.length; gz += zlib.gzipSync(b, { level: 9 }).length; br += zlib.brotliCompressSync(b).length; }
+    results[app] = { startup: median(runs.map((r) => r.startup)), steps, bytes, gz, br, dom: runs[0].dom };
   }
   await browser.close(); server.close();
 
@@ -99,7 +109,7 @@ const fmt = (ms) => (ms >= 100 ? ms.toFixed(0) : ms >= 10 ? ms.toFixed(1) : ms.t
   for (const [label] of STEPS) lines.push(`| ${label} | ` + APPS.map((a) => fmt(results[a].steps[label].frame)).join(' | ') + ' |');
   lines.push('', '### Startup and size', '', '| | ' + APPS.join(' | ') + ' |', '|---|' + '---|'.repeat(APPS.length));
   lines.push('| load to first content | ' + APPS.map((a) => fmt(results[a].startup)).join(' | ') + ' |');
-  lines.push('| page+JS bytes (raw / gzip) | ' + APPS.map((a) => `${(results[a].bytes / 1024).toFixed(0)} / ${(results[a].gz / 1024).toFixed(0)} KiB`).join(' | ') + ' |');
+  lines.push('| everything fetched (raw / gzip / brotli) | ' + APPS.map((a) => `${(results[a].bytes / 1024).toFixed(0)} / ${(results[a].gz / 1024).toFixed(0)} / ${(results[a].br / 1024).toFixed(0)} KiB`).join(' | ') + ' |');
   const report = lines.join('\n') + '\n';
   console.log('\n' + report);
   fs.mkdirSync(path.join(ROOT, 'results'), { recursive: true });

@@ -79,6 +79,13 @@ pub enum UiEvent {
     Close,
     Text(String),
     Tokens { template: u32 },
+    /// A compiled app's cache answered a `UiMemo`: the children the stretch
+    /// emitted for the same key last time are reused. Only the wasm runtime
+    /// produces the three memo events.
+    MemoHit(u64, u64),
+    /// A `UiMemo` that missed: what follows up to `MemoEnd` is remembered.
+    MemoStart(u64, u64),
+    MemoEnd,
 }
 
 /// Feeds recorded events to a host.
@@ -90,6 +97,7 @@ pub fn replay(templates: &[UiTemplate], events: &[UiEvent], host: &mut dyn UiHos
                     host.open(t, values);
                 }
             }
+            UiEvent::MemoHit(..) | UiEvent::MemoStart(..) | UiEvent::MemoEnd => {}
             UiEvent::Close => host.close(),
             UiEvent::Text(s) => host.text(s),
             UiEvent::Tokens { template } => {

@@ -58,6 +58,36 @@ pub struct UiRenderNode {
     /// very same allocation both times (`Rc::ptr_eq`), which lets a renderer
     /// skip it without comparing anything.
     pub children: Vec<Rc<UiRenderNode>>,
+    /// `Some(false)`: nothing in this subtree declares a key/pointer/frame/tick
+    /// handler or a breakpoint, so a host need not walk it for those. `None`
+    /// when not computed (walk it). Derived from the other fields; not compared.
+    #[serde(skip)]
+    pub scan_hint: Option<bool>,
+}
+
+impl UiRenderNode {
+    /// `scan_hint` from the node's own fields and its children's hints.
+    pub fn compute_scan_hint(&self) -> Option<bool> {
+        if self.on_key_down.is_some()
+            || self.on_key_up.is_some()
+            || self.on_pointer_move.is_some()
+            || self.on_pointer_up.is_some()
+            || self.on_frame.is_some()
+            || self.on_tick.is_some()
+            || !self.breakpoints.is_empty()
+        {
+            return Some(true);
+        }
+        let mut all_clear = true;
+        for child in &self.children {
+            match child.scan_hint {
+                Some(true) => return Some(true),
+                Some(false) => {}
+                None => all_clear = false,
+            }
+        }
+        all_clear.then_some(false)
+    }
 }
 
 impl PartialEq for UiRenderNode {
@@ -182,7 +212,8 @@ pub fn to_render_tree(tree: &UiTree, id: UiNodeId) -> UiRenderNode {
     } else {
         node.text.clone()
     };
-    UiRenderNode {
+    let mut out = UiRenderNode {
+        scan_hint: None,
         tag: node.tag.clone(),
         tint_source: node.tint_source.clone(),
         text,
@@ -227,7 +258,9 @@ pub fn to_render_tree(tree: &UiTree, id: UiNodeId) -> UiRenderNode {
                 .map(|&cid| to_render_rc(tree, cid))
                 .collect()
         },
-    }
+    };
+    out.scan_hint = out.compute_scan_hint();
+    out
 }
 
 /// Like `to_render_tree`, but shared: a node standing in for a reused

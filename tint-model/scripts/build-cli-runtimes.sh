@@ -17,6 +17,6 @@ build() { # name profile features
   rm -rf "$tmp"
   ls -l "$out/${name}_bg.wasm.gz"
 }
-build rt_dom wasm-small compiled
+build rt_dom wasm-small compiled,lean-ast
 build rt_dom_full wasm compiled,interpreter
 build tint_wasm wasm interpreter

@@ -21,7 +21,7 @@ impl<'a, 'b> Fc<'a, 'b> {
         }
         let i = self.tmp(I64);
         self.get(reg);
-        self.ins(I::I64TruncSatF64S);
+        self.ins(I::I64TruncF64S);
         self.lset(i);
         self.lget(i);
         self.ins(I::F64ConvertI64S);
@@ -96,6 +96,64 @@ impl<'a, 'b> Fc<'a, 'b> {
         }
     }
 
+    /// `rx = get list[i]; ry = get rx.f` where `rx` is dead afterwards and `ry` a
+    /// scalar: the field is read straight out of the element, without taking a
+    /// reference to it and giving it back. Returns whether it emitted both.
+    pub(super) fn fuse_index_field(
+        &mut self,
+        block: usize,
+        at: usize,
+        first: &Instr,
+        second: &Instr,
+    ) -> Result<bool, Unsupported> {
+        let (Instr::Get { dst: rx, base: list_reg, proj: Proj::Index(i) }, Instr::Get { dst: ry, base: from, proj }) =
+            (first, second)
+        else {
+            return Ok(false);
+        };
+        let (Proj::Field(f) | Proj::Tuple(f)) = proj else { return Ok(false) };
+        if from != rx
+            || ry == rx
+            || ry == list_reg
+            || self.heap[ry.0 as usize]
+            || !self.heap[rx.0 as usize]
+            || !self.dies[block][at + 1].contains(rx)
+            || self.dies[block][at].contains(rx)
+        {
+            return Ok(false);
+        }
+        let lay = self.list_elem(*list_reg)?;
+        if !lay.heap {
+            return Ok(false);
+        }
+        // Registers whose last use is the first instruction (the list, say) are given back after both.
+        let mut dying = self.dies[block][at].clone();
+        for r in &self.dies[block][at + 1] {
+            if r != rx && !dying.contains(r) {
+                dying.push(*r);
+            }
+        }
+        self.moved.clear();
+        // `rx` is empty on entry in every flow (it dies at the second instruction), nothing to give back.
+        self.clear(*rx);
+        let idx = self.index(*i)?;
+        let list = self.lr(*list_reg);
+        let addr = self.elem_addr(list, idx, 8, true);
+        let obj = self.tmp(I32);
+        self.lget(addr);
+        self.ins(I::I32Load(ma(0, 2)));
+        self.lset(obj);
+        self.load_slot(obj, *f as usize, *ry);
+        self.set(*ry);
+        for r in dying {
+            let l = self.lr(r);
+            self.release(l);
+            self.clear(r);
+        }
+        self.end_instr();
+        Ok(true)
+    }
+
     // ---- projections ---------------------------------------------------------------------------------------
 
     pub(super) fn get_proj(
@@ -135,12 +193,15 @@ impl<'a, 'b> Fc<'a, 'b> {
                 let idx = self.index(*i)?;
                 if take && lay.heap {
                     let list = self.unique(base, Imp::ListUnique);
-                    self.lget(list);
-                    self.lget(idx);
-                    self.call(Imp::ListTake);
-                    self.ins(I::I32WrapI64);
+                    // Bounds-checked, then the element's reference moves out (the slot is emptied).
+                    let addr = self.elem_addr(list, idx, 8, true);
                     let v = self.tmp(I32);
+                    self.lget(addr);
+                    self.ins(I::I32Load(ma(0, 2)));
                     self.lset(v);
+                    self.lget(addr);
+                    self.i64c(0);
+                    self.ins(I::I64Store(ma(0, 3)));
                     self.assign(dst, v);
                 } else {
                     let list = self.lr(base);
@@ -211,12 +272,36 @@ impl<'a, 'b> Fc<'a, 'b> {
                 if lay.heap {
                     // The runtime copies a shared list and releases the old element.
                     let v = self.own(src, &[]);
+                    // Fast path: unshared and in range, the slot takes the reference.
+                    self.lget(idx);
+                    self.lget(list);
+                    self.ins(I::I32Load(ma(OFF_LEN, 2)));
+                    self.ins(I::I64ExtendI32U);
+                    self.ins(I::I64LtU);
+                    self.lget(list);
+                    self.ins(I::I32Load(ma(OFF_RC, 2)));
+                    self.i32c(1);
+                    self.ins(I::I32Eq);
+                    self.ins(I::I32And);
+                    self.ins(I::If(BlockType::Empty));
+                    let addr = self.elem_addr(list, idx, 8, false);
+                    let old = self.tmp(I32);
+                    self.lget(addr);
+                    self.ins(I::I32Load(ma(0, 2)));
+                    self.lset(old);
+                    self.lget(addr);
+                    self.lget(v);
+                    self.ins(I::I64ExtendI32U);
+                    self.ins(I::I64Store(ma(0, 3)));
+                    self.release(old);
+                    self.ins(I::Else);
                     self.lget(list);
                     self.lget(idx);
                     self.lget(v);
                     self.ins(I::I64ExtendI32U);
                     self.call(Imp::ListSet);
                     self.lset(list);
+                    self.ins(I::End);
                     return Ok(());
                 }
                 let vt = self.vt(src);

@@ -391,6 +391,18 @@ pub enum Instr {
     UiTokens {
         template: u32,
     },
+    /// Starts a memoizable stretch of a ui fn (the body of a `for{}` that only
+    /// reads the scalars `inputs`). `dst` is true when a host already holds
+    /// what the stretch emitted for these very inputs and reuses it; the code
+    /// up to the matching `UiMemoEnd` is then skipped. A host without a cache
+    /// answers false, which is always correct.
+    UiMemo {
+        dst: Reg,
+        site: u32,
+        inputs: Vec<Reg>,
+    },
+    /// Ends the stretch a `UiMemo` that answered false started.
+    UiMemoEnd,
 }
 
 impl Instr {
@@ -419,12 +431,14 @@ impl Instr {
             | Call { dst, .. }
             | CallClosure { dst, .. }
             | Closure { dst, .. }
-            | GlobalGet { dst, .. } => Some(*dst),
+            | GlobalGet { dst, .. }
+            | UiMemo { dst, .. } => Some(*dst),
             Set { .. }
             | GlobalSet { .. }
             | UiOpen { .. }
             | UiClose
             | UiText { .. }
+            | UiMemoEnd
             | UiTokens { .. } => None,
         }
     }
@@ -438,7 +452,7 @@ impl Instr {
         };
         let mut out = Vec::new();
         match self {
-            Const { .. } | GlobalGet { .. } | UiClose | UiTokens { .. } => {}
+            Const { .. } | GlobalGet { .. } | UiClose | UiMemoEnd | UiTokens { .. } => {}
             Mov { src, .. }
             | Not { src, .. }
             | Neg { src, .. }
@@ -466,6 +480,7 @@ impl Instr {
             }
             Rt { args, .. } | Host { args, .. } | Call { args, .. } => out.extend(args),
             UiOpen { values, .. } => out.extend(values),
+            UiMemo { inputs, .. } => out.extend(inputs),
             CallClosure { callee, args, .. } => {
                 out.push(*callee);
                 out.extend(args);

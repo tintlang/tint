@@ -527,6 +527,26 @@ impl<'m> Verifier<'m> {
                 }
                 Ok(())
             }
+            Instr::UiMemo { dst, inputs, .. } => {
+                if self.func.kind != FuncKind::Ui {
+                    return Err("ui.memo outside a ui fn".into());
+                }
+                if !matches!(self.kind(self.ty(*dst)), TyKind::Bool) {
+                    return Err("ui.memo answers a bool".into());
+                }
+                for r in inputs {
+                    if !matches!(self.kind(self.ty(*r)), TyKind::Num(_) | TyKind::Str | TyKind::Bool) {
+                        return Err("ui.memo inputs must be scalars".into());
+                    }
+                }
+                Ok(())
+            }
+            Instr::UiMemoEnd => {
+                if self.func.kind != FuncKind::Ui {
+                    return Err("ui.memo_end outside a ui fn".into());
+                }
+                Ok(())
+            }
             Instr::UiTokens { template } => {
                 if self.func.kind != FuncKind::Ui {
                     return Err("ui.tokens outside a ui fn".into());

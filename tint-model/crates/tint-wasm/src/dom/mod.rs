@@ -59,6 +59,8 @@ struct Shared {
     previews: RefCell<std::collections::HashMap<String, PreviewSlot>>,
     preview_seq: Cell<u32>,
     key_up_bound: Cell<bool>,
+    /// The one delegated `click` listener on the container is bound.
+    click_bound: Cell<bool>,
     /// The rAF timestamp (ms, from `performance.now()`) the loop last ran
     /// at, used to compute the real elapsed `dt` (seconds) handed to the
     /// `frame||` handler. `None` on the very first frame, which reports

@@ -146,28 +146,19 @@ impl<'a, 'b> Fc<'a, 'b> {
                 self.i32c(*template as i32);
                 self.call(Imp::UiOpen);
                 for v in values {
-                    match self.m.types.kind(self.ty(*v)) {
-                        TyKind::Num(k) if k.is_float() => {
-                            self.get(*v);
-                            self.call(Imp::UiNum);
-                        }
-                        TyKind::Num(_) => {
-                            self.get(*v);
-                            self.ins(I::F64ConvertI64S);
-                            self.call(Imp::UiNum);
-                        }
-                        TyKind::Str => {
-                            self.get(*v);
-                            self.call(Imp::UiStr);
-                        }
-                        TyKind::Bool => {
-                            self.get(*v);
-                            self.call(Imp::UiBool);
-                        }
-                        _ => return unsupported("non-scalar UI value"),
-                    }
+                    self.ui_value(*v)?;
                 }
             }
+            Instr::UiMemo { dst, site, inputs } => {
+                self.i32c(*site as i32);
+                self.call(Imp::UiMemoBegin);
+                for v in inputs {
+                    self.ui_value(*v)?;
+                }
+                self.call(Imp::UiMemoCheck);
+                self.set(*dst);
+            }
+            Instr::UiMemoEnd => self.call(Imp::UiMemoEnd),
             Instr::UiClose => self.call(Imp::UiClose),
             Instr::UiTokens { template } => {
                 self.i32c(*template as i32);
@@ -192,6 +183,33 @@ impl<'a, 'b> Fc<'a, 'b> {
                 }
             }
             _ => unreachable!(),
+        }
+        Ok(())
+    }
+}
+
+impl<'a, 'b> Fc<'a, 'b> {
+    /// Hands one scalar to the runtime's current `ui_open` / `ui_memo_begin`.
+    fn ui_value(&mut self, v: Reg) -> Result<(), Unsupported> {
+        match self.m.types.kind(self.ty(v)) {
+            TyKind::Num(k) if k.is_float() => {
+                self.get(v);
+                self.call(Imp::UiNum);
+            }
+            TyKind::Num(_) => {
+                self.get(v);
+                self.ins(I::F64ConvertI64S);
+                self.call(Imp::UiNum);
+            }
+            TyKind::Str => {
+                self.get(v);
+                self.call(Imp::UiStr);
+            }
+            TyKind::Bool => {
+                self.get(v);
+                self.call(Imp::UiBool);
+            }
+            _ => return unsupported("non-scalar UI value"),
         }
         Ok(())
     }

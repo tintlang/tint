@@ -188,6 +188,28 @@ impl<'a, 'b> Fc<'a, 'b> {
                 }
                 self.set(dst);
             }
+            RtFn::StrSplit => {
+                self.get(args[0]);
+                self.get(args[1]);
+                self.i32c(self.ty(dst).0 as i32);
+                self.call(Imp::StrSplit);
+                let s = self.tmp(I32);
+                self.lset(s);
+                self.assign(dst, s);
+            }
+            RtFn::ListJoin
+                if matches!(
+                    self.m.types.kind(self.ty(args[0])),
+                    TyKind::List(e) if matches!(self.m.types.kind(*e), TyKind::Str)
+                ) =>
+            {
+                self.get(args[0]);
+                self.get(args[1]);
+                self.call(Imp::ListJoin);
+                let s = self.tmp(I32);
+                self.lset(s);
+                self.assign(dst, s);
+            }
             RtFn::StrLen => {
                 self.get(args[0]);
                 self.call(Imp::StrLen);

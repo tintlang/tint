@@ -23,6 +23,8 @@ pub enum Imp {
     StrConcat,
     StrLen,
     StrCmp,
+    StrSplit,
+    ListJoin,
     ListNew,
     ListUnique,
     ListPush,
@@ -52,6 +54,9 @@ pub enum Imp {
     UiClose,
     UiText,
     UiTokens,
+    UiMemoBegin,
+    UiMemoCheck,
+    UiMemoEnd,
     StorageGetOr,
     StorageSet,
     StorageRemove,
@@ -61,7 +66,7 @@ pub enum Imp {
 }
 
 impl Imp {
-    pub const COUNT: usize = 46;
+    pub const COUNT: usize = 51;
 }
 
 const I32: ValType = ValType::I32;
@@ -82,6 +87,8 @@ const SIGS: [Sig; Imp::COUNT] = [
     ("str_concat", &[I32, I32], &[I32]),
     ("str_len", &[I32], &[I32]),
     ("str_cmp", &[I32, I32], &[I32]),
+    ("str_split", &[I32, I32, I32], &[I32]),
+    ("list_join", &[I32, I32], &[I32]),
     ("list_new", &[I32, I32, I32], &[I32]),
     ("list_unique", &[I32], &[I32]),
     ("list_push", &[I32, I64], &[I32]),
@@ -111,6 +118,9 @@ const SIGS: [Sig; Imp::COUNT] = [
     ("ui_close", &[], &[]),
     ("ui_text", &[I32], &[]),
     ("ui_tokens", &[I32], &[]),
+    ("ui_memo_begin", &[I32], &[]),
+    ("ui_memo_check", &[], &[I32]),
+    ("ui_memo_end", &[], &[]),
     ("storage_get_or", &[I32, I32], &[I32]),
     ("storage_set", &[I32, I32], &[]),
     ("storage_remove", &[I32], &[]),

@@ -37,6 +37,7 @@ fn mix_str(h: &mut Hash, s: &str) {
     mix(h, u64::from_le_bytes(last) ^ ((s.len() as u64) << 56));
 }
 
+#[derive(Clone)]
 enum Child {
     Node(Rc<UiRenderNode>),
     Text(String),
@@ -60,11 +61,65 @@ pub struct IrRenderer {
     protos: HashMap<(u32, u64), UiRenderNode>,
     tokens: StdMap<String, UiModifierValue>,
     tokens_hash: u64,
+    /// What memoized stretches emitted (`UiMemo`), by key: the one of the
+    /// render before and the one being built.
+    memo_prev: HashMap<Hash, Rc<Vec<Child>>>,
+    memo_cur: HashMap<Hash, Rc<Vec<Child>>>,
+    /// Templates whose only run-time value is their `key::{..}`.
+    key_only: HashMap<u32, Option<usize>>,
+}
+
+/// When the run-time values of a template are only its `key::{..}` and the
+/// condition of its `if{..}` (always true by the time it is emitted), where
+/// the key sits among the values: such an element is its prototype plus a key.
+fn key_value_position(template: &UiElementTemplate) -> Option<usize> {
+    let exprs = modifier_exprs(&template.modifiers);
+    let is = |name: &str, expr: &tint_ast::Expr| {
+        template.modifiers.iter().any(|m| {
+            m.path.len() == 1
+                && m.path[0] == name
+                && matches!(&m.value, UiModifierValue::Expr(e) if std::ptr::eq(e, expr))
+        })
+    };
+    let mut position = None;
+    let mut seen = 0;
+    for (index, slot) in template.slots.iter().enumerate() {
+        if *slot == UiSlot::Unused {
+            continue;
+        }
+        let expr = *exprs.get(index)?;
+        if is("key", expr) && position.is_none() {
+            position = Some(seen);
+        } else if !is("if", expr) {
+            return None;
+        }
+        seen += 1;
+    }
+    position
 }
 
 impl IrRenderer {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// The key of a memoized stretch: its site, its scalar inputs and the theme
+    /// tokens in force (`epoch`).
+    pub fn memo_key(site: u32, values: &[UiValue], epoch: u64) -> Hash {
+        let mut hash = (epoch ^ 0x4D45_4D4F, site as u64);
+        for v in values {
+            match v {
+                UiValue::Number(n) => mix(&mut hash, n.to_bits()),
+                UiValue::Str(s) => mix_str(&mut hash, s),
+                UiValue::Bool(b) => mix(&mut hash, *b as u64 + 2),
+            }
+        }
+        hash
+    }
+
+    /// Whether the last render remembered a stretch under `key`.
+    pub fn has_memo(&self, key: Hash) -> bool {
+        self.memo_cur.contains_key(&key)
     }
 
     /// The top-level nodes of the tree `events` describe.
@@ -75,6 +130,8 @@ impl IrRenderer {
     ) -> Vec<Rc<UiRenderNode>> {
         self.prev = std::mem::take(&mut self.cur);
         self.cur.reserve(self.prev.len());
+        self.memo_prev = std::mem::take(&mut self.memo_cur);
+        let mut memo_open: Vec<(Hash, usize, usize)> = Vec::new();
         self.tokens.clear();
         self.tokens_hash = 0;
         let mut stack: Vec<Frame> = vec![Frame {
@@ -118,6 +175,35 @@ impl IrRenderer {
                     mix_str(&mut top.hash, s);
                     mix(&mut top.hash, 0x7E47);
                     top.children.push(Child::Text(s.clone()));
+                }
+                UiEvent::MemoStart(a, b) => {
+                    let top = stack.last().unwrap();
+                    memo_open.push(((*a, *b), stack.len(), top.children.len()));
+                }
+                UiEvent::MemoEnd => {
+                    if let Some((key, depth, start)) = memo_open.pop() {
+                        if stack.len() == depth {
+                            let kids = stack.last().unwrap().children[start..].to_vec();
+                            self.memo_cur.insert(key, Rc::new(kids));
+                        }
+                    }
+                }
+                UiEvent::MemoHit(a, b) => {
+                    let key = (*a, *b);
+                    if let Some(kids) = self.memo_prev.get(&key).cloned() {
+                        let top = stack.last_mut().unwrap();
+                        for child in kids.iter() {
+                            match child {
+                                Child::Node(n) => top.children.push(Child::Node(Rc::clone(n))),
+                                Child::Text(s) => {
+                                    mix_str(&mut top.hash, s);
+                                    mix(&mut top.hash, 0x7E47);
+                                    top.children.push(Child::Text(s.clone()));
+                                }
+                            }
+                        }
+                        self.memo_cur.insert(key, kids);
+                    }
                 }
                 UiEvent::Tokens { template } => {
                     if let Some(UiTemplate::Tokens { modifiers }) = templates.get(*template as usize) {
@@ -168,7 +254,15 @@ impl IrRenderer {
 
     fn build(&mut self, frame: &mut Frame) -> UiRenderNode {
         let template = frame.template.expect("only elements are built");
-        let fixed = template.slots.iter().all(|s| *s == UiSlot::Unused);
+        let mut fixed = template.slots.iter().all(|s| *s == UiSlot::Unused);
+        let mut keyed = None;
+        if !fixed {
+            let index = frame.index;
+            if let Some(at) = *self.key_only.entry(index).or_insert_with(|| key_value_position(template)) {
+                fixed = true;
+                keyed = Some(at);
+            }
+        }
         let only_nodes = frame.children.iter().all(|c| matches!(c, Child::Node(_)));
         let lone_text = frame.children.len() == 1
             && matches!(frame.children[0], Child::Text(_))
@@ -180,7 +274,7 @@ impl IrRenderer {
                 let mut bare = Frame {
                     template: frame.template,
                     index: frame.index,
-                    values: frame.values,
+                    values: if keyed.is_some() { &[] } else { frame.values },
                     hash: frame.hash,
                     children: Vec::new(),
                 };
@@ -188,6 +282,13 @@ impl IrRenderer {
                 self.protos.insert(key, node);
             }
             let mut node = self.protos[&key].clone();
+            if let Some(at) = keyed {
+                node.key = Some(match &frame.values[at] {
+                    UiValue::Str(s) => s.clone(),
+                    UiValue::Number(n) => EvalValue::Number(*n).to_string(),
+                    UiValue::Bool(b) => EvalValue::Bool(*b).to_string(),
+                });
+            }
             if lone_text {
                 if let Some(Child::Text(s)) = frame.children.pop() {
                     if node.text.is_none() {
@@ -205,6 +306,7 @@ impl IrRenderer {
                         Child::Text(_) => None,
                     })
                     .collect();
+                node.scan_hint = node.compute_scan_hint();
                 return node;
             }
         }

@@ -17,5 +17,8 @@ operations cost O(n) per access (two value representations converted on every
 variable read), so 10k-row steps are quadratic. `tint-render` assigns pre-built list
 literals instead and isolates the DOM renderer.
 
+`web/react-stack.html` is the same app in React with Tailwind-style utility classes (the stack a
+typical React project ships); `npx vite build` in `web/` builds it with the other variants.
+
 Tint has no per-row event handlers with arguments, so "select" and "remove" act on
 fixed row indices; the DOM work is the same.

@@ -14,7 +14,8 @@
 #![allow(clippy::missing_safety_doc)]
 
 use std::alloc::{alloc_zeroed, dealloc, realloc, Layout};
-use std::collections::BTreeMap;
+use std::collections::HashMap;
+use std::hash::{BuildHasherDefault, Hasher};
 use tint_ir::typed::interp::{cast_num, display, render, Interp};
 use tint_ir::typed::*;
 use tint_wasmabi::*;
@@ -22,7 +23,13 @@ use tint_wasmabi::*;
 use values::{from_val, scalar_val, to_val};
 
 mod host;
+#[cfg(target_arch = "wasm32")]
+mod small_alloc;
 mod values;
+
+#[cfg(target_arch = "wasm32")]
+#[global_allocator]
+static ALLOC: small_alloc::SmallAlloc = small_alloc::SmallAlloc::new();
 
 pub use host::{
     host_storage_hydrate, host_storage_snapshot, host_take_http, new_string_ptr, release_ptr,
@@ -75,7 +82,8 @@ pub(crate) struct List {
 pub(crate) struct Map {
     head: Header,
     heap: u32,
-    map: BTreeMap<String, u64>,
+    /// Hashed for lookups; `keys()`/`values()` sort when they list (see `values.rs`).
+    map: HashMap<String, u64, BuildHasherDefault<FxHasher>>,
 }
 
 #[repr(C)]
@@ -357,10 +365,60 @@ pub unsafe extern "C" fn str_bytes(p: Ptr) -> u32 {
     str_of(p).len() as u32
 }
 
+/// `s.split(sep)` as a list of strings; `dst_ty` is the result's list type.
+#[no_mangle]
+pub unsafe extern "C" fn str_split(s: Ptr, sep: Ptr, dst_ty: u32) -> Ptr {
+    let m = module();
+    let TyKind::List(e) = m.types.kind(TyId(dst_ty)) else {
+        fail("internal error: split result is not a list".to_string())
+    };
+    let layout = elem_layout(m, *e);
+    let (s, sep) = (str_of(s), str_of(sep));
+    let mut out = if sep.is_empty() {
+        list_new(s.len() as u32, layout.size, layout.heap as u32)
+    } else {
+        list_new(s.matches(sep).count() as u32 + 1, layout.size, layout.heap as u32)
+    };
+    if sep.is_empty() {
+        for c in s.chars() {
+            let mut b = [0u8; 4];
+            out = list_push(out, new_str(c.encode_utf8(&mut b).to_string()) as usize as u64);
+        }
+    } else {
+        for part in s.split(sep) {
+            out = list_push(out, new_str(part.to_string()) as usize as u64);
+        }
+    }
+    out
+}
+
+/// Joins a list of strings.
+#[no_mangle]
+pub unsafe extern "C" fn list_join(l: Ptr, sep: Ptr) -> Ptr {
+    let l = &*(l as *const List);
+    let sep = str_of(sep);
+    let mut total = sep.len() * (l.len as usize).saturating_sub(1);
+    for i in 0..l.len as usize {
+        total += str_of(*(l.ptr.add(i * 8) as *const u64) as usize as Ptr).len();
+    }
+    let mut out = String::with_capacity(total);
+    for i in 0..l.len as usize {
+        if i > 0 {
+            out.push_str(sep);
+        }
+        out.push_str(str_of(*(l.ptr.add(i * 8) as *const u64) as usize as Ptr));
+    }
+    new_str(out)
+}
+
 /// `parts` points at `n` consecutive `u32` string pointers.
 #[no_mangle]
 pub unsafe extern "C" fn str_concat(n: u32, parts: *const u32) -> Ptr {
-    let mut out = String::new();
+    let mut total = 0;
+    for i in 0..n as usize {
+        total += str_of(*parts.add(i) as usize as Ptr).len();
+    }
+    let mut out = String::with_capacity(total);
     for i in 0..n as usize {
         out.push_str(str_of(*parts.add(i) as usize as Ptr));
     }
@@ -389,7 +447,7 @@ pub extern "C" fn map_new(heap: u32) -> Ptr {
             kind: KIND_MAP,
         },
         heap,
-        map: BTreeMap::new(),
+        map: HashMap::default(),
     })) as Ptr
 }
 
@@ -418,12 +476,52 @@ pub unsafe extern "C" fn map_unique(p: Ptr) -> Ptr {
     Box::into_raw(Box::new(copy)) as Ptr
 }
 
+/// Multiply-rotate hash over the key's bytes (8 at a time).
+#[derive(Default)]
+pub(crate) struct FxHasher(u64);
+
+impl FxHasher {
+    #[inline]
+    fn add(&mut self, w: u64) {
+        self.0 = (self.0.rotate_left(5) ^ w).wrapping_mul(0x517c_c1b7_2722_0a95);
+    }
+}
+
+impl Hasher for FxHasher {
+    fn write(&mut self, bytes: &[u8]) {
+        let mut chunks = bytes.chunks_exact(8);
+        for c in &mut chunks {
+            self.add(u64::from_le_bytes(c.try_into().unwrap()));
+        }
+        let rest = chunks.remainder();
+        if !rest.is_empty() {
+            let mut last = [0u8; 8];
+            last[..rest.len()].copy_from_slice(rest);
+            self.add(u64::from_le_bytes(last));
+        }
+    }
+    fn write_u8(&mut self, b: u8) {
+        self.add(b as u64);
+    }
+    fn finish(&self) -> u64 {
+        // The multiply leaves the entropy in the high bits; the table indexes with the low ones.
+        let h = self.0;
+        (h ^ (h >> 32)).wrapping_mul(0x9E37_79B9_7F4A_7C15).rotate_left(26)
+    }
+}
+
 /// Inserts or replaces an entry. A heap value's reference moves into the map.
 #[no_mangle]
 pub unsafe extern "C" fn map_set(p: Ptr, key: Ptr, bits: u64) -> Ptr {
     let p = map_unique(p);
     let map = &mut *(p as *mut Map);
-    let old = map.map.insert(str_of(key).to_string(), bits);
+    let old = match map.map.get_mut(str_of(key)) {
+        Some(slot) => Some(std::mem::replace(slot, bits)),
+        None => {
+            map.map.insert(str_of(key).to_string(), bits);
+            None
+        }
+    };
     if let (Some(old), true) = (old, map.heap != 0) {
         release(old as usize as Ptr);
     }
@@ -707,11 +805,60 @@ pub extern "C" fn cmp(ty: u32, op: u32, a: u64, b: u64) -> u32 {
     }
 }
 
+/// Decimal digits of `n` without going through `fmt`.
+fn push_int(s: &mut String, n: i64) {
+    let mut buf = [0u8; 20];
+    let mut at = buf.len();
+    let mut v = n.unsigned_abs();
+    loop {
+        at -= 1;
+        buf[at] = b'0' + (v % 10) as u8;
+        v /= 10;
+        if v == 0 {
+            break;
+        }
+    }
+    if n < 0 {
+        s.push('-');
+    }
+    // only ASCII digits are in `buf[at..]`
+    s.push_str(unsafe { std::str::from_utf8_unchecked(&buf[at..]) });
+}
+
 /// The text `"{value}"` produces.
 #[no_mangle]
 pub extern "C" fn to_str(ty: u32, bits: u64) -> Ptr {
+    use std::fmt::Write;
     let m = module();
     let ty = TyId(ty);
+    // Numbers are formatted straight from their bits (the same text `display` gives).
+    if let TyKind::Num(kind) = m.types.kind(ty) {
+        let mut s = String::with_capacity(20);
+        let done = match kind {
+            NumKind::Num | NumKind::F64 => {
+                let f = f64::from_bits(bits);
+                if f.fract() == 0.0 && f.abs() < 1e15 && !(f == 0.0 && f.is_sign_negative()) {
+                    push_int(&mut s, f as i64);
+                    true
+                } else {
+                    write!(s, "{f}").is_ok()
+                }
+            }
+            NumKind::I32 | NumKind::I64 => {
+                push_int(&mut s, bits as i64);
+                true
+            }
+            NumKind::U8 | NumKind::U32 => {
+                push_int(&mut s, bits as i64);
+                true
+            }
+            NumKind::U64 => write!(s, "{bits}").is_ok(),
+            NumKind::F32 => false,
+        };
+        if done {
+            return new_str(s);
+        }
+    }
     new_str(display(m, ty, &to_val(m, ty, bits)))
 }
 

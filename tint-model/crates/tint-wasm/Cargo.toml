@@ -8,6 +8,8 @@ license.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [features]
+# Page runtime of a compiled app: UI templates keep expression positions only (no expression deserializer).
+lean-ast = ["tint-ast/lean-expr"]
 default = ["interpreter", "bytecode", "sandbox-api"]
 # check/run/REPL/tree-as-data entry points for the sandbox. The standalone page
 # is built without them.

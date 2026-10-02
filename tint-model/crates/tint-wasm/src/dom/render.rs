@@ -148,6 +148,7 @@ fn build_node(
         el,
         children,
         has_hover,
+        lazy: false,
     })
 }
 
@@ -157,7 +158,11 @@ fn bind_handlers(el: &Element, node: &UiRenderNode, shared: &Rc<Shared>) {
         // currently normalizes `click||` and `pointer_down||` into one
         // handler field, and a click listener is the reliable common
         // denominator across browser hosts.
-        bind_dispatch(el, "click", handler, shared, node.sound.clone());
+        if node.sound.is_some() {
+            bind_dispatch(el, "click", handler, shared, node.sound.clone());
+        } else {
+            let _ = el.set_attribute("data-tint-click", &handler);
+        }
     }
     if let Some(handler) = node.on_hover_enter.clone() {
         bind_dispatch(el, "mouseenter", handler, shared, None);
@@ -209,6 +214,11 @@ fn bulk_size(node: &UiRenderNode, in_button: bool) -> Option<usize> {
         || node.tag == "Preview"
         || node.tag == "TextArea"
         || node.on_pointer_start.is_some()
+        || node.on_hover_enter.is_some()
+        || node.on_hover_leave.is_some()
+        || node.on_key_down.is_some()
+        || node.on_key_up.is_some()
+        || node.sound.is_some()
     {
         return None;
     }
@@ -293,6 +303,11 @@ fn write_html(node: &UiRenderNode, breakpoint: &str, out: &mut String) {
         push_escaped(out, key, true);
         out.push('"');
     }
+    if let Some(handler) = &node.on_click {
+        out.push_str(" data-tint-click=\"");
+        push_escaped(out, handler, true);
+        out.push('"');
+    }
     let css = node_css(node, tag == "button", breakpoint);
     if !css.is_empty() {
         out.push_str(" style=\"");
@@ -311,20 +326,33 @@ fn write_html(node: &UiRenderNode, breakpoint: &str, out: &mut String) {
     out.push('>');
 }
 
-/// Pairs a parsed element with its render node: binds handlers and collects
-/// the mounted children in document order.
-fn adopt(el: Element, node: &UiRenderNode, shared: &Rc<Shared>) -> Result<MNode, JsValue> {
-    bind_handlers(&el, node, shared);
-    let mut children = Vec::with_capacity(node.children.len());
-    if node.text.is_none() {
-        let mut next = el.first_element_child();
-        for child in &node.children {
-            let child_el = next.ok_or_else(|| JsValue::from_str("bulk build: missing element"))?;
-            next = child_el.next_element_sibling();
-            children.push(adopt(child_el, child, shared)?);
-        }
+/// Pairs a parsed element with its render node. Handlers are delegated
+/// (`data-tint-click`) and bulk nodes bind nothing else, so the descendants are
+/// wrapped only when a patch needs them (`adopt_children`).
+fn adopt(el: Element, node: &UiRenderNode, _shared: &Rc<Shared>) -> Result<MNode, JsValue> {
+    Ok(MNode {
+        el,
+        children: Vec::new(),
+        has_hover: false,
+        lazy: node.text.is_none() && !node.children.is_empty(),
+    })
+}
+
+/// Wraps the child elements of `el`, which was built from `kids` by one parse.
+fn adopt_children(el: &Element, kids: &[Rc<UiRenderNode>]) -> Result<Vec<MNode>, JsValue> {
+    let mut out = Vec::with_capacity(kids.len());
+    let mut next = el.first_element_child();
+    for kid in kids {
+        let child_el = next.ok_or_else(|| JsValue::from_str("bulk build: missing element"))?;
+        next = child_el.next_element_sibling();
+        out.push(MNode {
+            el: child_el,
+            children: Vec::new(),
+            has_hover: false,
+            lazy: kid.text.is_none() && !kid.children.is_empty(),
+        });
     }
-    Ok(MNode { el, children, has_hover: false })
+    Ok(out)
 }
 
 /// Builds every bulk-able node among `nodes` with a single HTML parse; the
@@ -346,7 +374,12 @@ fn build_bulk_many(
     let mut html = String::new();
     for (node, ok) in nodes.iter().zip(&eligible) {
         if *ok {
+            let first = html.is_empty();
             write_html(node, breakpoint, &mut html);
+            if first {
+                // Rows are alike: size the buffer from the first one, not by doubling.
+                html.reserve(html.len() * nodes.len());
+            }
         }
     }
     let template = TEMPLATE.with(|t| -> Result<web_sys::HtmlTemplateElement, JsValue> {
@@ -387,7 +420,11 @@ fn build_bulk_into(
     }
     let mut html = String::new();
     for node in nodes {
+        let first = html.is_empty();
         write_html(node, breakpoint, &mut html);
+        if first {
+            html.reserve(html.len() * nodes.len());
+        }
     }
     parent.set_inner_html(&html);
     let mut next = parent.first_element_child();
@@ -447,38 +484,75 @@ fn bind_dispatch(
         if let Some(sound) = &sound {
             play_sound(sound);
         }
-        let timing = profiling();
-        let t0 = if timing { now() } else { 0.0 };
-        let tree = match shared.session.try_borrow_mut() {
-            Ok(mut session) => match session.dispatch(&handler) {
-                Ok(tree) => tree,
-                Err(e) => {
-                    web_sys::console::error_1(&JsValue::from_str(&format!(
-                        "tint: dispatch({}) failed: {}",
-                        handler, e
-                    )));
-                    return;
-                }
-            },
-            Err(_) => return,
-        };
-        let t1 = if timing { now() } else { 0.0 };
-        if let Err(e) = mount_tree(tree, &shared) {
-            web_sys::console::error_1(&e);
-        }
-        if timing {
-            let t2 = now();
-            web_sys::console::log_1(&JsValue::from_str(&format!(
-                "TINT-TIMING {handler} eval {:.1} mount {:.1}",
-                t1 - t0,
-                t2 - t1
-            )));
-        }
+        run_click(&shared, &handler);
     }) as Box<dyn FnMut(_)>);
     // Ignore add_event_listener's own Result: a failure here means the
     // element itself is broken, which document.create_element's Result
     // earlier in build_node would already have surfaced.
     let _ = el.add_event_listener_with_callback(event_name, cb.as_ref().unchecked_ref());
+    cb.forget();
+}
+
+/// Runs `handler` against the session and re-mounts the result.
+fn run_click(shared: &Rc<Shared>, handler: &str) {
+    let timing = profiling();
+    let t0 = if timing { now() } else { 0.0 };
+    let tree = match shared.session.try_borrow_mut() {
+        Ok(mut session) => match session.dispatch(handler) {
+            Ok(tree) => tree,
+            Err(e) => {
+                web_sys::console::error_1(&JsValue::from_str(&format!(
+                    "tint: dispatch({}) failed: {}",
+                    handler, e
+                )));
+                return;
+            }
+        },
+        Err(_) => return,
+    };
+    let t1 = if timing { now() } else { 0.0 };
+    if let Err(e) = mount_tree(tree, shared) {
+        web_sys::console::error_1(&e);
+    }
+    if timing {
+        let t2 = now();
+        web_sys::console::log_1(&JsValue::from_str(&format!(
+            "TINT-TIMING {handler} eval {:.1} mount {:.1}",
+            t1 - t0,
+            t2 - t1
+        )));
+    }
+}
+
+/// One `click` listener on the container serves every element that carries
+/// `data-tint-click` (no closure per element). Like a native bubbling
+/// listener it runs the handlers of the target and its ancestors, innermost
+/// first, but not those inside a nested `Preview` (that session has its own).
+fn bind_click_delegate(container: &Element, shared: &Rc<Shared>) {
+    if shared.click_bound.replace(true) {
+        return;
+    }
+    let root = container.clone();
+    let shared = shared.clone();
+    let cb = Closure::wrap(Box::new(move |e: web_sys::Event| {
+        let mut handlers: Vec<String> = Vec::new();
+        let mut cur = e.target().and_then(|t| t.dyn_into::<Element>().ok());
+        while let Some(el) = cur {
+            if el == root {
+                break;
+            }
+            if el.has_attribute("data-tint-preview-source") {
+                handlers.clear();
+            } else if let Some(h) = el.get_attribute("data-tint-click") {
+                handlers.push(h);
+            }
+            cur = el.parent_element();
+        }
+        for h in handlers {
+            run_click(&shared, &h);
+        }
+    }) as Box<dyn FnMut(_)>);
+    let _ = container.add_event_listener_with_callback("click", cb.as_ref().unchecked_ref());
     cb.forget();
 }
 

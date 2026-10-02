@@ -5,5 +5,9 @@ edition.workspace = true
 description = "TintLang AST"
 license.workspace = true
 
+[features]
+# Expressions deserialize to a placeholder (see `Expr`). Only for runtimes that never evaluate them.
+lean-expr = []
+
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }

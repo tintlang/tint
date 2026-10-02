@@ -348,6 +348,7 @@ fn mount_tree(tree: Vec<Rc<UiRenderNode>>, shared: &Rc<Shared>) -> Result<(), Js
     // tree is consistent even if the resolution race between reading
     // innerWidth and finishing the rebuild -- not realistic, but cheap
     // to make free.
+    bind_click_delegate(&container, shared);
     let prof = profiling();
     let q0 = if prof { now() } else { 0.0 };
     let scan = scan_tree(&tree);
@@ -487,6 +488,9 @@ thread_local! {
 }
 
 fn scan_node(node: &Rc<UiRenderNode>, old: &ScanCache, new: &mut ScanCache) -> Rc<TreeScan> {
+    if node.scan_hint == Some(false) {
+        return EMPTY_SCAN.with(Rc::clone);
+    }
     // Leaves are summarized directly: caching them costs more than looking at them.
     if node.children.is_empty() {
         let plain = node.on_key_down.is_none()
@@ -737,6 +741,10 @@ struct MNode {
     el: Element,
     children: Vec<MNode>,
     has_hover: bool,
+    /// Built from one HTML parse: the child elements exist in the DOM but are
+    /// not wrapped yet (`children` is empty). `adopt_children` wraps them when
+    /// a patch has to descend.
+    lazy: bool,
 }
 
 /// What is currently on screen: the previous render tree and its elements.
@@ -905,7 +913,76 @@ fn dom_tag_name(node: &UiRenderNode) -> &'static str {
 /// Tint tag and the HTML tag. Matched elements are patched in place (focus,
 /// media playback and CSS animation state survive), unmatched old elements
 /// are removed, new ones are inserted. No DOM reads are needed to decide.
+/// Whether `new` can take over the element of `old` in place (same key, same tag).
+fn same_slot(old: &UiRenderNode, new: &UiRenderNode) -> bool {
+    old.key == new.key && old.tag == new.tag && dom_tag_name(old) == dom_tag_name(new)
+}
+
+/// Patches the children of `parent`. Rows at the start and at the end that keep
+/// their key are patched in place, one by one; only what lies between them goes
+/// through the keyed matching of `patch_middle`. A select, an edit or a removal
+/// in a long list therefore costs a scan, not a rebuild of the bookkeeping.
 fn patch_list(
+    document: &Document,
+    parent: &Element,
+    old_nodes: &[Rc<UiRenderNode>],
+    mut old_mounts: Vec<MNode>,
+    nodes: &[Rc<UiRenderNode>],
+    shared: &Rc<Shared>,
+    breakpoint: &str,
+) -> Result<Vec<MNode>, JsValue> {
+    let shortest = old_nodes.len().min(nodes.len());
+    let mut start = 0;
+    while start < shortest && same_slot(&old_nodes[start], &nodes[start]) {
+        start += 1;
+    }
+    let (mut old_end, mut new_end) = (old_nodes.len(), nodes.len());
+    while old_end > start && new_end > start && same_slot(&old_nodes[old_end - 1], &nodes[new_end - 1]) {
+        old_end -= 1;
+        new_end -= 1;
+    }
+    if start == 0 && old_end == old_nodes.len() {
+        return patch_middle(document, parent, old_nodes, old_mounts, nodes, shared, breakpoint, None, true);
+    }
+    // The anchor the middle is inserted before: the first element after it.
+    let tail_mounts = old_mounts.split_off(old_end);
+    let anchor: Option<web_sys::Node> = tail_mounts.first().map(|m| m.el.clone().into());
+    let middle_mounts = old_mounts.split_off(start);
+    let mut out: Vec<MNode> = Vec::with_capacity(nodes.len());
+    for (i, m) in old_mounts.into_iter().enumerate() {
+        let (o, n) = (&old_nodes[i], &nodes[i]);
+        out.push(if !m.has_hover && Rc::ptr_eq(o, n) {
+            m
+        } else {
+            patch_node(document, o, n, m, shared, breakpoint)?
+        });
+    }
+    out.extend(patch_middle(
+        document,
+        parent,
+        &old_nodes[start..old_end],
+        middle_mounts,
+        &nodes[start..new_end],
+        shared,
+        breakpoint,
+        anchor,
+        false,
+    )?);
+    for (k, m) in tail_mounts.into_iter().enumerate() {
+        let (o, n) = (&old_nodes[old_end + k], &nodes[new_end + k]);
+        out.push(if !m.has_hover && Rc::ptr_eq(o, n) {
+            m
+        } else {
+            patch_node(document, o, n, m, shared, breakpoint)?
+        });
+    }
+    Ok(out)
+}
+
+/// The keyed matching: `anchor` is the element the result is placed before
+/// (`None`: at the end of `parent`); `whole` says the slice is all of `parent`'s
+/// content.
+fn patch_middle(
     document: &Document,
     parent: &Element,
     old_nodes: &[Rc<UiRenderNode>],
@@ -913,40 +990,86 @@ fn patch_list(
     nodes: &[Rc<UiRenderNode>],
     shared: &Rc<Shared>,
     breakpoint: &str,
+    anchor: Option<web_sys::Node>,
+    whole: bool,
 ) -> Result<Vec<MNode>, JsValue> {
     let mut old: Vec<Option<MNode>> = old_mounts.into_iter().map(Some).collect();
     // (mounted node, index it had in the old list if it was reused)
     let mut plan: Vec<(MNode, Option<usize>)> = Vec::with_capacity(nodes.len());
 
-    // Old indices per key, built once: looking each key up by scanning the old
-    // list made a keyed list of n rows cost O(n^2) string comparisons.
-    let mut by_key: std::collections::HashMap<&str, std::collections::VecDeque<usize>> =
-        std::collections::HashMap::new();
-    if nodes.iter().any(|n| n.key.is_some()) {
-        for (i, o) in old_nodes.iter().enumerate() {
-            if let Some(k) = o.key.as_deref() {
-                by_key.entry(k).or_default().push_back(i);
+    // Decide which old element (if any) each new node reuses. Keyed nodes that
+    // kept their position claim it first; only the rest go through a map of the
+    // old keys still unclaimed (a few rows in the common edit, not the list).
+    let mut used = vec![false; old_nodes.len()];
+    let mut candidates: Vec<Option<usize>> = vec![None; nodes.len()];
+    let compatible = |i: usize, node: &UiRenderNode| {
+        old_nodes[i].tag == node.tag && dom_tag_name(&old_nodes[i]) == dom_tag_name(node)
+    };
+    for (index, node) in nodes.iter().enumerate() {
+        if let (Some(key), Some(old_key)) = (&node.key, old_nodes.get(index).and_then(|o| o.key.as_ref())) {
+            if key == old_key && compatible(index, node) {
+                candidates[index] = Some(index);
+                used[index] = true;
             }
         }
     }
-
-    // Decide which old element (if any) each new node reuses.
-    let mut candidates: Vec<Option<usize>> = Vec::with_capacity(nodes.len());
+    // Old indices per key, built once and only when something is left over:
+    // looking each key up by scanning the old list made a keyed list of n rows
+    // cost O(n^2) string comparisons.
+    let mut by_key: Option<tint_runtime::scope::HashMap<&str, std::collections::VecDeque<usize>>> = None;
     for (index, node) in nodes.iter().enumerate() {
-        let candidate = if let Some(key) = &node.key {
-            by_key.get_mut(key.as_str()).and_then(|v| v.pop_front())
-        } else if index < old.len() && old[index].is_some() {
+        if candidates[index].is_some() {
+            continue;
+        }
+        let claimed = if let Some(key) = &node.key {
+            let map = by_key.get_or_insert_with(|| {
+                let mut map: tint_runtime::scope::HashMap<&str, std::collections::VecDeque<usize>> =
+                    Default::default();
+                for (i, o) in old_nodes.iter().enumerate() {
+                    if let (false, Some(k)) = (used[i], o.key.as_deref()) {
+                        map.entry(k).or_default().push_back(i);
+                    }
+                }
+                map
+            });
+            let mut found = None;
+            if let Some(queue) = map.get_mut(key.as_str()) {
+                while let Some(i) = queue.pop_front() {
+                    if !used[i] {
+                        found = Some(i);
+                        break;
+                    }
+                }
+            }
+            found
+        } else if index < old_nodes.len() && !used[index] {
             Some(index)
         } else {
             None
         };
-        candidates.push(candidate.filter(|&i| {
-            old_nodes[i].tag == node.tag && dom_tag_name(&old_nodes[i]) == dom_tag_name(node)
-        }));
+        if let Some(i) = claimed {
+            used[i] = true;
+            if compatible(i, node) {
+                candidates[index] = Some(i);
+            }
+        }
+    }
+    // A new element whose slot in the old list was left unclaimed takes it over
+    // with one `replaceChild` instead of a removal plus an insertion.
+    let mut matched = vec![false; old_nodes.len()];
+    for c in candidates.iter().flatten() {
+        matched[*c] = true;
+    }
+    let mut replaces: Vec<bool> = vec![false; nodes.len()];
+    for (index, candidate) in candidates.iter().enumerate() {
+        if candidate.is_none() && index < matched.len() && !matched[index] {
+            matched[index] = true;
+            replaces[index] = true;
+        }
     }
 
     // Nothing reused and everything plain: replace the parent's content outright.
-    if candidates.iter().all(|c| c.is_none()) && !nodes.is_empty() {
+    if whole && candidates.iter().all(|c| c.is_none()) && !nodes.is_empty() {
         if let Some(mounts) = build_bulk_into(parent, nodes, shared, breakpoint)? {
             return Ok(mounts);
         }
@@ -962,7 +1085,7 @@ fn patch_list(
     let (bulk, fragment) = build_bulk_many(document, &fresh, shared, breakpoint)?;
     let mut bulk = bulk.into_iter();
 
-    for (node, candidate) in nodes.iter().zip(candidates) {
+    for (index, (node, candidate)) in nodes.iter().zip(candidates).enumerate() {
         match candidate {
             Some(i) => {
                 let mounted = old[i].take().expect("candidate is unused");
@@ -974,6 +1097,13 @@ fn patch_list(
                     Some(m) => m,
                     None => build_node(document, node, shared, breakpoint)?,
                 };
+                if replaces[index] {
+                    if let Some(gone) = old[index].take() {
+                        parent.replace_child(&built.el, &gone.el)?;
+                        plan.push((built, Some(index)));
+                        continue;
+                    }
+                }
                 plan.push((built, None));
             }
         }
@@ -995,21 +1125,21 @@ fn patch_list(
     let first_new = plan.iter().position(|(_, reused)| reused.is_none());
     let mut placed_from = plan.len();
     if let (Some(fragment), Some(k)) = (&fragment, first_new) {
-        if plan[k..].iter().all(|(_, reused)| reused.is_none()) && stay[..k].iter().all(|s| *s) {
+        if anchor.is_none() && plan[k..].iter().all(|(_, reused)| reused.is_none()) && stay[..k].iter().all(|s| *s) {
             parent.append_child(fragment)?;
             placed_from = k;
         }
     }
-    let mut next: Option<web_sys::Node> = None;
-    for (pos, (mounted, _)) in plan.iter().enumerate().rev() {
-        if pos >= placed_from {
-            next = Some(mounted.el.clone().into());
-            continue;
-        }
+    // Each element goes before its successor in `plan` (the anchor after the
+    // last); the successor is only looked at when something has to move.
+    for pos in (0..placed_from.min(plan.len())).rev() {
         if !stay[pos] {
-            parent.insert_before(&mounted.el, next.as_ref())?;
+            let next: Option<&web_sys::Node> = match plan.get(pos + 1) {
+                Some((m, _)) => Some(m.el.as_ref()),
+                None => anchor.as_ref(),
+            };
+            parent.insert_before(&plan[pos].0.el, next)?;
         }
-        next = Some(mounted.el.clone().into());
     }
 
     Ok(plan.into_iter().map(|(m, _)| m).collect())
@@ -1092,6 +1222,12 @@ fn patch_node(
             }
         }
     }
+    if old.on_click != new.on_click && old.sound.is_none() && new.sound.is_none() {
+        match &new.on_click {
+            Some(handler) => el.set_attribute("data-tint-click", handler)?,
+            None => el.remove_attribute("data-tint-click")?,
+        }
+    }
     if old.reference != new.reference {
         match &new.reference {
             Some(r) => el.set_attribute("data-tint-ref", r)?,
@@ -1131,11 +1267,13 @@ fn patch_node(
         // The element's children belong to the nested session.
         set_preview_attributes(&el, new)?;
         m.children.clear();
+        m.lazy = false;
     } else if let Some(svg) = &new.svg {
         if old.svg.as_ref() != Some(svg) {
             el.set_inner_html(svg);
         }
         m.children.clear();
+        m.lazy = false;
     } else if let Some(text) = &new.text {
         if let Some(area) = el.dyn_ref::<web_sys::HtmlTextAreaElement>() {
             // Typing already put this text in the field; rewriting it would
@@ -1143,11 +1281,16 @@ fn patch_node(
             if area.value() != *text {
                 area.set_value(text);
             }
-        } else if old.text.as_ref() != Some(text) || old.svg.is_some() || !m.children.is_empty() {
+        } else if old.text.as_ref() != Some(text) || old.svg.is_some() || !m.children.is_empty() || m.lazy {
             el.set_text_content(Some(text));
         }
         m.children.clear();
+        m.lazy = false;
     } else {
+        if m.lazy && !same_children(&old.children, &new.children) {
+            m.children = adopt_children(&el, &old.children)?;
+            m.lazy = false;
+        }
         let (old_kids, old_mounts): (&[Rc<UiRenderNode>], Vec<MNode>) = if old_had_leaf {
             el.set_text_content(None);
             (&[], Vec::new())

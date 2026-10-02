@@ -107,6 +107,8 @@ pub(crate) struct Lowerer<'a> {
     pub globals: HashMap<String, GlobalId>,
     pub stack: Vec<FnB>,
     pub lambdas: usize,
+    /// Memoizable `for{}` bodies lowered so far (their `UiMemo` site ids).
+    pub memo_sites: u32,
     /// Generic parameter bindings while an ADT instance is being built.
     pub subst: Vec<HashMap<String, TyId>>,
     pub item: String,
@@ -130,6 +132,7 @@ pub fn lower_program<'a>(program: &'a Program, model: &'a SemanticModel) -> Lowe
         globals: HashMap::new(),
         stack: Vec::new(),
         lambdas: 0,
+        memo_sites: 0,
         subst: Vec::new(),
         item: String::new(),
         discard: false,

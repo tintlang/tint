@@ -117,6 +117,8 @@ pub fn show_instr(module: &Module, func: &Func, instr: &Instr) -> String {
         Instr::UiClose => "ui.close".to_string(),
         Instr::UiText { src } => format!("ui.text r{}", src.0),
         Instr::UiTokens { template } => format!("ui.tokens #{template}"),
+        Instr::UiMemo { dst, site, inputs } => format!("r{} = ui.memo #{site}({})", dst.0, regs(inputs)),
+        Instr::UiMemoEnd => "ui.memo_end".to_string(),
     }
 }
 

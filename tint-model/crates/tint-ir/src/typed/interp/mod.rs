@@ -507,6 +507,9 @@ impl<'m> Interp<'m> {
                 let text = display(self.module, func.reg_ty(*src), &regs[src.0 as usize]);
                 self.ui_events.push(UiEvent::Text(text));
             }
+            // The reference interpreter keeps no cache: never a hit, nothing to end.
+            Instr::UiMemo { dst, .. } => regs[dst.0 as usize] = Val::Bool(false),
+            Instr::UiMemoEnd => {}
             Instr::UiTokens { template } => {
                 self.ui_events.push(UiEvent::Tokens {
                     template: *template,

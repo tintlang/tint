@@ -27,6 +27,9 @@ jobs:
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          # tint-wasmgen's tests build the wasm runtime (tint-wasmrt) for wasm32
+          targets: wasm32-unknown-unknown
 
       - name: Check workspace
         if: matrix.check == 'check'
