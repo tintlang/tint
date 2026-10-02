@@ -80,7 +80,7 @@ cd tint/vscode-tint
 npm install
 npm run compile
 npx @vscode/vsce package
-code --install-extension tint-lang-0.1.2.vsix
+code --install-extension tint-lang-0.3.0.vsix
 ```
 
 ## Support

@@ -1,6 +1,6 @@
 {
   "name": "@tintlang/svelte",
-  "version": "0.1.3",
+  "version": "0.3.0",
   "description": "Svelte action for the Tint browser runtime.",
   "type": "module",
   "exports": {
@@ -11,7 +11,7 @@
   },
   "files": ["src"],
   "peerDependencies": {
-    "@tintlang/runtime": "^0.1.2",
+    "@tintlang/runtime": "^0.3.0",
     "svelte": ">=4"
   },
   "sideEffects": false

@@ -2,7 +2,7 @@
   "name": "tint-lang",
   "displayName": "Tint Language",
   "description": "Syntax highlighting and development tools for the Tint programming language",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "tintlang",
   "license": "MIT",
   "icon": "icon.png",

@@ -4,11 +4,14 @@ All notable changes to Tint are documented here.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-02
+
 - `tint build` now compiles the program to WebAssembly by default: typed IR -> wasm backend (`tint-wasmgen`) -> `app.wasm`, run by the small `tint-wasmrt` runtime (no parser, checker or interpreter in the page). `--engine interpreter` keeps the previous page. Constructs the compiler does not support are a build error; there is no silent fallback. `tint dev` and `tint run` are unchanged (interpreter / Cranelift).
 - Compiled apps support host functions (`storage_*`, `now_ms`, `http_get`), JS and `rs::` natives, `async`/`await`, `Host {}` components, events with values, and `props||`/attribute expressions. Results of host calls need a type: `|r: Result<number, string>|`, `let r: number = await f()` or `f() as T` (see `docs/guide/async.md`).
 - Fixed: `key::{r.id}` dropped the field and keyed the row by the whole item, so keyed diffing did not work; `key::{r}` did not reach the renderer when compiled.
 - New crates: `tint-wasmgen` (backend), `tint-wasmrt` (wasm32 runtime), `tint-wasmabi` (contract between them). The browser runtimes embedded in the CLI are built by `scripts/build-cli-runtimes.sh`.
 - Size and speed (bench/ui, tint-render): load to first content 45 -> 26 ms, page 1106 -> 538 KiB raw (389 -> 302 KiB gzip); list operations are within ~10-35% of the interpreter, Pong frame 0.33 ms.
+- Performance (compiled wasm, bench/wasm and bench/ui): small-object allocator in `tint-wasmrt`; native `split` and `join` (list of strings) instead of the interpreter bridge; list-element field reads and writes inline (`take`, `ListSet`, index+field fusion), cheaper `%` and list indexing on numbers. Against the same programs in Node (V8, fresh process): wordfreq 1.9x -> 1.04x, strings 2.5x -> 1.07x, hashmap 1.9x -> 1.4x, binary-trees 1.8x -> 1.3x, collatz 1.55x -> 1.27x; nbody (3x) and a single long loop in `main` (2x, wasm has no OSR in V8) are the known gaps. UI: keyed row creation/replace/swap/append/update paths at or near React (bench/ui, `react-stack` variant). `node bench/wasm/all.js` reproduces the wasm table.
 
 ## [0.2.0] - 2026-10-01
 
